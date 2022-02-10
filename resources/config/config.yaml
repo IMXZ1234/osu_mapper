@@ -1,0 +1,26 @@
+collate_fn: dataset.collate_fn.non_array_to_list
+data_arg:
+  batch_size: 8
+  dataset: dataset.cnnv1dataset.CNNv1Dataset
+  dataset_arg:
+    index_file_path: C:\Users\asus\coding\python\osu_beatmap_generator\resources\data\raw\div2n_sninh_tp.pkl
+  drop_last: true
+  num_workers: 1
+  shuffle: true
+loss_arg:
+  loss_type: loss.cnnv1loss.CNNv1Loss
+model_arg:
+  model_type: net.cnnv1.CNNModel
+optimizer_arg:
+  lr: 0.001
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/cnnv1/result
+  model_save_dir: ./resources/cnnv1/result
+output_device: 0
+pred_arg:
+  pred_type: pred.cnnv1pred.CNNv1Pred
+scheduler_arg:
+  gamma: 0.85
+  scheduler_type: StepLR
+  step_size: 25
