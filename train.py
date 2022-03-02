@@ -14,7 +14,7 @@ import threading
 
 
 class Train:
-    def __init__(self, model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg, **kwargs):
+    def __init__(self, model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg, train_arg, **kwargs):
         if 'cal_acc_func' in kwargs:
             self.cal_epoch_acc = dynamic_import(kwargs['cal_acc_func'])
         else:
@@ -31,13 +31,21 @@ class Train:
             self.output_device = kwargs['output_device']
         else:
             self.output_device = 'cpu'
+
+        self.train_state_dir = kwargs['train_state_dir'] if 'train_state_dir' in kwargs else None
+
+        self.start_epoch = 0
         self.model = self.load_model(**model_arg)
         self.optimizer = self.load_optimizer(**optimizer_arg)
         self.scheduler = self.load_scheduler(**scheduler_arg)
         self.train_iter, self.test_iter = self.load_data(**data_arg)
         self.loss = self.load_loss(**loss_arg)
         self.pred = self.load_pred(**pred_arg)
-        self.writer, self.logger, self.log_dir, self.model_save_dir = self.load_logger(**output_arg)
+        self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(**output_arg)
+
+        self.epoch = train_arg['epoch']
+        self.eval_step = train_arg['eval_step']
+
         self.control_file_path = os.path.join(self.log_dir, 'control.yaml')
         self.train_pred_list = []
         self.test_pred_list = []
@@ -48,7 +56,7 @@ class Train:
         self.learning_rate_list = []
         self.save_model_flag = False
 
-    def load_logger(self, log_dir, model_save_dir):
+    def load_logger(self, log_dir, model_save_dir, model_save_step, **kwargs):
         writer = SummaryWriter(logdir=log_dir + '/run')
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -63,7 +71,7 @@ class Train:
         fHandler.setLevel(logging.DEBUG)
         fHandler.setFormatter(formatter)
         logger.addHandler(fHandler)
-        return writer, logger, log_dir, model_save_dir
+        return writer, logger, log_dir, model_save_dir, model_save_step
 
     def load_model(self, model_type, **kwargs):
         if model_type == 'mlp':
@@ -77,9 +85,6 @@ class Train:
                 nn.Linear(64, 1))
         else:
             net = dynamic_import(model_type)(**kwargs)
-        net.apply(init_weights)
-        if isinstance(self.output_device, int):
-            net.cuda(self.output_device)
         return net
 
     def load_optimizer(self, optimizer_type, **kwargs):
@@ -148,22 +153,40 @@ class Train:
             if not train_thread.is_alive():
                 return
 
-    def train(self, num_epoch, eval_step):
+    def train(self):
+        if self.train_state_dir is not None:
+            self.from_train_state()
+        else:
+            self.model.apply(init_weights)
+            self.start_epoch = 0
+        if isinstance(self.output_device, int):
+            self.model.cuda(self.output_device)
+
         control_dict = {'save_model_next_epoch': False}
         with open(self.control_file_path, 'w') as f:
             yaml.dump(control_dict, f)
-        for epoch in range(num_epoch):
+        for epoch in range(self.start_epoch, self.epoch):
             self.train_epoch(epoch)
-            if (epoch + 1) % eval_step == 0:
+            if (epoch + 1) % self.eval_step == 0:
                 with torch.no_grad():
                     self.model.eval()
                     self.eval_epoch(epoch)
                     self.model.train()
+            if (epoch + 1) % self.model_save_step == 0:
+                torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
+                print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
             with open(self.control_file_path, 'r') as f:
                 control_dict = yaml.load(f, Loader=yaml.FullLoader)
             if control_dict['save_model_next_epoch']:
                 torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
+                print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
                 control_dict['save_model_next_epoch'] = False
+                with open(self.control_file_path, 'w') as f:
+                    yaml.dump(control_dict, f)
+            if control_dict['save_train_state']:
+                self.save_train_state(epoch)
+                control_dict['save_train_state'] = False
+                print('saved train state of epoch %d under %s' % (epoch, self.model_save_dir))
                 with open(self.control_file_path, 'w') as f:
                     yaml.dump(control_dict, f)
         # if self.save_model_flag:
@@ -313,16 +336,30 @@ class Train:
         print('eval_accuracy_list\n', self.eval_accuracy_list)
         print('eva_loss_list\n', self.eva_loss_list)
         print('learning_rate_list\n', self.learning_rate_list)
-        plt.plot(self.train_accuracy_list)
-        plt.show()
-        plt.plot(self.train_loss_list)
-        plt.show()
-        plt.plot(self.eval_accuracy_list)
-        plt.show()
-        plt.plot(self.eva_loss_list)
-        plt.show()
-        plt.plot(self.learning_rate_list)
-        plt.show()
+        # plt.plot(self.train_accuracy_list)
+        # plt.show()
+        # plt.plot(self.train_loss_list)
+        # plt.show()
+        # plt.plot(self.eval_accuracy_list)
+        # plt.show()
+        # plt.plot(self.eva_loss_list)
+        # plt.show()
+        # plt.plot(self.learning_rate_list)
+        # plt.show()
+
+    def save_train_state(self, epoch):
+        state = {'epoch': epoch,
+                 'model': self.model.state_dict(),
+                 'optimizer': self.optimizer.state_dict()}
+        filename = os.path.join(self.train_state_dir, 'train_state.pt')
+        torch.save(state, filename)
+
+    def from_train_state(self):
+        filename = os.path.join(self.train_state_dir, 'train_state.pt')
+        state = torch.load(filename)
+        self.model.load_state_dict(state['model'])
+        self.optimizer.load_state_dict(state['model'])
+        self.start_epoch = state['epoch']
 
 
 def dynamic_import(path):
@@ -427,11 +464,16 @@ if __name__ == '__main__':
             loss_arg = {'loss_type': 'loss.cnnv1loss.CNNv1Loss'}
             pred_arg = {'pred_type': 'pred.cnnv1pred.CNNv1Pred'}
             output_arg = {'log_dir': './resources/result/%s/%s' % (setting_name, str(lr)),
-                          'model_save_dir': './resources/result/%s/%s' % (setting_name, str(lr))}
+                          'model_save_dir': './resources/result/%s/%s' % (setting_name, str(lr)),
+                          'model_save_step': 16}
+            train_arg = {'epoch': 256, 'eval_step': 1}
             with open(config_path, 'w') as f:
                 yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
                            'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
-                           'output_device': 0, 'collate_fn': 'dataset.collate_fn.non_array_to_list'}, f)
+                           'train_arg': train_arg,
+                           'output_device': 0,
+                           'collate_fn': 'dataset.collate_fn.non_array_to_list',
+                           }, f)  # 'train_state_dir': r'./resources/train_state'
             with open(config_path, 'r') as f:
                 config_dict = yaml.load(f, Loader=yaml.FullLoader)
             # model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg = config_dict['model_arg'], config_dict[
@@ -443,5 +485,5 @@ if __name__ == '__main__':
             num_epoch = 256
             eval_step = 1
             # model_save_path = './result'
-            train.train(num_epoch, eval_step)
+            train.train()
             # train.run_train(num_epoch, eval_step)

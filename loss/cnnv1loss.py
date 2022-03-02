@@ -37,7 +37,7 @@ class CNNv1Loss(nn.Module):
             # if True in torch.isnan(valid_sample_out):
             #     print('nan in valid_sample_out')
             total_loss.append(F.cross_entropy(valid_sample_out, valid_sample_label,
-                                              weight=torch.tensor([1, 3], device=valid_sample_out.device, dtype=torch.float)))
+                                              weight=torch.tensor([1, 1], device=valid_sample_out.device, dtype=torch.float)))
             # if True in torch.isnan(torch.stack(total_loss)):
             #     print('nan in total_loss')
             #     print(sample_idx)

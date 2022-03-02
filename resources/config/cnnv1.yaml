@@ -19,6 +19,7 @@ optimizer_arg:
 output_arg:
   log_dir: ./resources/result/cnnv1/0.1
   model_save_dir: ./resources/result/cnnv1/0.1
+  model_save_step: 16
 output_device: 0
 pred_arg:
   pred_type: pred.cnnv1pred.CNNv1Pred
@@ -26,3 +27,6 @@ scheduler_arg:
   gamma: 0.1
   scheduler_type: StepLR
   step_size: 64
+train_arg:
+  epoch: 256
+  eval_step: 1
