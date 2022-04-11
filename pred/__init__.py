@@ -1,1 +1,1 @@
-from . import cnnv1pred
+from . import multi_pred

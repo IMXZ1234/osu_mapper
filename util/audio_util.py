@@ -3,6 +3,9 @@ import os
 import audioread
 import numpy as np
 import torch
+import wave
+
+import torchaudio
 
 FFMPEG_PATH = r'C:\Users\asus\coding\vsc++\ffmpeg-4.4.1-full_build-shared\bin\ffmpeg.exe'
 FFPROBE_PATH = r'C:\Users\asus\coding\vsc++\ffmpeg-4.4.1-full_build-shared\bin\ffprobe.exe'
@@ -46,7 +49,7 @@ class FFProbeMeta:
                     if i < len(lines) and lines[i].startswith(r'  Duration:'):
                         properties = lines[i].split(',')
                         time_parts = properties[0].split(':')[1:]
-                        self.duration = ((float(time_parts[0])*60)+float(time_parts[1])*60)+float(time_parts[2])
+                        self.duration = ((float(time_parts[0]) * 60) + float(time_parts[1]) * 60) + float(time_parts[2])
                         self.start = float(properties[1].split(':')[1])
                         self.bitrate = int()
                         i += 1
@@ -99,7 +102,7 @@ def get_sample_rate_from_ffprobe_dump(ffprobe_dump_path):
     return sample_rate
 
 
-def audio_to(from_path, to_path):
+def audio_convert(from_path, to_path):
     # print('converting %s to %s' % (from_path, to_path)) > %s 2>&1, OUTFILE_PATH >nul 2>nul
     os.system(FFMPEG_PATH + ' -i \"%s\" \"%s\" -y >nul 2>nul' % (from_path, to_path))
 
@@ -109,7 +112,7 @@ def dump_audio_info(audio_file_path, ffprobe_dump_path):
 
 
 def get_audio_attr(audio_file_path, attr):
-    # make sure existent file is not overwritten by temp output
+    # make sure existent file is not overwritten by temp gen
     out_file_path = audio_file_path[:-4] + '_temp'
     while os.path.exists(out_file_path):
         out_file_path += '%'
@@ -132,7 +135,7 @@ def get_audio_attr(audio_file_path, attr):
 
 def audioread_get_audio_data(audio_file_path):
     """
-    Conforms to torchaudio I/O api output format.
+    Conforms to torchaudio I/O api gen format.
     """
     with audioread.audio_open(audio_file_path) as f:
         # channel, sample_rate, duration can be obtained by f.channels, f.samplerate, f.duration
@@ -145,5 +148,21 @@ def audioread_get_audio_data(audio_file_path):
             total_len += len(data)
             buf_num += 1
         # normalize to (-1, 1)
-        audio_cs = np.concatenate(audio_cs, axis=1, dtype=float) / (2**15)
+        audio_cs = np.concatenate(audio_cs, axis=1, dtype=float) / (2 ** 15)
     return torch.tensor(audio_cs, dtype=torch.float), f.samplerate
+
+
+def save_audio(file_path, audio_data, sample_rate, temp_wav_file_path=None):
+    """
+    audio_data should be tensor
+    """
+    name, ext = os.path.splitext(file_path)
+    if ext in ('.wav', ".ogg", ".vorbis", ".flac", ".sph"):
+        torchaudio.backend.soundfile_backend.save(file_path, audio_data, sample_rate)
+        return
+    else:
+        if temp_wav_file_path is None:
+            temp_wav_file_path = name + '.wav'
+        torchaudio.backend.soundfile_backend.save(temp_wav_file_path, audio_data, sample_rate)
+        audio_convert(temp_wav_file_path, file_path)
+        os.remove(temp_wav_file_path)

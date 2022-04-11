@@ -18,3 +18,13 @@ class DataInspector:
             plt.show()
         return attr_list
 
+
+def divisor_distribution(divisor_list):
+    possible_divisors = [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 16]
+    divisor_count = [0 for _ in range(len(possible_divisors))]
+    back = [None for _ in range(max(possible_divisors) + 1)]
+    for i, divisor in enumerate(possible_divisors):
+        back[divisor] = i
+    for divisor in divisor_list:
+        divisor_count[back[divisor]] += 1
+    return divisor_count

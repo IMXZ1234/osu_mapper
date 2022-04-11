@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/osu_beatmap_generator.iml" filepath="$PROJECT_DIR$/.idea/osu_beatmap_generator.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../osu_auto_mapper/.idea/osu_auto_mapper.iml" filepath="$PROJECT_DIR$/../osu_auto_mapper/.idea/osu_auto_mapper.iml" />
     </modules>
   </component>
 </project>

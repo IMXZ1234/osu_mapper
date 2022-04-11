@@ -1,2 +1,5 @@
-/resources/data
-/resources/result
+/resources/data/*
+/resources/result/*
+/resources/gen/*
+.idea/
+__pycache__/

@@ -2,12 +2,26 @@ import torch
 from torch import nn
 
 
-class CNNv1Pred(nn.Module):
+class MultiPred(nn.Module):
     def __init__(self):
-        super(CNNv1Pred, self).__init__()
+        super(MultiPred, self).__init__()
 
-    # def forward(self, output):
-    #     data, speed_stars, valid_interval = output
+    def forward(self, data):
+        """
+        data(list of Tensor/Tensor): batch_size(sample_num), sample_label_num, class_pred_probability
+        """
+        if isinstance(data, torch.Tensor):
+            return torch.argmax(data, dim=2)
+        pred = [torch.argmax(data[sample_idx], dim=1) for sample_idx in range(len(data))]
+        return pred
+
+
+class ValidIntervalMultiPred(nn.Module):
+    def __init__(self):
+        super(ValidIntervalMultiPred, self).__init__()
+
+    # def forward(self, gen):
+    #     data, speed_stars, valid_interval = gen
     #     data = [torch.softmax(sample_data, dim=1) for sample_data in data]
     #     pred = [[] for _ in range(len(data))]
     #     for sample_idx in range(len(data)):

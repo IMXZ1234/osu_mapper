@@ -1,1 +1,1 @@
-from . import cnnv1loss
+from . import multi_pred_loss

@@ -1,0 +1,41 @@
+cal_acc_func: metrics.segmetrics.cal_acc_func
+cal_cm_func: metrics.segmetrics.cal_cm_func
+collate_fn: dataset.collate_fn.data_array_to_tensor
+data_arg:
+  batch_size: 4
+  dataset: dataset.segdataset.SegDataset
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    beats_per_sample: 9
+    feature_frames_per_beat: 16384
+    index_file_path: ./resources/data/fold/div2n_sninhtp/test%d.pkl
+    multi_label: false
+  train_dataset_arg:
+    beats_per_sample: 9
+    feature_frames_per_beat: 16384
+    index_file_path: ./resources/data/fold/div2n_sninhtp/train%d.pkl
+    multi_label: false
+loss_arg:
+  loss_type: CrossEntropy
+model_arg:
+  model_type: net.segresnet1d.ResNet1D
+  num_classes: 2
+optimizer_arg:
+  lr: 0.1
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/segresnet1d/0.1
+  model_save_dir: ./resources/result/segresnet1d/0.1
+  model_save_step: 1
+output_device: 0
+pred_arg:
+  pred_type: classification
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 8
+train_arg:
+  epoch: 32
+  eval_step: 1

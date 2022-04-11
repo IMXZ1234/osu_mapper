@@ -1,16 +1,21 @@
 collate_fn: dataset.collate_fn.non_array_to_list
 data_arg:
-  batch_size: 8
+  batch_size: 1
   dataset: dataset.cnnv1dataset.CNNv1Dataset
   drop_last: false
   num_workers: 1
   shuffle: true
   test_dataset_arg:
-    index_file_path: C:\Users\asus\coding\python\osu_beatmap_generator\resources\data\fold\div2n_sninhtp\test1.pkl
+    feature_frames_per_beat: 2048
+    index_file_path: ./resources/data/fold/div2n_sninhtp/test%d.pkl
   train_dataset_arg:
-    index_file_path: C:\Users\asus\coding\python\osu_beatmap_generator\resources\data\fold\div2n_sninhtp\train1.pkl
+    feature_frames_per_beat: 2048
+    index_file_path: ./resources/data/fold/div2n_sninhtp/train%d.pkl
 loss_arg:
   loss_type: loss.cnnv1loss.CNNv1Loss
+  weight:
+  - 1
+  - 1
 model_arg:
   model_type: net.cnnv1.CNNModel
 optimizer_arg:
@@ -19,14 +24,14 @@ optimizer_arg:
 output_arg:
   log_dir: ./resources/result/cnnv1/0.1
   model_save_dir: ./resources/result/cnnv1/0.1
-  model_save_step: 16
+  model_save_step: 1
 output_device: 0
 pred_arg:
   pred_type: pred.cnnv1pred.CNNv1Pred
 scheduler_arg:
   gamma: 0.1
   scheduler_type: StepLR
-  step_size: 64
+  step_size: 8
 train_arg:
-  epoch: 256
+  epoch: 32
   eval_step: 1

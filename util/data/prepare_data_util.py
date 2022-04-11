@@ -7,14 +7,17 @@ from sklearn import model_selection
 import torchaudio
 import shutil
 
-from util import audio_util
+from util import audio_util, beatmap_util
+
+USER_PROFILE = os.getenv('USERPROFILE')
 
 
-class OSUSongsDir:
+class OsuSongsDir:
+    DEFAULT_OSU_SONGS_DIR = USER_PROFILE + r'\AppData\Local\osu!\Songs'
     """
     Osu! Songs directory
     """
-    def __init__(self, songs_dir=r'C:\Users\asus\AppData\Local\osu!\Songs'):
+    def __init__(self, songs_dir=DEFAULT_OSU_SONGS_DIR):
         self.songs_dir = songs_dir
 
     def beatmaps(self):
@@ -29,6 +32,18 @@ class OSUSongsDir:
             for osu_filename in osu_filename_list:
                 osu_file_path = os.path.join(beatmapset_dir_path, osu_filename)
                 yield beatmapset_dirname, beatmapset_dir_path, osu_filename, osu_file_path
+
+    def beatmapsets(self):
+        """
+        Walk through Osu! Songs directory.
+        """
+        for beatmapset_dirname in os.listdir(self.songs_dir):
+            beatmapset_dir_path = os.path.join(self.songs_dir, beatmapset_dirname)
+            osu_filename_list = os.listdir(beatmapset_dir_path)
+            # all .osu files under a beatmapset dir
+            osu_filename_list = [filename for filename in osu_filename_list if filename.endswith('.osu')]
+            osu_file_path_list = [os.path.join(beatmapset_dir_path, osu_filename) for osu_filename in osu_filename_list]
+            yield beatmapset_dirname, beatmapset_dir_path, osu_filename_list, osu_file_path_list
 
     def gen_index_file(self, index_file_path=r'C:\Users\asus\coding\python\osu_beatmap_generator\resources\data\raw\local.pkl'):
         """
@@ -71,28 +86,22 @@ class DataFilter:
         return data
 
 
-class FoldDivider:
-    def __init__(self, data):
-        self.data = data
-
-    def div_folds(self, fold_dir, folds=5, shuffle=False):
-        if not os.path.exists(fold_dir):
-            os.makedirs(fold_dir)
-        kf = model_selection.KFold(folds, shuffle=shuffle)
-        fold = 1
-        for train_index, test_index in kf.split(self.data.audio_osu_list):
-            print('generating folds %d data...' % fold)
-            self.data.from_index(self.data, train_index, os.path.join(fold_dir, 'train%d.pkl' % fold)).save()
-            self.data.from_index(self.data, test_index, os.path.join(fold_dir, 'test%d.pkl' % fold)).save()
-            fold += 1
-
-
 def download_beatmap_with_specifications(lib, since, game_mode=slider.game_mode.GameMode.standard, api_key=slider.client.Client.DEFAULT_API_URL):
     client = slider.client.Client(lib, api_key)
     beatmapresult_list = client.beatmap(since=since, game_mode=game_mode)
     for beatmapresult in beatmapresult_list:
         print(beatmapresult.beatmap_id)
         beatmap = beatmapresult.beatmap(save=True)
+
+
+def cnnv1_criteria(beatmap):
+    if not beatmap_util.single_non_inherited_timepoints(beatmap):
+        return False
+    if beatmap.bpm_min() != beatmap.bpm_max():
+        return False
+    if beatmap.beat_divisor not in [1, 2, 4, 8]:
+        return False
+    return True
 
 
 def local_to_dataset(songs_dir=r'C:\Users\asus\AppData\Local\osu!\Songs', folds=5):
@@ -110,7 +119,6 @@ def local_to_dataset(songs_dir=r'C:\Users\asus\AppData\Local\osu!\Songs', folds=
             beatmap = slider.Beatmap.from_path(osu_file_path)
             audio_file_path = os.path.join(beatmapset_dir_path, beatmap.audio_filename)
             torchaudio.backend.list_audio_backends()
-
 
 # def fetch_audio_osu(songs_dir=r'C:\Users\asus\AppData\Local\osu!\Songs'):
 #     """
@@ -143,14 +151,14 @@ def fetch_audio_osu(songs_dir=r'C:\Users\asus\AppData\Local\osu!\Songs',
     if not os.path.exists(osu_dir):
         os.makedirs(osu_dir)
     audio_osu_pairs = []
-    for beatmapset_dirname, beatmapset_dir_path, osu_filename, osu_file_path in OSUSongsDir(songs_dir).beatmaps():
+    for beatmapset_dirname, beatmapset_dir_path, osu_filename, osu_file_path in OsuSongsDir(songs_dir).beatmaps():
         beatmap = slider.Beatmap.from_path(osu_file_path)
         target_osu_file_path = os.path.join(osu_dir, str(beatmap.beatmap_id) + '.osu')
         shutil.copy(osu_file_path, target_osu_file_path)
         target_audio_file_path = os.path.join(audio_dir, str(beatmap.beatmap_id) + '.wav')
         if not os.path.exists(target_audio_file_path):
             audio_file_path = os.path.join(beatmapset_dir_path, beatmap.audio_filename)
-            audio_util.audio_to(audio_file_path, target_audio_file_path)
+            audio_util.audio_convert(audio_file_path, target_audio_file_path)
         audio_osu_pairs.append((target_audio_file_path, target_osu_file_path))
     with open(os.path.join(audio_osu_dir, 'audio_osu_pairs.pkl'), 'wb') as f:
         pickle.dump(audio_osu_pairs, f)

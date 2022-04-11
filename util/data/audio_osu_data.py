@@ -5,6 +5,7 @@ import types
 import numpy as np
 import slider
 import torchaudio
+import random
 
 from util import audio_util
 
@@ -31,6 +32,13 @@ class AudioOsuData:
         """
         self.save_index_file(index_file_path, audio_osu_list)
         self.save_beatmap_obj(beatmap_obj_file_path, beatmaps)
+
+    def shuffle(self):
+        assert self.beatmaps is not None
+        assert self.audio_osu_list is not None
+        zipped = list(zip(self.audio_osu_list, self.beatmaps))
+        random.shuffle(zipped)
+        self.beatmaps, self.audio_osu_list = list(zip(*zipped))
 
     @classmethod
     def from_path(cls, index_file_path=r'C:\Users\asus\coding\python\osu_beatmap_generator\resources\data\raw\local.pkl',
