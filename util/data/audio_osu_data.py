@@ -1,13 +1,28 @@
 import os
 import pickle
+import random
 import types
 
-import numpy as np
 import slider
-import torchaudio
-import random
+from sklearn import model_selection
 
 from util import audio_util
+
+
+class AudioOsuDataFoldDivider:
+    def __init__(self, data):
+        self.data = data
+
+    def div_folds(self, fold_dir, folds=5, shuffle=False):
+        if not os.path.exists(fold_dir):
+            os.makedirs(fold_dir)
+        kf = model_selection.KFold(folds, shuffle=shuffle)
+        fold = 1
+        for train_index, test_index in kf.split(self.data.audio_osu_list):
+            print('generating folds %d data...' % fold)
+            self.data.from_index(self.data, train_index, os.path.join(fold_dir, 'train%d.pkl' % fold)).save()
+            self.data.from_index(self.data, test_index, os.path.join(fold_dir, 'test%d.pkl' % fold)).save()
+            fold += 1
 
 
 class AudioOsuData:

@@ -1,12 +1,7 @@
+import logging
 import os
 
 import requests
-from scrape import accout
-import json
-import time
-import threading
-import logging
-from requests.auth import HTTPBasicAuth
 from requests_oauthlib import OAuth2Session
 
 

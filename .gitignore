@@ -3,3 +3,4 @@
 /resources/gen/*
 .idea/
 __pycache__/
+/scrape/account.py
