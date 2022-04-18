@@ -3,6 +3,7 @@ import os
 
 import requests
 from requests_oauthlib import OAuth2Session
+import account
 
 
 class BeatmapDownloader:
@@ -18,7 +19,14 @@ class BeatmapDownloader:
     beatmap_dl = r'https://osu.ppy.sh/d/%d'
     metadata_file = 'beatmap_metadata.json'
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None,
+                 username=account.username,
+                 password=account.password,
+                 app_name_v1=account.app_name_v1,
+                 app_url_v1=account.app_url_v1,
+                 api_key_v1=account.api_key_v1,
+                 client_id_v2=account.client_id_v2,
+                 client_secret_v2=account.client_secret_v2):
         if logger is None:
             logger = logging.Logger('BeatmapDownloader')
             logger.setLevel(logging.DEBUG)
@@ -26,8 +34,8 @@ class BeatmapDownloader:
         self.logger = logger
 
         # for osu! api v2
-        self.client_id = 13651
-        self.client_secret = 'vPDZuM9GFfzyPu4pYXQt6y6lBfWXWwKpau8EcnAZ'
+        self.client_id = client_id_v2
+        self.client_secret = client_secret_v2
         self.access_token = ''
         self.refresh_essen = {
             'client_id': self.client_id,
@@ -48,8 +56,8 @@ class BeatmapDownloader:
 
         # osu! basic auth
         # we use basic auth to retrieve beatmap .osz
-        self.username = 'IMXZ123'
-        self.password = 'wdsjdlxq'
+        self.username = username
+        self.password = password
         self.auth_essen = {
             "username": self.username,
             "password": self.password,
@@ -62,9 +70,9 @@ class BeatmapDownloader:
 
         # for osu! api v1
         # we use api v1 to retrieve beatmapset metadata
-        self.app_name = 'osu_auto_mapper'
-        self.app_url = 'index.php'
-        self.api_key = '6d05ddb6da0db9660c77aaba023dee43c82d5a23'
+        self.app_name = app_name_v1
+        self.app_url = app_url_v1
+        self.api_key = api_key_v1
         self.default_meta_path = r'../resources/data/meta.json'
 
         # self.expired = True

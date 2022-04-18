@@ -1,0 +1,49 @@
+cal_acc_func: metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: dataset.collate_fn.data_array_to_tensor
+data_arg:
+  batch_size: 2
+  dataset: dataset.seg_multi_label_db_dataset.SegMultiLabelDBDataset
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    audio_dir: ./resources/data/audio
+    beat_feature_frames: 16384
+    db_path: ./resources/data/osu_train.db
+    multi_label: false
+    pad_beats: 8
+    sample_beats: 32
+    table_name: TESTFOLD%d
+  train_dataset_arg:
+    audio_dir: ./resources/data/audio
+    beat_feature_frames: 16384
+    db_path: ./resources/data/osu_train.db
+    multi_label: false
+    pad_beats: 8
+    sample_beats: 32
+    table_name: TRAINFOLD%d
+loss_arg:
+  loss_type: loss.multi_pred_loss.MultiPredLoss
+model_arg:
+  keep_seg: 256
+  model_type: net.seg_multi_pred_resnet1d.SegMultiPredResNet1D
+  num_classes: 2
+  seg_len: 2048
+optimizer_arg:
+  lr: 0.1
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/seg_resnet1d_bi_lr0.1/0.1/%d
+  model_save_dir: ./resources/result/seg_resnet1d_bi_lr0.1/0.1/%d
+  model_save_step: 1
+output_device: 0
+pred_arg:
+  pred_type: pred.multi_pred.MultiPred
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 16
+train_arg:
+  epoch: 64
+  eval_step: 1

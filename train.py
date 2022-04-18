@@ -451,42 +451,46 @@ def recursive_wrap_data(data, output_device):
 
 
 def train_with_new_setting(setting_name):
-    for lr in [0.0001]:
+    for lr in [0.1]:
         print('init lr %s' % str(lr))
         config_path = './resources/config/%s.yaml' % setting_name
-        model_arg = {'model_type': 'net.seg_multi_pred_resnet1d.SegMultiPredResNet1D',
-                     'num_classes': 4,
-                     'seg_len': 16384//8,  # input data length for a snap
-                     'keep_seg': 32*8, }  # , 'num_block': [1, 1, 1, 1]
+        model_arg = {'model_type': 'net.seg_multi_pred_mlp.SegMultiPredMLP',
+                     'num_classes': 2,
+                     'extract_hidden_layer_num': 0,
+                     'beat_feature_frames': 16384,
+                     'sample_beats': 16,
+                     'pad_beats': 4,
+                     }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {'optimizer_type': 'SGD', 'lr': lr}
-        scheduler_arg = {'scheduler_type': 'StepLR', 'step_size': 8, 'gamma': 0.1}
+        scheduler_arg = {'scheduler_type': 'StepLR', 'step_size': 3, 'gamma': 0.1}
         data_arg = {'dataset': 'dataset.seg_multi_label_db_dataset.SegMultiLabelDBDataset',
                     'train_dataset_arg':
                         {'db_path': r'./resources/data/osu_train.db',
                          'audio_dir': r'./resources/data/audio',
                          'table_name': 'TRAINFOLD%d',
                          'beat_feature_frames': 16384,
-                         'sample_beats': 32,
-                         'pad_beats': 8,
-                         'multi_label': True, },
+                         # this 8+32+8 will yield an audio fragment of about 17 sec
+                         'sample_beats': 16,
+                         'pad_beats': 4,
+                         'multi_label': False, },
                     'test_dataset_arg':
                         {'db_path': r'./resources/data/osu_train.db',
                          'audio_dir': r'./resources/data/audio',
                          'table_name': 'TESTFOLD%d',
                          'beat_feature_frames': 16384,
-                         'sample_beats': 32,
-                         'pad_beats': 8,
-                         'multi_label': True, },
-                    'batch_size': 2,
+                         'sample_beats': 16,
+                         'pad_beats': 4,
+                         'multi_label': False, },
+                    'batch_size': 1,
                     'shuffle': False,
                     'num_workers': 1,
                     'drop_last': False}
         loss_arg = {'loss_type': 'loss.multi_pred_loss.MultiPredLoss'}
         pred_arg = {'pred_type': 'pred.multi_pred.MultiPred'}
-        output_arg = {'log_dir': './resources/result/%s/%s' % (setting_name, str(lr)),
-                      'model_save_dir': './resources/result/%s/%s' % (setting_name, str(lr)),
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
                       'model_save_step': 1}
-        train_arg = {'epoch': 32, 'eval_step': 1}
+        train_arg = {'epoch': 24, 'eval_step': 1}
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
                        'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
@@ -515,11 +519,15 @@ def get_fold_config(config_dict, fold):
         fold_config_dict['data_arg']['test_dataset_arg']['table_name'] % fold
     fold_config_dict['data_arg']['train_dataset_arg']['table_name'] = \
         fold_config_dict['data_arg']['train_dataset_arg']['table_name'] % fold
+    fold_config_dict['output_arg']['log_dir'] = \
+        fold_config_dict['output_arg']['log_dir'] % fold
+    fold_config_dict['output_arg']['model_save_dir'] = \
+        fold_config_dict['output_arg']['model_save_dir'] % fold
     return fold_config_dict
 
 
 if __name__ == '__main__':
-    setting_name = 'seg_multi_label_resnet1d_lr0.0001'
+    setting_name = 'seg_mlp_bi_lr0.1'
     train_with_new_setting(setting_name)
     # config_path = './resources/config/%s.yaml' % setting_name
     # with open(config_path, 'r') as f:

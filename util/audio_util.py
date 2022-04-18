@@ -166,3 +166,22 @@ def save_audio(file_path, audio_data, sample_rate, temp_wav_file_path=None):
         torchaudio.backend.soundfile_backend.save(temp_wav_file_path, audio_data, sample_rate)
         audio_convert(temp_wav_file_path, file_path)
         os.remove(temp_wav_file_path)
+
+
+def crop_audio(audio_file_path: str, save_audio_file_path: str = None,
+               frame_num: int = 16384 * 48, offset: int = 0):
+    if save_audio_file_path is None:
+        save_audio_file_path = os.path.join(
+            os.path.dirname(audio_file_path),
+            'cropped_%d_' % frame_num + os.path.basename(audio_file_path)
+        )
+    audio_data, sample_rate = audioread_get_audio_data(audio_file_path)
+    cropped_audio_data = audio_data[:, offset:offset + frame_num]
+    save_audio(save_audio_file_path, cropped_audio_data, sample_rate)
+
+
+if __name__ == '__main__':
+    crop_audio(
+        r'C:\Users\asus\coding\python\osu_mapper\resources\data\audio\47065.mp3',
+
+    )
