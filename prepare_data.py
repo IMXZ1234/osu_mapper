@@ -1,12 +1,20 @@
 import os
+import pickle
 from datetime import timedelta
 import yaml
 
-from util.data import audio_osu_data, db, filter, prepare_data_util, fold_divider
+from util import beatmap_util
+from util.data import audio_osu_data
+from preprocess import db, filter
 from util.general_util import dynamic_import
 
-DEFAULT_AUDIO_DIR = r'./resources/data/audio'
-DEFAULT_DB_PATH = r'./resources/data/osu_train.db'
+DEFAULT_TRAIN_AUDIO_DIR = r'./resources/data/audio'
+DEFAULT_INFERENCE_AUDIO_DIR = r'./resources/data/inference_audio'
+
+DEFAULT_TRAIN_DB_PATH = r'./resources/data/osu_train.db'
+DEFAULT_INFERENCE_DB_PATH = r'./resources/data/osu_inference.db'
+
+DEFAULT_BEATMAP_LIST_SAVE_PATH = r'./resources/data/inference_beatmap_list.pkl'
 
 
 def old_prepare_dataset():
@@ -133,18 +141,35 @@ def old_prepare_dataset():
     # prepare_raw.download_beatmap_with_specifications(lib, datetime.datetime(2021, 1, 1))
 
 
-class OsuTrainDBFactory:
-    def __init__(self, preprocessor_arg, filter_arg, fold_divider_arg,
+class DataPreparer:
+    def __init__(self, preprocessor_arg=None, filter_arg=None, fold_divider_arg=None,
                  do_preprocess=True, do_filter=True, do_fold_divide=True,
-                 audio_dir=DEFAULT_AUDIO_DIR,
-                 db_path=DEFAULT_DB_PATH):
-        self.audio_dir, self.db_path = audio_dir, db_path
-        self.preprocessor = self.load_preprocessor(**preprocessor_arg)
-        self.filter = self.load_filter(**filter_arg)
-        self.fold_divider = self.load_fold_divider(**fold_divider_arg)
+                 preprocessed_audio_dir=None,
+                 db_path=None,
+                 inference=False,
+                 **kwargs):
+        self.inference = inference
+        self.preprocessed_audio_dir, self.db_path = preprocessed_audio_dir, db_path
         self.do_preprocess = do_preprocess
-        self.do_filter = do_filter
-        self.do_fold_divide = do_fold_divide
+        if self.do_preprocess:
+            self.preprocessor = self.load_preprocessor(**preprocessor_arg)
+        # when preparing inference data we do not need filtering or fold division
+        if self.inference:
+            if self.preprocessed_audio_dir is None:
+                self.preprocessed_audio_dir = DEFAULT_INFERENCE_AUDIO_DIR
+            if self.db_path is None:
+                self.db_path = DEFAULT_INFERENCE_DB_PATH
+        else:
+            if self.preprocessed_audio_dir is None:
+                self.preprocessed_audio_dir = DEFAULT_TRAIN_AUDIO_DIR
+            if self.db_path is None:
+                self.db_path = DEFAULT_TRAIN_DB_PATH
+            self.do_filter = do_filter
+            if self.do_filter:
+                self.filter = self.load_filter(**filter_arg)
+            self.do_fold_divide = do_fold_divide
+            if self.do_fold_divide:
+                self.fold_divider = self.load_fold_divider(**fold_divider_arg)
 
     def load_preprocessor(self, preprocessor_type, **kwargs):
         p = dynamic_import(preprocessor_type)(**kwargs)
@@ -167,12 +192,16 @@ class OsuTrainDBFactory:
             flt = dynamic_import(filter_type)(**kwargs)
         return flt
 
-    def prepare_data(self):
-        if not os.path.exists(self.audio_dir):
-            os.makedirs(self.audio_dir)
-        database = db.OsuTrainDB(self.db_path, connect=True)
+    def prepare_train_data(self):
+        if self.inference:
+            raise ValueError(
+                'DataPreparer initialized for inference data preparation can not be used to prepare train data'
+            )
+        if not os.path.exists(self.preprocessed_audio_dir):
+            os.makedirs(self.preprocessed_audio_dir)
+        database = db.OsuDB(self.db_path, connect=True)
         if self.do_preprocess:
-            database.gen_preprocessed(self.preprocessor, self.audio_dir, )
+            database.gen_preprocessed(self.preprocessor, self.preprocessed_audio_dir, False)
         # records = database.get_table_records('MAIN')
         # print([record[4] for record in records])
         if self.do_filter:
@@ -180,7 +209,7 @@ class OsuTrainDBFactory:
             print(self.filter)
             if issubclass(self.filter.__class__, filter.OsuTrainDataFilterGroup):
                 print(self.filter.data_filters)
-            database.filter_data(self.filter)
+            database.filter_data(self.filter, self.preprocessed_audio_dir)
         if self.do_fold_divide:
             for fold in range(1, 1+self.fold_divider.folds):
                 database.delete_view(view_name='TRAINFOLD%d' % fold)
@@ -188,9 +217,42 @@ class OsuTrainDBFactory:
             database.split_folds(self.fold_divider)
         database.close()
 
+    def prepare_inference_data(self,
+                               from_audio_path_list,
+                               beatmap_list):
+        assert len(from_audio_path_list) == len(beatmap_list)
+        if not os.path.exists(self.preprocessed_audio_dir):
+            os.makedirs(self.preprocessed_audio_dir)
+        database = db.OsuDB(self.db_path, connect=True)
+        if self.do_preprocess:
+            database.gen_preprocessed(self.preprocessor,
+                                      self.preprocessed_audio_dir,
+                                      use_beatmap_list=True,
+                                      beatmap_list=beatmap_list,
+                                      from_audio_path_list=from_audio_path_list)
+            # records = database.get_table_records('MAIN')
+            # print([record[4] for record in records])
+        database.close()
 
-def prepare_seg_multi_label_data():
-    config_path = r'./resources/config/prepare_data/seg_multi_label_data.yaml'
+
+def prepare_train_data_with_config(config_path):
+    with open(os.path.join(config_path), 'r') as f:
+        prepare_data_config = yaml.load(f, Loader=yaml.FullLoader)
+    prepare = DataPreparer(**prepare_data_config)
+    prepare.prepare_train_data()
+
+
+def prepare_inference_data_with_config(config_path,
+                                       from_audio_path_list,
+                                       beatmap_list_save_path):
+    with open(os.path.join(config_path), 'r') as f:
+        prepare_data_config = yaml.load(f, Loader=yaml.FullLoader)
+    prepare = DataPreparer(**prepare_data_config)
+    prepare.prepare_inference_data(from_audio_path_list, beatmap_list_save_path)
+
+
+def prepare_seg_multi_label_train_data():
+    config_path = r'resources/config/prepare_data/train/seg_multi_label_data.yaml'
     preprocessor_arg = {
         'preprocessor_type': 'util.data.preprocessor.ResamplePreprocessor',
         'beat_feature_frames': 16384,
@@ -225,15 +287,42 @@ def prepare_seg_multi_label_data():
         'do_preprocess': False,
         'do_filter': False,
         'do_fold_divide': True,
+        'preprocessed_audio_dir': DEFAULT_TRAIN_AUDIO_DIR,
+        'db_path': DEFAULT_TRAIN_DB_PATH,
     }
     with open(os.path.join(config_path), 'w') as f:
         yaml.dump(prepare_data_config, f)
-    prepare = OsuTrainDBFactory(**prepare_data_config)
-    prepare.prepare_data()
+    prepare_train_data_with_config(config_path)
+
+
+def prepare_seg_multi_label_inference_data(from_audio_path_list, bpm_list, snap_divisor=8):
+    assert len(from_audio_path_list) == len(bpm_list)
+    beatmap_list = [beatmap_util.get_empty_beatmap()
+                    for _ in range(len(from_audio_path_list))]
+    for beatmap, bpm in zip(beatmap_list, bpm_list):
+        beatmap_util.set_bpm(beatmap, bpm, snap_divisor)
+    with open(DEFAULT_BEATMAP_LIST_SAVE_PATH, 'wb') as f:
+        pickle.dump(beatmap_list, f)
+    config_path = r'resources/config/prepare_data/inference/seg_multi_label_data.yaml'
+    preprocessor_arg = {
+        'preprocessor_type': 'util.data.preprocessor.ResamplePreprocessor',
+        'beat_feature_frames': 16384,
+    }
+    prepare_data_config = {
+        'preprocessor_arg': preprocessor_arg,
+        'do_preprocess': False,
+        'preprocessed_audio_dir': DEFAULT_INFERENCE_AUDIO_DIR,
+        'db_path': DEFAULT_INFERENCE_DB_PATH,
+    }
+    with open(os.path.join(config_path), 'w') as f:
+        yaml.dump(prepare_data_config, f)
+    prepare_inference_data_with_config(
+        config_path, from_audio_path_list, DEFAULT_BEATMAP_LIST_SAVE_PATH
+    )
 
 
 if __name__ == '__main__':
-    prepare_seg_multi_label_data()
+    prepare_seg_multi_label_train_data()
     # database = db.OsuTrainDB(DEFAULT_DB_PATH)
     # # database.delete_view()
     # all_values = set(database.get_column('AUDIOFILENAME'))

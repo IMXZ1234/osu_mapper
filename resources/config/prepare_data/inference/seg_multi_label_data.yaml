@@ -1,0 +1,8 @@
+do_preprocess: false
+audio_dir: ./resources/data/inference/audio
+beat_feature_frames: 16384
+db_path: ./resources/data/osu_inference.db
+preprocessor_arg:
+  beat_feature_frames: 16384
+  preprocessor_type: preprocess.preprocessor.ResamplePreprocessor
+inference: true

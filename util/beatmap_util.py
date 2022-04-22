@@ -1,6 +1,6 @@
+import math
 from datetime import timedelta
 import slider
-
 
 empty_beatmap = '''
 osu file format v14
@@ -105,6 +105,52 @@ def get_empty_beatmap():
     return slider.Beatmap.parse(empty_beatmap)
 
 
+def set_bpm(beatmap: slider.Beatmap, bpm, snap_divisor=8):
+    """
+    Adds an non inherited timing point with bpm and snaps per beat as specified.
+    Also sets BeatDivisor field to snap_divisor
+    """
+    beatmap.beat_divisor = snap_divisor
+    beatmap.timing_points.append(
+        slider.beatmap.TimingPoint(
+            timedelta(milliseconds=0),
+            60000 / bpm,
+            snap_divisor,
+            0,
+            0,
+            0,
+            None,
+            False,
+        )
+    )
+
+
+def set_start_time(beatmap: slider.Beatmap, start_time: timedelta):
+    """
+    Simply by adding a Circle hitobject at start_time.
+    """
+    beatmap._hit_objects.append(
+        slider.beatmap.Circle(
+            slider.Position(0, 0),
+            start_time,
+            0
+        )
+    )
+
+
+def set_end_time(beatmap: slider.Beatmap, end_time: timedelta):
+    """
+    Simply by adding a Circle hitobject at end_time.
+    """
+    beatmap._hit_objects.append(
+        slider.beatmap.Circle(
+            slider.Position(0, 0),
+            end_time,
+            0
+        )
+    )
+
+
 def get_difficulty(beatmap: slider.Beatmap):
     try:
         speed_stars = beatmap.speed_stars()
@@ -138,3 +184,106 @@ def check_essential_fields(beatmap: slider.Beatmap, fields=ESSENTIAL_FIELDS):
             return False
     return True
 
+
+def add_circle(beatmap, pos, time, hitsound=0, addition='0:0:0:0:'):
+    """
+    time can be number (in milliseconds), or timedelta
+    """
+    if not isinstance(time, timedelta):
+        time = timedelta(milliseconds=time)
+    beatmap._hit_objects.append(
+        slider.beatmap.Circle(
+            slider.Position(pos[0], pos[1]),
+            time,
+            hitsound,
+            addition
+        )
+    )
+
+
+def add_slider(beatmap,
+               curve_type,
+               pos_list,
+               time,
+               num_beats,
+               ms_per_beat,
+               repeat=1,
+               hitsound=0,
+               edge_sounds=[0, 0],
+               edge_sets=['0:0', '0:0'],
+               addition='0:0:0:0:',
+               slider_multiplier=1.4,
+               slider_tick_rate=0.1,
+               ):
+    """
+    time can be number (in milliseconds), or timedelta
+    ms_per_beat : float
+        The milliseconds per beat, this is another representation of BPM.
+    """
+    # velocity_multiplier = -100 / ms_per_beat
+    pos_list = [slider.Position(x, y) for x, y in pos_list]
+    if not isinstance(time, timedelta):
+        time = timedelta(milliseconds=time)
+    # pixels_per_beat = slider_multiplier * 100 * velocity_multiplier
+    pixels_per_beat = slider_multiplier * 100
+    pixel_length = pixels_per_beat * num_beats / repeat
+    ticks = int((math.ceil((num_beats - 0.1) / repeat * slider_tick_rate) - 1) * repeat + repeat + 1)
+    duration = timedelta(milliseconds=int(num_beats * ms_per_beat))
+    # print(pos_list)
+    beatmap._hit_objects.append(
+        slider.beatmap.Slider(
+            pos_list[0],
+            time,
+            time + duration,
+            hitsound,
+            slider.beatmap.Curve.from_kind_and_points(
+                curve_type, pos_list, pixel_length
+            ),
+            repeat,
+            pixel_length,
+            ticks,
+            num_beats,
+            slider_tick_rate,
+            ms_per_beat,
+            edge_sounds,
+            edge_sets,
+            addition
+        )
+    )
+
+
+class BeatmapConstructor:
+    def __init__(self, beatmap: slider.Beatmap):
+        self.beatmap = beatmap
+        self.ms_per_beat = 60000 / self.beatmap.bpm_min()
+        self.slider_multiplier = self.beatmap.slider_multiplier
+        self.slider_tick_rate = self.beatmap.slider_tick_rate
+
+    def add_circle(self, pos, time, hitsound=0, addition='0:0:0:0:'):
+        add_circle(self.beatmap, pos, time, hitsound, addition)
+
+    def add_slider(self,
+                   curve_type,
+                   pos_list,
+                   time,
+                   num_beats,
+                   repeat=1,
+                   hitsound=0,
+                   edge_sounds=[0, 0],
+                   edge_sets=['0:0', '0:0'],
+                   addition='0:0:0:0:'):
+        add_slider(
+            self.beatmap,
+            curve_type,
+            pos_list,
+            time,
+            num_beats,
+            self.ms_per_beat,
+            repeat,
+            hitsound,
+            edge_sounds,
+            edge_sets,
+            addition,
+            self.slider_multiplier,
+            self.slider_tick_rate,
+        )

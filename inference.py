@@ -1,42 +1,49 @@
 import torch
-import yaml
-from torch.autograd import Variable
 
-from util import audio_util
-from dataset import collate_fn
-from util.general_util import dynamic_import
-
-
-def recursive_wrap_data(data, output_device):
-    """
-    recursively wrap tensors in data into Variable and move to device.
-
-    :param data:
-    :return:
-    """
-    if isinstance(data, list):
-        for i in range(len(data)):
-            data[i] = recursive_wrap_data(data[i], output_device)
-    elif isinstance(data, torch.Tensor):
-        return Variable(data.cuda(output_device), requires_grad=False)
-    return data
+from util.general_util import dynamic_import, recursive_wrap_data, recursive_to_cpu
 
 
 class Inference:
-    def __init__(self, config_path, model_path, device='cpu'):
-        with open(config_path, 'rt', encoding='utf-8') as f:
-            config_dict = yaml.load(f, Loader=yaml.FullLoader)
-        self.dataset = dynamic_import(config_dict['data_arg']['dataset'])
-        self.pred = self.load_pred(**config_dict['pred_arg'])
-        self.model = self.load_model(**config_dict['model_arg'])
-        model_state_dict = torch.load(model_path)
+    def __init__(self, pred_arg, model_arg, weights_path, data_arg=None, **kwargs):
+        # since Inference object may be initialized before dataset,
+        # we only keep a copy of data_arg, and postpone initialization of dataloader
+        self.data_arg = data_arg
+        self.data_iter = None
+        self.pred = self.load_pred(**pred_arg)
+        self.model = self.load_model(**model_arg)
+        self.weights_path = weights_path
+        model_state_dict = torch.load(self.weights_path)
         self.model.load_state_dict(model_state_dict)
+        if 'collate_fn' in kwargs:
+            self.collate_fn = dynamic_import(kwargs['collate_fn'])
+        else:
+            self.collate_fn = None
+        if 'output_collate_fn' in kwargs:
+            self.output_collate_fn = dynamic_import(kwargs['output_collate_fn'])
+        else:
+            self.output_collate_fn = dynamic_import('dataset.collate_fun.output_collate_fn')
+        if 'output_device' in kwargs:
+            self.output_device = kwargs['output_device']
+        else:
+            self.output_device = 'cpu'
+        if isinstance(self.output_device, int):
+            self.model.cuda(self.output_device)
         self.model.eval()
 
-        if device == 'cpu':
-            self.device = torch.device("cpu")
-        else:
-            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    def load_data(self,
+                  dataset,
+                  test_dataset_arg,
+                  batch_size=8,
+                  num_workers=1,
+                  **kwargs):
+        test_iter = torch.utils.data.DataLoader(
+            dataset=dynamic_import(dataset)(**test_dataset_arg),
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=self.collate_fn,
+            num_workers=num_workers,
+            drop_last=False)
+        return test_iter
 
     def load_pred(self, pred_type, **kwargs):
         pred = dynamic_import(pred_type)(**kwargs)
@@ -46,22 +53,24 @@ class Inference:
         net = dynamic_import(model_type)(**kwargs)
         return net
 
-    def run_inference(self, audio_file_path, speed_stars, bpm, start_time, end_time, feature_frames_per_beat=512, snap_divisor=8):
+    def set_data_arg(self, data_arg):
+        self.data_arg = data_arg
+
+    def run_inference(self):
         """
-        start_time, end_time should be in microseconds
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
         """
-        audio_data, sample_rate = audio_util.audioread_get_audio_data(audio_file_path)
-        data = self.dataset.preprocess(audio_data, sample_rate, speed_stars, bpm, start_time, end_time,
-                                       beat_feature_frames=feature_frames_per_beat, snap_divisor=snap_divisor)
-        print(data)
-        if self.device != torch.device('cpu'):
-            self.model.cuda(self.device)
-            data = recursive_wrap_data(data, self.device)
-        # into batch of size 1 to fit the model input format
-        data = [[data[i]] for i in range(len(data))]
-        with torch.no_grad():
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
             output = self.model(data)
-        label = self.pred(output)
-        print(label)
-        return label[0].cpu().numpy()
+            epoch_output_list.append(recursive_to_cpu(output))
+        # print(epoch_output_list)
+        epoch_output_list = self.output_collate_fn(epoch_output_list)
+        label = self.pred(epoch_output_list)
+        return label
 

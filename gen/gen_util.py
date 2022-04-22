@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 from datetime import timedelta
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,14 +12,6 @@ from slider import curve
 
 from util import audio_util, beatmap_util
 import inference
-
-
-def get_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        'path', type=str, help=r'Path to audio file to convert.'
-    )
-    return parser
 
 
 def _timedelta_to_milliseconds(td):
@@ -380,8 +373,5 @@ def extract_bpm(audio_file_path):
     bpm = 60 / thresh_bin_mean(itv, 0.02)
     first_beat = output[0, 0]
     last_beat = output[-1, 0]
-    return bpm, first_beat * 1000000, last_beat * 1000000
-
-
-
+    return float(bpm), float(first_beat) * 1000000, float(last_beat) * 1000000
 

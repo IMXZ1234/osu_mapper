@@ -1,13 +1,16 @@
 import os
 
 import inference
+from gen.beatmap_generator import BeatmapGenerator
 
 
-class BeatmapGenerator:
-    def __init__(self, config_path, model_path, device='cpu'):
-        self.inference = inference.Inference(config_path, model_path)
+class CNNGenerator(BeatmapGenerator):
+    def __init__(self, audio_file_path, inference_config_path, model_path, device='cpu'):
+        super().__init__(audio_file_path)
+        self.inference = inference.Inference(inference_config_path, model_path)
 
-    def generate_beatmap(self, audio_file_path, speed_stars, out_path, audio_info_path=None):
+    def generate_beatmap(self, audio_file_path_list, speed_stars_list,
+                         out_path_list=None, audio_info_path=None, **kwargs):
         if audio_info_path is not None:
             # load audio info (bpm, first_beat, last_beat) from file if possible
             if os.path.exists(audio_info_path):
@@ -16,17 +19,17 @@ class BeatmapGenerator:
                     s = line.split(',')
                     bpm, first_beat, last_beat = [float(part) for part in s]
             else:
-                bpm, first_beat, last_beat = extract_bpm(audio_file_path)
+                bpm, first_beat, last_beat = extract_bpm(audio_file_path_list)
                 with open(audio_info_path, 'w') as f:
                     f.write(','.join([str(bpm), str(first_beat), str(last_beat)]))
         else:
-            bpm, first_beat, last_beat = extract_bpm(audio_file_path)
+            bpm, first_beat, last_beat = extract_bpm(audio_file_path_list)
 
         print('bpm %f, first_beat %f, last_beat %f' % (bpm, first_beat, last_beat))
-        label = self.inference.run_inference(audio_file_path, speed_stars, bpm,
+        label = self.inference.run_inference(audio_file_path_list, speed_stars_list, bpm,
                                              start_time=first_beat, end_time=last_beat)
-        beatmap = self.label_to_beatmap(label, speed_stars, bpm, start_time=first_beat, end_time=last_beat)
-        beatmap.write_path(out_path)
+        beatmap = self.label_to_beatmap(label, speed_stars_list, bpm, start_time=first_beat, end_time=last_beat)
+        beatmap.write_path(out_path_list)
 
     @staticmethod
     def label_to_beatmap(label, speed_stars, bpm, start_time, end_time, snap_divisor=8):

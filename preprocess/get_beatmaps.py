@@ -1,7 +1,6 @@
 import requests
 from lxml import html
 import re
-import scrapy
 import slider
 
 

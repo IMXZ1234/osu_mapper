@@ -1,0 +1,29 @@
+collate_fn: dataset.collate_fn.data_array_to_tensor_inference
+output_collate_fn: dataset.collate_fn.output_collate_fn
+data_arg:
+  batch_size: 1
+  dataset: dataset.seg_multi_label_db_dataset.SegMultiLabelDBDataset
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    audio_dir: ./resources/data/inference_audio
+    beat_feature_frames: 16384
+    db_path: ./resources/data/osu_inference.db
+    inference: true
+    multi_label: false
+    pad_beats: 4
+    sample_beats: 16
+    snap_divisor: 8
+    table_name: MAIN
+model_arg:
+  beat_feature_frames: 16384
+  extract_hidden_layer_num: 0
+  model_type: net.seg_multi_pred_mlp.SegMultiPredMLP
+  num_classes: 2
+  pad_beats: 4
+  sample_beats: 16
+output_device: 0
+pred_arg:
+  pred_type: pred.multi_pred.MultiPred
+weights_path: './resources/result/seg_mlp_bi_lr0.1/0.1/1/model_epoch19.pt'

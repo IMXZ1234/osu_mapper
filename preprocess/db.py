@@ -4,7 +4,7 @@ import os
 import slider
 import traceback
 
-from util.data import prepare_data_util, preprocessor, filter, fold_divider
+from preprocess import preprocessor, prepare_data_util, filter, fold_divider
 from util import beatmap_util
 
 
@@ -159,9 +159,7 @@ class SQLite3DB:
         return [record[0] for record in cursor.fetchall()]
 
 
-class OsuTrainDB(SQLite3DB):
-    DEFAULT_DB_PATH = r'./resources/data/train_data.db'
-    DEFAULT_AUDIO_DIR = r'./resources/data/audio'
+class OsuDB(SQLite3DB):
     DEFAULT_COLUMNS = ['ID', 'BEATMAPID', 'BEATMAPSETID', 'BEATMAP [%s]' % slider.Beatmap.__name__, 'AUDIOFILENAME']
     DEFAULT_COLUMNS_TYPE = ['INT', 'INT', 'INT', 'BLOB', 'TEXT']
 
@@ -173,14 +171,14 @@ class OsuTrainDB(SQLite3DB):
     def beatmap_sql_converter(data: bytes):
         return pickle.loads(data)
 
-    def __init__(self, db_path=DEFAULT_DB_PATH, connect=True):
+    def __init__(self, db_path, connect=True):
         # primary key should be at pos 0
-        sqlite3.register_adapter(slider.Beatmap, OsuTrainDB.beatmap_sql_adaptor)
+        sqlite3.register_adapter(slider.Beatmap, OsuDB.beatmap_sql_adaptor)
         # # sadly this doesn't work
         # sqlite3.register_converter(slider.Beatmap.__name__, OsuTrainDB.beatmap_sql_converter)
-        super(OsuTrainDB, self).__init__(db_path, sqlite3.PARSE_COLNAMES, connect=connect)
+        super(OsuDB, self).__init__(db_path, sqlite3.PARSE_COLNAMES, connect=connect)
 
-    def filter_data(self, data_filter: filter.HitObjectFilter, audio_dir=DEFAULT_AUDIO_DIR):
+    def filter_data(self, data_filter: filter.HitObjectFilter, audio_dir):
         if 'FILTERED' in self.all_view_names():
             if input('FILTERED view already exist, deleted old view? y/n') in ('y', 'Y'):
                 self.delete_view('FILTERED')
@@ -193,14 +191,16 @@ class OsuTrainDB(SQLite3DB):
         print('filter complete')
 
     def gen_preprocessed(self, data_preprocessor: preprocessor.OsuTrainDataAudioPreprocessor,
-                         audio_dir=DEFAULT_AUDIO_DIR,
-                         osu_songs_dir=prepare_data_util.OsuSongsDir.DEFAULT_OSU_SONGS_DIR,
-                         from_db_path: str = None):
+                         preprocessed_audio_dir: str,
+                         use_beatmap_list: bool = False,
+                         osu_songs_dir: str = prepare_data_util.OsuSongsDir.DEFAULT_OSU_SONGS_DIR,
+                         beatmap_list: list[slider.Beatmap] = None,
+                         from_audio_path_list: str = None):
         """
-        If from_db_path is not None, preprocess audio files from another database.
+        If use_beatmap_list, preprocess audio files using Beatmaps in beatmap_list.
         """
-        columns = OsuTrainDB.DEFAULT_COLUMNS + data_preprocessor.EXTRA_COLUMNS
-        columns_type = OsuTrainDB.DEFAULT_COLUMNS_TYPE + data_preprocessor.EXTRA_COLUMNS_TYPE
+        columns = OsuDB.DEFAULT_COLUMNS + data_preprocessor.EXTRA_COLUMNS
+        columns_type = OsuDB.DEFAULT_COLUMNS_TYPE + data_preprocessor.EXTRA_COLUMNS_TYPE
         try:
             self.create_table(columns, columns_type, 'MAIN')
         except sqlite3.OperationalError:
@@ -209,47 +209,28 @@ class OsuTrainDB(SQLite3DB):
                 self.create_table(columns, columns_type, 'MAIN')
             else:
                 return
-        dir_obj = prepare_data_util.OsuSongsDir(osu_songs_dir)
+
+        # used to record extra columns of preprocessed audio file
+        # also help prevent preprocessing same audio again
+        audio_extra_columns = dict()
         current_id = 0
-        for beatmapset_dirname, beatmapset_dir_path, osu_filename_list, osu_file_path_list in dir_obj.beatmapsets():
-            print('processing %s' % beatmapset_dirname)
-            beatmaps = []
-            for osu_file_path in osu_file_path_list:
-                try:
-                    beatmap = slider.Beatmap.from_path(osu_file_path)
-                    if beatmap_util.check_essential_fields(beatmap):
-                        beatmaps.append(beatmap)
-                    else:
-                        print('beatmap from %s is missing essential fields, skipped!' % osu_file_path)
-                except:
-                    print('parsing .osu failed for %s' % osu_file_path)
+        if use_beatmap_list:
+            # most likely during inference data preparation
+            assert from_audio_path_list is not None
+            assert beatmap_list is not None
+            for beatmap, audio_from_path in zip(beatmap_list, from_audio_path_list):
+                if not os.path.exists(audio_from_path):
+                    print('audio %s does not exist!' % audio_from_path)
                     continue
-            audio_extra_columns = dict()
-            beatmapset_audio_id = None
-            for beatmap in beatmaps:
-                if beatmapset_audio_id is None or beatmapset_audio_id == 0:
-                    audio_to_filename = '%d.mp3' % beatmap.beatmap_set_id
-                else:
-                    audio_to_filename = '%d_%d.mp3' % (beatmap.beatmap_set_id, beatmapset_audio_id)
-                print('version %s' % beatmap.version)
-                # audio data is shared among beatmaps in a beatmapset and has been preprocessed
-                if beatmap.audio_filename in audio_extra_columns:
+                audio_to_path = os.path.join(preprocessed_audio_dir, beatmap.audio_filename)
+                if audio_from_path in audio_extra_columns:
                     self.insert_row([current_id,
                                      beatmap.beatmap_id,
                                      beatmap.beatmap_set_id,
                                      beatmap,
-                                     audio_to_filename,
-                                     *(audio_extra_columns[beatmap.audio_filename])])
+                                     beatmap.audio_filename,
+                                     *audio_extra_columns[audio_from_path]])
                 else:
-                    if beatmapset_audio_id is None:
-                        # the first audio for this beatmapset
-                        beatmapset_audio_id = 0
-                    else:
-                        beatmapset_audio_id += 1
-                    if beatmapset_audio_id != 0:
-                        print('audio file No.%d found for beatmapset %d' % (beatmapset_audio_id, beatmap.beatmap_set_id))
-                    audio_from_path = os.path.join(beatmapset_dir_path, beatmap.audio_filename)
-                    audio_to_path = os.path.join(audio_dir, audio_to_filename)
                     try:
                         extra_columns = data_preprocessor.preprocess(beatmap, audio_from_path, audio_to_path)
                     except:
@@ -258,14 +239,72 @@ class OsuTrainDB(SQLite3DB):
                         print('audio_from_path: %s' % audio_from_path)
                         print('audio_to_path: %s' % audio_to_path)
                         continue
-                    audio_extra_columns[beatmap.audio_filename] = extra_columns
+                    audio_extra_columns[audio_from_path] = extra_columns
                     self.insert_row([current_id,
                                      beatmap.beatmap_id,
                                      beatmap.beatmap_set_id,
                                      beatmap,
-                                     audio_to_filename,
+                                     beatmap.audio_filename,
                                      *extra_columns])
                 current_id += 1
+        else:
+            # most likely during train data preparation
+            dir_obj = prepare_data_util.OsuSongsDir(osu_songs_dir)
+            for beatmapset_dirname, beatmapset_dir_path, osu_filename_list, osu_file_path_list in dir_obj.beatmapsets():
+                print('processing %s' % beatmapset_dirname)
+                beatmaps = []
+                # extract Beatmap from .osu files first, ensure that .osu and corresponding Beatmap is valid
+                for osu_file_path in osu_file_path_list:
+                    try:
+                        beatmap = slider.Beatmap.from_path(osu_file_path)
+                        if beatmap_util.check_essential_fields(beatmap):
+                            beatmaps.append(beatmap)
+                        else:
+                            print('beatmap from %s is missing essential fields, skipped!' % osu_file_path)
+                    except:
+                        print('parsing .osu failed for %s' % osu_file_path)
+                        continue
+                beatmapset_audio_id = None
+                for beatmap in beatmaps:
+                    if beatmapset_audio_id is None or beatmapset_audio_id == 0:
+                        audio_to_filename = '%d.mp3' % beatmap.beatmap_set_id
+                    else:
+                        audio_to_filename = '%d_%d.mp3' % (beatmap.beatmap_set_id, beatmapset_audio_id)
+                    print('version %s' % beatmap.version)
+                    audio_from_path = os.path.join(beatmapset_dir_path, beatmap.audio_filename)
+                    # audio data is shared among beatmaps in a beatmapset and has been preprocessed
+                    if audio_from_path in audio_extra_columns:
+                        self.insert_row([current_id,
+                                         beatmap.beatmap_id,
+                                         beatmap.beatmap_set_id,
+                                         beatmap,
+                                         audio_to_filename,
+                                         *(audio_extra_columns[audio_from_path])])
+                    else:
+                        if beatmapset_audio_id is None:
+                            # the first audio for this beatmapset
+                            beatmapset_audio_id = 0
+                        else:
+                            beatmapset_audio_id += 1
+                        if beatmapset_audio_id != 0:
+                            print('audio file No.%d found for beatmapset %d' % (beatmapset_audio_id, beatmap.beatmap_set_id))
+                        audio_to_path = os.path.join(preprocessed_audio_dir, audio_to_filename)
+                        try:
+                            extra_columns = data_preprocessor.preprocess(beatmap, audio_from_path, audio_to_path)
+                        except:
+                            traceback.print_exc()
+                            print('fail to preprocess, skipping: %d_%d' % (beatmap.beatmap_set_id, beatmap.beatmap_id))
+                            print('audio_from_path: %s' % audio_from_path)
+                            print('audio_to_path: %s' % audio_to_path)
+                            continue
+                        audio_extra_columns[audio_from_path] = extra_columns
+                        self.insert_row([current_id,
+                                         beatmap.beatmap_id,
+                                         beatmap.beatmap_set_id,
+                                         beatmap,
+                                         audio_to_filename,
+                                         *extra_columns])
+                    current_id += 1
         print('preprocess complete')
 
     def split_folds(self, data_fold_divider: fold_divider.OsuTrainDBFoldDivider):
