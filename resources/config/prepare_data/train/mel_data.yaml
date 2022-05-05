@@ -1,0 +1,29 @@
+db_path: ./resources/data/osu_train_mel.db
+do_filter: true
+do_fold_divide: true
+do_preprocess: true
+filter_arg:
+  filter_arg:
+  - filter_type: preprocess.filter.HitObjectFilter
+  - filter_type: preprocess.filter.BeatmapsetSingleAudioFilter
+  - filter_type: preprocess.filter.SingleBMPFilter
+  - filter_type: preprocess.filter.SingleUninheritedTimingPointFilter
+  - filter_type: preprocess.filter.SnapDivisorFilter
+  filter_type: preprocess.filter.OsuTrainDataFilterGroup
+fold_divider_arg:
+  fold_divider_type: preprocess.fold_divider.OsuTrainDBFoldDivider
+  folds: 5
+  shuffle: false
+from_db_path: ./resources/data/osu_train.db
+from_dir: ./resources/data/audio
+preprocessor_arg:
+  beat_feature_frames: 16384
+  from_resampled: true
+  hop_length: 512
+  n_fft: 1024
+  n_mels: 128
+  preprocessor_type: preprocess.preprocessor.MelPreprocessor
+  snap_offset: 0
+  win_length: null
+save_dir: ./resources/data/mel
+save_ext: .pkl

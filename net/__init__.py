@@ -5,4 +5,6 @@ from . import (
     segresnet1d,
     seg_multi_pred_resnet1d,
     seg_multi_pred_mlp,
+    seg_multi_pred_cnn,
+    mel_mlp,
 )

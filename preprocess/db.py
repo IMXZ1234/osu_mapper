@@ -1,11 +1,13 @@
 import pickle
 import sqlite3
 import os
+from typing import Union
+
 import slider
 import traceback
 
 from preprocess import preprocessor, prepare_data_util, filter, fold_divider
-from util import beatmap_util
+from util import beatmap_util, general_util
 
 
 class SQLite3DB:
@@ -142,14 +144,18 @@ class SQLite3DB:
         return cursor.fetchall()
 
     def get_row(self, column, values, table_num='MAIN'):
+        """
+        If values is a single value, return a row. else return a list of rows.
+        """
         if isinstance(values, (tuple, list)):
             cursor = self.con.execute('SELECT * from %s WHERE %s IN (%s);'
                                       % (table_num, column, ','.join(['?'] * len(values))),
                                       values)
+            return cursor.fetchall()
         else:
             cursor = self.con.execute('SELECT * from %s WHERE %s = %s;'
                                       % (table_num, column, values))
-        return cursor.fetchall()
+            return cursor.fetchall()[0]
 
     def get_column(self, column, table_name='MAIN'):
         """
@@ -162,6 +168,9 @@ class SQLite3DB:
 class OsuDB(SQLite3DB):
     DEFAULT_COLUMNS = ['ID', 'BEATMAPID', 'BEATMAPSETID', 'BEATMAP [%s]' % slider.Beatmap.__name__, 'AUDIOFILENAME']
     DEFAULT_COLUMNS_TYPE = ['INT', 'INT', 'INT', 'BLOB', 'TEXT']
+    DEFAULT_COLUMNS_DATA = ['ID', 'BEATMAPID', 'BEATMAPSETID', 'BEATMAP [%s]' % slider.Beatmap.__name__, 'DATA']
+    DEFAULT_COLUMNS_DATA_TYPE = ['INT', 'INT', 'INT', 'BLOB', 'BLOB']
+    DEFAULT_COLUMNS_NUM = 5
 
     @staticmethod
     def beatmap_sql_adaptor(beatmap: slider.Beatmap):
@@ -178,7 +187,7 @@ class OsuDB(SQLite3DB):
         # sqlite3.register_converter(slider.Beatmap.__name__, OsuTrainDB.beatmap_sql_converter)
         super(OsuDB, self).__init__(db_path, sqlite3.PARSE_COLNAMES, connect=connect)
 
-    def filter_data(self, data_filter: filter.HitObjectFilter, audio_dir):
+    def filter_data(self, data_filter: filter.HitObjectFilter, save_dir):
         if 'FILTERED' in self.all_view_names():
             if input('FILTERED view already exist, deleted old view? y/n') in ('y', 'Y'):
                 self.delete_view('FILTERED')
@@ -186,34 +195,31 @@ class OsuDB(SQLite3DB):
                 return
         # ID is on pos 0, BEATMAP is on pos 3, AUDIOFILENAME is on pos 4
         keep_sample_idx = [sample[0] for sample in self.get_table_records('MAIN')
-                           if data_filter.filter(pickle.loads(sample[3]), os.path.join(audio_dir, sample[4]))]
+                           if data_filter.filter(pickle.loads(sample[3]), os.path.join(save_dir, sample[4]))]
         self.create_view_from_rows('ID', keep_sample_idx, 'FILTERED', 'MAIN')
         print('filter complete')
 
-    def gen_preprocessed(self, data_preprocessor: preprocessor.OsuTrainDataAudioPreprocessor,
-                         preprocessed_audio_dir: str,
+    def gen_preprocessed(self, data_preprocessor: Union[preprocessor.OsuAudioFilePreprocessor,
+                                                        preprocessor.OsuAudioPreprocessor],
+                         save_dir: str = None,
                          use_beatmap_list: bool = False,
                          osu_songs_dir: str = prepare_data_util.OsuSongsDir.DEFAULT_OSU_SONGS_DIR,
                          beatmap_list: list[slider.Beatmap] = None,
-                         from_audio_path_list: str = None):
+                         from_audio_path_list: str = None,
+                         clear_table=True,
+                         save_ext=None):
         """
         If use_beatmap_list, preprocess audio files using Beatmaps in beatmap_list.
         """
         columns = OsuDB.DEFAULT_COLUMNS + data_preprocessor.EXTRA_COLUMNS
         columns_type = OsuDB.DEFAULT_COLUMNS_TYPE + data_preprocessor.EXTRA_COLUMNS_TYPE
-        try:
-            self.create_table(columns, columns_type, 'MAIN')
-        except sqlite3.OperationalError:
-            if input('MAIN table already exist, deleted old table? y/n') in ('y', 'Y'):
-                self.delete_table('MAIN')
-                self.create_table(columns, columns_type, 'MAIN')
-            else:
-                return
+        self._try_create_main_table(columns, columns_type, clear_table)
 
         # used to record extra columns of preprocessed audio file
         # also help prevent preprocessing same audio again
         audio_extra_columns = dict()
-        current_id = 0
+        start_id = self.record_num('MAIN')
+        current_id = start_id
         if use_beatmap_list:
             # most likely during inference data preparation
             assert from_audio_path_list is not None
@@ -222,13 +228,18 @@ class OsuDB(SQLite3DB):
                 if not os.path.exists(audio_from_path):
                     print('audio %s does not exist!' % audio_from_path)
                     continue
-                audio_to_path = os.path.join(preprocessed_audio_dir, beatmap.audio_filename)
+                if save_ext is not None:
+                    save_audio_filename = general_util.change_ext(beatmap.audio_filename, save_ext)
+                else:
+                    save_audio_filename = beatmap.audio_filename
+                beatmap.audio_filename = save_audio_filename
+                audio_to_path = os.path.join(save_dir, beatmap.audio_filename)
                 if audio_from_path in audio_extra_columns:
                     self.insert_row([current_id,
                                      beatmap.beatmap_id,
                                      beatmap.beatmap_set_id,
                                      beatmap,
-                                     beatmap.audio_filename,
+                                     save_audio_filename,
                                      *audio_extra_columns[audio_from_path]])
                 else:
                     try:
@@ -244,7 +255,7 @@ class OsuDB(SQLite3DB):
                                      beatmap.beatmap_id,
                                      beatmap.beatmap_set_id,
                                      beatmap,
-                                     beatmap.audio_filename,
+                                     save_audio_filename,
                                      *extra_columns])
                 current_id += 1
         else:
@@ -288,7 +299,7 @@ class OsuDB(SQLite3DB):
                             beatmapset_audio_id += 1
                         if beatmapset_audio_id != 0:
                             print('audio file No.%d found for beatmapset %d' % (beatmapset_audio_id, beatmap.beatmap_set_id))
-                        audio_to_path = os.path.join(preprocessed_audio_dir, audio_to_filename)
+                        audio_to_path = os.path.join(save_dir, audio_to_filename)
                         try:
                             extra_columns = data_preprocessor.preprocess(beatmap, audio_from_path, audio_to_path)
                         except:
@@ -306,6 +317,96 @@ class OsuDB(SQLite3DB):
                                          *extra_columns])
                     current_id += 1
         print('preprocess complete')
+        return start_id, current_id
+
+    def _try_create_main_table(self, columns, columns_type, clear_table):
+        if clear_table or ('MAIN' not in self.all_table_names()):
+            try:
+                self.create_table(columns, columns_type, 'MAIN')
+            except sqlite3.OperationalError:
+                if input('MAIN table already exist, deleted old table? y/n') in ('y', 'Y'):
+                    self.delete_table('MAIN')
+                    self.create_table(columns, columns_type, 'MAIN')
+                else:
+                    return
+
+    def _get_header_columns_by_preprocessor(self, data_preprocessor):
+        data_in_db = isinstance(data_preprocessor, preprocessor.OsuAudioPreprocessor)
+        if not data_in_db:
+            columns = OsuDB.DEFAULT_COLUMNS
+            columns_type = OsuDB.DEFAULT_COLUMNS_TYPE
+        else:
+            columns = OsuDB.DEFAULT_COLUMNS_DATA
+            columns_type = OsuDB.DEFAULT_COLUMNS_DATA_TYPE
+        columns += data_preprocessor.EXTRA_COLUMNS
+        columns_type += data_preprocessor.EXTRA_COLUMNS_TYPE
+        return data_in_db, columns, columns_type
+
+    def gen_preprocessed_from_db(self, data_preprocessor: Union[preprocessor.OsuAudioFilePreprocessor,
+                                                        preprocessor.OsuAudioPreprocessor],
+                                 from_db_path: str,
+                                 save_dir: str = None,
+                                 from_dir: str = None,
+                                 clear_table=True,
+                                 save_ext=None):
+        data_in_db, columns, columns_type = self._get_header_columns_by_preprocessor(data_preprocessor)
+        self._try_create_main_table(columns, columns_type, clear_table)
+
+        ref_db = OsuDB(from_db_path)
+        total_samples = ref_db.record_num('MAIN')
+        # ref_columns = ref_db.table_info('MAIN')[0]
+        # ref_extra_columns = ref_columns[OsuDB.DEFAULT_COLUMNS_NUM:]
+
+        start_id = self.record_num('MAIN')
+        current_id = start_id
+        audio_extra_columns = dict()
+        for ref_current_id in range(total_samples):
+            row = ref_db.get_row('ID', ref_current_id, 'MAIN')
+            if not data_in_db:
+                # pos 4 saves audio path
+                audio_filename = row[4]
+                if save_ext is not None:
+                    save_audio_filename = general_util.change_ext(audio_filename, save_ext)
+                else:
+                    save_audio_filename = audio_filename
+                # pos 3 saves pickled Beatmap
+                beatmap = pickle.loads(row[3])
+                audio_from_path = os.path.join(from_dir, audio_filename)
+                if not os.path.exists(audio_from_path):
+                    print('audio %s does not exist!' % audio_from_path)
+                    continue
+                audio_to_path = os.path.join(save_dir, save_audio_filename)
+                beatmap.audio_filename = save_audio_filename
+                if audio_from_path in audio_extra_columns:
+                    print('%s already processed' % audio_filename)
+                    self.insert_row([current_id,
+                                     beatmap.beatmap_id,
+                                     beatmap.beatmap_set_id,
+                                     beatmap,
+                                     save_audio_filename,
+                                     *audio_extra_columns[audio_from_path]])
+                else:
+                    try:
+                        print('processing %s' % audio_filename)
+                        extra_columns = data_preprocessor.preprocess(beatmap, audio_from_path, audio_to_path)
+                    except:
+                        traceback.print_exc()
+                        print('fail to preprocess, skipping: %d_%d' % (beatmap.beatmap_set_id, beatmap.beatmap_id))
+                        print('audio_from_path: %s' % audio_from_path)
+                        print('audio_to_path: %s' % audio_to_path)
+                        continue
+                    audio_extra_columns[audio_from_path] = extra_columns
+                    self.insert_row([current_id,
+                                     beatmap.beatmap_id,
+                                     beatmap.beatmap_set_id,
+                                     beatmap,
+                                     save_audio_filename,
+                                     *extra_columns])
+            else:
+                raise NotImplementedError
+            current_id += 1
+        print('preprocess complete')
+        return start_id, current_id
 
     def split_folds(self, data_fold_divider: fold_divider.OsuTrainDBFoldDivider):
         """
@@ -318,3 +419,11 @@ class OsuDB(SQLite3DB):
             self.create_view_from_rows('ID', train_id, 'TRAINFOLD%d' % (fold_idx + 1), 'MAIN')
             self.create_view_from_rows('ID', test_id, 'TESTFOLD%d' % (fold_idx + 1), 'MAIN')
         print('split folds complete')
+
+    def create_inference_view(self, id_list):
+        if 'INFERENCE' in self.all_view_names():
+            print('deleted old INFERENCE view')
+            self.delete_view('INFERENCE')
+        self.create_view_from_rows(
+            'ID', id_list, 'INFERENCE', 'MAIN'
+        )

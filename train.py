@@ -1,4 +1,6 @@
 import math
+import time
+
 import numpy as np
 import torch
 import os
@@ -11,6 +13,7 @@ import yaml
 import matplotlib.pyplot as plt
 import threading
 import functools
+from tqdm import tqdm
 
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data
 from util.result import metrics_util
@@ -35,7 +38,7 @@ class Train:
         if 'output_collate_fn' in kwargs:
             self.output_collate_fn = dynamic_import(kwargs['collate_fn'])
         else:
-            self.output_collate_fn = dynamic_import('dataset.collate_fun.output_collate_fn')
+            self.output_collate_fn = dynamic_import('dataset.collate_fn.output_collate_fn')
         if 'output_device' in kwargs:
             self.output_device = kwargs['output_device']
         else:
@@ -228,7 +231,7 @@ class Train:
         epoch_label_list = []
         epoch_index_list = []
         self.logger.info('train epoch: {}'.format(epoch + 1))
-        for batch, (data, label, index) in enumerate(self.train_iter):
+        for batch, (data, label, index) in enumerate(tqdm(self.train_iter)):
             epoch_index_list.append(index)
             data = recursive_wrap_data(data, self.output_device)
             label = recursive_wrap_data(label, self.output_device)
@@ -272,7 +275,7 @@ class Train:
         epoch_label_list = []
         epoch_index_list = []
         self.logger.info('eval epoch: {}'.format(epoch + 1))
-        for batch, (data, label, index) in enumerate(self.test_iter):
+        for batch, (data, label, index) in enumerate(tqdm(self.test_iter)):
             epoch_index_list.append(index)
             data = recursive_wrap_data(data, self.output_device)
             label = recursive_wrap_data(label, self.output_device)
@@ -382,7 +385,65 @@ def plot_difference_distribution(pred_list, target_list, difference_step):
     plt.show()
 
 
-def train_with_new_setting(setting_name):
+def train_mel_mlp(setting_name):
+    for lr in [0.1]:
+        print('init lr %s' % str(lr))
+        config_path = './resources/config/%s.yaml' % setting_name
+        model_arg = {'model_type': 'net.mel_mlp.MelMLP',
+                     'num_classes': 3,
+                     'extract_hidden_layer_num': 2,
+                     'snap_mel': 4,
+                     'n_mel': 128,
+                     'sample_beats': 16,
+                     'pad_beats': 4,
+                     'snap_divisor': 8,
+                     }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {'optimizer_type': 'SGD', 'lr': lr}
+        scheduler_arg = {'scheduler_type': 'StepLR', 'step_size': 1, 'gamma': 0.1}
+        data_arg = {'dataset': 'dataset.mel_db_dataset.MelDBDataset',
+                    'train_dataset_arg':
+                        {'db_path': r'./resources/data/osu_train_mel.db',
+                         'audio_dir': r'./resources/data/mel',
+                         'table_name': 'TRAINFOLD%d',
+                         'snap_mel': 4,
+                         'snap_offset': 0,
+                         'snap_divisor': 8,
+                         'sample_beats': 16,
+                         'pad_beats': 4,
+                         'multi_label': True, },
+                    'test_dataset_arg':
+                        {'db_path': r'./resources/data/osu_train_mel.db',
+                         'audio_dir': r'./resources/data/mel',
+                         'table_name': 'TESTFOLD%d',
+                         'snap_mel': 4,
+                         'snap_offset': 0,
+                         'snap_divisor': 8,
+                         'sample_beats': 16,
+                         'pad_beats': 4,
+                         'multi_label': True, },
+                    'batch_size': 1,
+                    'shuffle': False,
+                    'num_workers': 1,
+                    'drop_last': False}
+        loss_arg = {'loss_type': 'loss.multi_pred_loss.MultiPredLoss'}
+        pred_arg = {'pred_type': 'pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_step': 1}
+        train_arg = {'epoch': 4, 'eval_step': 1}
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       'collate_fn': 'dataset.collate_fn.data_array_to_tensor',
+                       'cal_acc_func': 'metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=5)
+
+
+def train_seg_multi_pred_mlp(setting_name):
     for lr in [0.1]:
         print('init lr %s' % str(lr))
         config_path = './resources/config/%s.yaml' % setting_name
@@ -435,6 +496,56 @@ def train_with_new_setting(setting_name):
         train_with_config(config_path, folds=5)
 
 
+def train_seg_multi_pred_cnn(setting_name):
+    for lr in [0.1]:
+        print('init lr %s' % str(lr))
+        config_path = './resources/config/%s.yaml' % setting_name
+        model_arg = {'model_type': 'net.seg_multi_pred_cnn.SegMultiPredCNN',
+                     'num_classes': 2,
+                     'out_snaps': 128*8,
+                     }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {'optimizer_type': 'SGD', 'lr': lr}
+        scheduler_arg = {'scheduler_type': 'StepLR', 'step_size': 1, 'gamma': 0.1}
+        data_arg = {'dataset': 'dataset.seg_multi_label_db_dataset.SegMultiLabelDBDataset',
+                    'train_dataset_arg':
+                        {'db_path': r'./resources/data/osu_train.db',
+                         'audio_dir': r'./resources/data/audio',
+                         'table_name': 'TRAINFOLD%d',
+                         'beat_feature_frames': 16384,
+                         # this 8+32+8 will yield an audio fragment of about 17 sec
+                         'sample_beats': 128,
+                         'pad_beats': 32,
+                         'multi_label': False, },
+                    'test_dataset_arg':
+                        {'db_path': r'./resources/data/osu_train.db',
+                         'audio_dir': r'./resources/data/audio',
+                         'table_name': 'TESTFOLD%d',
+                         'beat_feature_frames': 16384,
+                         'sample_beats': 128,
+                         'pad_beats': 32,
+                         'multi_label': False, },
+                    'batch_size': 1,
+                    'shuffle': False,
+                    'num_workers': 1,
+                    'drop_last': False}
+        loss_arg = {'loss_type': 'loss.multi_pred_loss.MultiPredLoss'}
+        pred_arg = {'pred_type': 'pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_step': 1}
+        train_arg = {'epoch': 4, 'eval_step': 1}
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       'collate_fn': 'dataset.collate_fn.data_array_to_tensor',
+                       'cal_acc_func': 'metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=5)
+
+
 def train_with_config(config_path, folds=5):
     for fold in range(1, folds + 1):
         with open(config_path, 'r') as f:
@@ -459,15 +570,6 @@ def get_fold_config(config_dict, fold):
 
 
 if __name__ == '__main__':
-    setting_name = 'seg_mlp_bi_lr0.1'
-    train_with_new_setting(setting_name)
-    # config_path = './resources/config/%s.yaml' % setting_name
-    # with open(config_path, 'r') as f:
-    #     config_dict = yaml.load(f, Loader=yaml.FullLoader)
-    # for lr in [0.1]:
-    #     print('init lr %s' % str(lr))
-    #     for fold in range(1, 6):
-    #         print('Fold %d' % fold)
-    #         fold_config_dict = get_fold_config(config_dict, fold)
-    #         train = Train(**fold_config_dict)
-    #         train.run_train()
+    setting_name = 'mel_mlp_cs_lr0.1'
+    train_mel_mlp(setting_name)
+

@@ -53,15 +53,15 @@ class BeatmapsetSingleAudioFilter(OsuTrainDataFilter):
 class SingleBMPFilter(OsuTrainDataFilter):
     def filter(self, beatmap: slider.Beatmap, audio_file_path):
         if beatmap.bpm_min() != beatmap.bpm_max():
-            print('beatmap.bpm_min != beatmap.bpm_max')
-            print('beatmap.beatmap_set_id')
-            print(beatmap.beatmap_set_id)
-            print('beatmap.beatmap_id')
-            print(beatmap.beatmap_id)
-            print('beatmap.bpm_min')
-            print(beatmap.bpm_min())
-            print('beatmap.bpm_max')
-            print(beatmap.bpm_max())
+            # print('beatmap.bpm_min != beatmap.bpm_max')
+            # print('beatmap.beatmap_set_id')
+            # print(beatmap.beatmap_set_id)
+            # print('beatmap.beatmap_id')
+            # print(beatmap.beatmap_id)
+            # print('beatmap.bpm_min')
+            # print(beatmap.bpm_min())
+            # print('beatmap.bpm_max')
+            # print(beatmap.bpm_max())
             return False
         return True
 
@@ -73,12 +73,27 @@ class SingleUninheritedTimingPointFilter(OsuTrainDataFilter):
             if tp.parent is None:
                 uninherited_tp_num += 1
         if uninherited_tp_num > 1:
-            print('uninherited_tp_num > 1')
-            print('beatmap.beatmap_set_id')
-            print(beatmap.beatmap_set_id)
-            print('beatmap.beatmap_id')
-            print(beatmap.beatmap_id)
-            print('uninherited_tp_num')
-            print(uninherited_tp_num)
+            # print('uninherited_tp_num > 1')
+            # print('beatmap.beatmap_set_id')
+            # print(beatmap.beatmap_set_id)
+            # print('beatmap.beatmap_id')
+            # print(beatmap.beatmap_id)
+            # print('uninherited_tp_num')
+            # print(uninherited_tp_num)
+            return False
+        return True
+
+
+class SnapDivisorFilter(OsuTrainDataFilter):
+    def filter(self, beatmap: slider.Beatmap, audio_file_path):
+        if beatmap.beat_divisor > 8:
+            print('beat_divisor > 8: %d' % beatmap.beat_divisor)
+            print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
+            print()
+            return False
+        if beatmap.beat_divisor % 2 != 0:
+            print('beat_divisor is odd: %d' % beatmap.beat_divisor)
+            print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
+            print()
             return False
         return True

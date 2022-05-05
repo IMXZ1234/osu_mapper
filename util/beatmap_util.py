@@ -1,6 +1,12 @@
 import math
+import os
+import time
 from datetime import timedelta
 import slider
+from zipfile import ZipFile
+import itertools
+
+from util import general_util
 
 empty_beatmap = '''
 osu file format v14
@@ -27,7 +33,7 @@ Title:audio
 TitleUnicode:audio
 Artist:Various Artists
 ArtistUnicode:Various Artists
-Creator:IMXZ123
+Creator:osu_mapper
 Version:Insane
 Source:
 Tags:
@@ -58,26 +64,94 @@ SliderTickRate:1
 [HitObjects]
 '''
 
-ESSENTIAL_FIELDS = ['beatmap_set_id', 'beatmap_id', 'audio_filename']
+ESSENTIAL_FIELDS = ['beatmap_set_id', 'beatmap_id', 'audio_filename', 'artist', 'title', 'version']
+DEFAULT_OSZ_DIR = './resources/gen/osz'
+DEFAULT_OSU_DIR = './resources/gen/osu'
 
 
-def get_first_hit_object_time_microseconds(beatmap: slider.Beatmap):
+def osu_filename(beatmap: slider.Beatmap):
+    return '%s - %s (%s) [%s].osu' % (beatmap.artist, beatmap.title, beatmap.creator, beatmap.version)
+
+
+def osz_filename(beatmap: slider.Beatmap):
+    if beatmap.beatmap_set_id == -1:
+        return 'beatmap-%s-%s.osz' % (str(hash(time.time())), os.path.splitext(beatmap.audio_filename)[0])
+    else:
+        return '%s %s - %s.osz' % (beatmap.beatmap_set_id, beatmap.artist, beatmap.title)
+
+
+def set_meta(beatmap: slider.Beatmap, meta: dict):
+    for k, v in meta.items():
+        if k in beatmap.__dict__:
+            beatmap.__setattr__(k, v)
+        else:
+            print('unknown meta: %s' % k)
+
+
+def pack_to_osz(audio_path, osu_path_list, osz_path=None, beatmap_list: list[slider.Beatmap] = None):
+    if beatmap_list is None:
+        beatmap_list = [slider.Beatmap.from_path(osu_path) for osu_path in osu_path_list]
+    if osz_path is None:
+        osz_path = os.path.join(DEFAULT_OSZ_DIR,
+                                osz_filename(beatmap_list[0]))
+    with ZipFile(osz_path, 'w') as zf:
+        zf.write(audio_path, os.path.basename(audio_path))
+        for osu_path, beatmap in zip(osu_path_list, beatmap_list):
+            zf.write(osu_path, osu_filename(beatmap))
+
+
+def _valid_types(include_circle=True,
+                 include_slider=True,
+                 include_spinner=False,
+                 include_holdnote=False):
+    return tuple(itertools.compress(
+        [slider.beatmap.Circle, slider.beatmap.Slider, slider.beatmap.Spinner, slider.beatmap.HoldNote],
+        [include_circle, include_slider, include_spinner, include_holdnote],
+    ))
+
+
+def hit_objects(beatmap: slider.Beatmap,
+                include_circle=True,
+                include_slider=True,
+                include_spinner=False,
+                include_holdnote=False):
+    """
+    Returns filterfalse object
+    """
+    valid_types = _valid_types(include_circle, include_slider, include_spinner, include_holdnote)
+    return itertools.filterfalse(
+        lambda ho: not isinstance(ho, valid_types),
+        beatmap._hit_objects
+    )
+
+
+def get_first_hit_object_time_microseconds(beatmap: slider.Beatmap,
+                                           include_circle=True,
+                                           include_slider=True,
+                                           include_spinner=False,
+                                           include_holdnote=False):
     """
     The time offset of the first hit object, in microsecond
     """
-    # print('beatmap.beatmap_id')
-    # print(beatmap.beatmap_id)
-    # print('beatmap.beatmap_set_id')
-    # print(beatmap.beatmap_set_id)
-    first_obj_time = beatmap.hit_objects()[0].time / timedelta(microseconds=1)
-    return first_obj_time
+    valid_types = _valid_types(include_circle, include_slider, include_spinner, include_holdnote)
+    for ho in beatmap._hit_objects:
+        if isinstance(ho, valid_types):
+            return ho.time / timedelta(microseconds=1)
+    print('no hitobject found!')
+    return None
 
 
-def get_conscious_start_time_microseconds(beatmap: slider.Beatmap):
+def get_conscious_start_time_microseconds(beatmap: slider.Beatmap,
+                                          include_circle=True,
+                                          include_slider=True,
+                                          include_spinner=False,
+                                          include_holdnote=False):
     """
     The time offset of min(the first uninherited timing point, the first hit object), in microsecond
     """
-    first_obj_time = beatmap.hit_objects()[0].time / timedelta(microseconds=1)
+    first_obj_time = get_first_hit_object_time_microseconds(
+        beatmap, include_circle, include_slider, include_spinner, include_holdnote
+    )
     for timing_point in beatmap.timing_points:
         if timing_point.bpm is not None:
             first_timing_point = timing_point.offset / timedelta(microseconds=1)
@@ -86,11 +160,33 @@ def get_conscious_start_time_microseconds(beatmap: slider.Beatmap):
     return first_obj_time
 
 
-def get_last_hit_object_time_microseconds(beatmap: slider.Beatmap):
+def get_first_uninherited_timing_point(beatmap: slider.Beatmap):
+    """
+    The first uninherited timing point.
+    """
+    for timing_point in beatmap.timing_points:
+        if timing_point.parent is None:
+            return timing_point
+    print('no uninherited timing point found, beatmap corrupted?')
+    return None
+
+
+def get_last_hit_object_time_microseconds(beatmap: slider.Beatmap,
+                                          include_circle=True,
+                                          include_slider=True,
+                                          include_spinner=False,
+                                          include_holdnote=False):
     """
     The end_time/time offset of the last hit object, in microsecond
     """
-    last_obj = beatmap.hit_objects()[-1]
+    valid_types = _valid_types(include_circle, include_slider, include_spinner, include_holdnote)
+    last_obj = None
+    for last_obj in reversed(beatmap._hit_objects):
+        if isinstance(last_obj, valid_types):
+            break
+    if last_obj is None:
+        print('no hitobject found!')
+        return None
     if isinstance(last_obj, slider.beatmap.Slider):
         return last_obj.end_time / timedelta(microseconds=1)
     elif isinstance(last_obj, slider.beatmap.Spinner):
@@ -191,14 +287,14 @@ def add_circle(beatmap, pos, time, hitsound=0, addition='0:0:0:0:'):
     """
     if not isinstance(time, timedelta):
         time = timedelta(milliseconds=time)
-    beatmap._hit_objects.append(
-        slider.beatmap.Circle(
-            slider.Position(pos[0], pos[1]),
-            time,
-            hitsound,
-            addition
-        )
+    ho_circle = slider.beatmap.Circle(
+        slider.Position(pos[0], pos[1]),
+        time,
+        hitsound,
+        addition
     )
+    beatmap._hit_objects.append(ho_circle)
+    return ho_circle
 
 
 def add_slider(beatmap,
@@ -230,26 +326,26 @@ def add_slider(beatmap,
     ticks = int((math.ceil((num_beats - 0.1) / repeat * slider_tick_rate) - 1) * repeat + repeat + 1)
     duration = timedelta(milliseconds=int(num_beats * ms_per_beat))
     # print(pos_list)
-    beatmap._hit_objects.append(
-        slider.beatmap.Slider(
-            pos_list[0],
-            time,
-            time + duration,
-            hitsound,
-            slider.beatmap.Curve.from_kind_and_points(
-                curve_type, pos_list, pixel_length
-            ),
-            repeat,
-            pixel_length,
-            ticks,
-            num_beats,
-            slider_tick_rate,
-            ms_per_beat,
-            edge_sounds,
-            edge_sets,
-            addition
-        )
+    ho_slider = slider.beatmap.Slider(
+        pos_list[0],
+        time,
+        time + duration,
+        hitsound,
+        slider.beatmap.Curve.from_kind_and_points(
+            curve_type, pos_list, pixel_length
+        ),
+        repeat,
+        pixel_length,
+        ticks,
+        num_beats,
+        slider_tick_rate,
+        ms_per_beat,
+        edge_sounds,
+        edge_sets,
+        addition
     )
+    beatmap._hit_objects.append(ho_slider)
+    return ho_slider
 
 
 class BeatmapConstructor:
@@ -260,7 +356,7 @@ class BeatmapConstructor:
         self.slider_tick_rate = self.beatmap.slider_tick_rate
 
     def add_circle(self, pos, time, hitsound=0, addition='0:0:0:0:'):
-        add_circle(self.beatmap, pos, time, hitsound, addition)
+        return add_circle(self.beatmap, pos, time, hitsound, addition)
 
     def add_slider(self,
                    curve_type,
@@ -272,7 +368,7 @@ class BeatmapConstructor:
                    edge_sounds=[0, 0],
                    edge_sets=['0:0', '0:0'],
                    addition='0:0:0:0:'):
-        add_slider(
+        return add_slider(
             self.beatmap,
             curve_type,
             pos_list,

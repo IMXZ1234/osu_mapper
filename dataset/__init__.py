@@ -4,4 +4,5 @@ from . import (
     segdataset,
     seg_multi_label_dataset,
     seg_multi_label_db_dataset,
+    mel_db_dataset,
 )

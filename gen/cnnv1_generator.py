@@ -1,7 +1,12 @@
 import os
+from datetime import timedelta
+
+import slider
 
 import inference
 from gen.beatmap_generator import BeatmapGenerator
+from gen.gen_util import extract_bpm
+from util import beatmap_util
 
 
 class CNNGenerator(BeatmapGenerator):
@@ -9,8 +14,8 @@ class CNNGenerator(BeatmapGenerator):
         super().__init__(audio_file_path)
         self.inference = inference.Inference(inference_config_path, model_path)
 
-    def generate_beatmap(self, audio_file_path_list, speed_stars_list,
-                         out_path_list=None, audio_info_path=None, **kwargs):
+    def generate_beatmapset(self, audio_file_path_list, speed_stars_list,
+                            osu_out_path_list=None, audio_info_path=None, **kwargs):
         if audio_info_path is not None:
             # load audio info (bpm, first_beat, last_beat) from file if possible
             if os.path.exists(audio_info_path):
@@ -29,7 +34,7 @@ class CNNGenerator(BeatmapGenerator):
         label = self.inference.run_inference(audio_file_path_list, speed_stars_list, bpm,
                                              start_time=first_beat, end_time=last_beat)
         beatmap = self.label_to_beatmap(label, speed_stars_list, bpm, start_time=first_beat, end_time=last_beat)
-        beatmap.write_path(out_path_list)
+        beatmap.write_path(osu_out_path_list)
 
     @staticmethod
     def label_to_beatmap(label, speed_stars, bpm, start_time, end_time, snap_divisor=8):

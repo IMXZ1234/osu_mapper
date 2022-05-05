@@ -12,10 +12,7 @@ class IntervalList(list):
         self.lbs, self.rbs = list(zip(*interval_list))
         self.lbs, self.rbs = list(self.lbs), list(self.rbs)
 
-    def add_interval(self, interval: (tuple, list)):
-        # adds at most one new interval
-        # possibly removes multiple intervals
-        lb_in, rb_in = interval
+    def _pos(self, lb_in, rb_in):
         # pos of lb_in in self.lbs (if inserted)
         ll_pos = bisect(self.lbs, lb_in)
         # pos of lb_in in self.rbs (if inserted)
@@ -24,6 +21,13 @@ class IntervalList(list):
         rl_pos = bisect(self.lbs, rb_in)
         # pos of rb_in in self.rbs (if inserted)
         rr_pos = bisect(self.rbs, rb_in)
+        return ll_pos, lr_pos, rl_pos, rr_pos
+
+    def add_interval(self, interval: (tuple, list)):
+        # adds at most one new interval
+        # possibly removes multiple intervals
+        lb_in, rb_in = interval
+        ll_pos, lr_pos, rl_pos, rr_pos = self._pos(lb_in, rb_in)
         if ll_pos == lr_pos:
             # lb_in not inside any interval in original interval list
             new_lb = lb_in
@@ -41,31 +45,48 @@ class IntervalList(list):
             # rl_pos = rr_pos + 1
             new_rb = self.rbs[rr_pos]
         rm_pos_end = rl_pos
-        # print('new_lb')
-        # print(new_lb)
-        # print('new_rb')
-        # print(new_rb)
-        # print('rm_pos_start')
-        # print(rm_pos_start)
-        # print('rm_pos_end')
-        # print(rm_pos_end)
-        # print(self.lbs[rm_pos_start])
-        # print(self.lbs)
         self.lbs = self.lbs[:rm_pos_start] + [new_lb] + self.lbs[rm_pos_end:]
         self.rbs = self.rbs[:rm_pos_start] + [new_rb] + self.rbs[rm_pos_end:]
+
+    def intersect_interval(self, interval: (tuple, list)):
+        # adds at most two new intervals
+        # possibly removes multiple intervals
+        lb_in, rb_in = interval
+        ll_pos, lr_pos, rl_pos, rr_pos = self._pos(lb_in, rb_in)
+        # does operation produces a new interval at lb_in/rb_in
+        l_new, r_new = False, False
+        if ll_pos != lr_pos:
+            # lb_in inside interval with idx ll_pos in original interval list
+            l_new = True
+            # ll_pos = lr_pos + 1
+            l_new_lb = lb_in
+            l_new_rb = self.rbs[lr_pos]
+        keep_pos_start = ll_pos
+        if rl_pos != rr_pos:
+            # rb_in inside interval with idx ll_pos in original interval list
+            r_new = True
+            # rl_pos = rr_pos + 1
+            r_new_lb = self.rbs[rr_pos]
+            r_new_rb = rb_in
+        keep_pos_end = rl_pos
+        new_lbs = []
+        new_rbs = []
+        if l_new:
+            new_lbs += [l_new_lb]
+            new_rbs += [l_new_rb]
+        new_lbs += self.lbs[keep_pos_start:keep_pos_end]
+        new_rbs += self.rbs[keep_pos_start:keep_pos_end]
+        if r_new:
+            new_lbs += [r_new_lb]
+            new_rbs += [r_new_rb]
+        self.lbs = new_lbs
+        self.rbs = new_rbs
 
     def remove_interval(self, interval: (tuple, list)):
         # adds at most two new intervals
         # possibly removes multiple intervals
         lb_in, rb_in = interval
-        # pos of lb_in in self.lbs (if inserted)
-        ll_pos = bisect(self.lbs, lb_in)
-        # pos of lb_in in self.rbs (if inserted)
-        lr_pos = bisect(self.rbs, lb_in)
-        # pos of rb_in in self.lbs (if inserted)
-        rl_pos = bisect(self.lbs, rb_in)
-        # pos of rb_in in self.rbs (if inserted)
-        rr_pos = bisect(self.rbs, rb_in)
+        ll_pos, lr_pos, rl_pos, rr_pos = self._pos(lb_in, rb_in)
         # does operation produces a new interval at lb_in/rb_in
         l_new, r_new = False, False
         if ll_pos != lr_pos:
@@ -122,7 +143,9 @@ class IntervalList(list):
 if __name__ == '__main__':
     itv_list = IntervalList([(3, 4), (5, 6), (7, 8)])
     print(itv_list)
-    itv_list.add_interval((4.5, 7.5))
+    itv_list.intersect_interval((4, 6))
     print(itv_list)
-    itv_list.remove_interval((4.25, 7.5))
-    print(itv_list)
+    # itv_list.add_interval((4.5, 7.5))
+    # print(itv_list)
+    # itv_list.remove_interval((4.25, 7.5))
+    # print(itv_list)

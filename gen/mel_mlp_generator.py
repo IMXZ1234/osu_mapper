@@ -5,39 +5,16 @@ from gen.label_interpreter import BiLabelInterpreter
 from util import beatmap_util
 
 
-class SegMultiLabelGenerator(BeatmapGenerator):
+class MelGenerator(BeatmapGenerator):
     def __init__(self,
-                 inference_config_path='./resources/config/inference/seg_mlp_bi_lr0.1.yaml',
-                 prepare_data_config_path='./resources/config/prepare_data/inference/seg_multi_label_data.yaml'):
+                 inference_config_path='./resources/config/inference/mel_mlp_bi_lr0.1.yaml',
+                 prepare_data_config_path='./resources/config/prepare_data/inference/mel_data.yaml'):
         print('using inference_config_path %s' % inference_config_path)
         print('using prepare_data_config_path %s' % prepare_data_config_path)
         super().__init__(inference_config_path, prepare_data_config_path)
         data_arg = self.config_dict['data_arg']
         dataset_arg = data_arg['test_dataset_arg']
-        self.beat_feature_frames = dataset_arg['beat_feature_frames'] if 'beat_feature_frames' in dataset_arg else 16384
         self.snap_divisor = dataset_arg['snap_divisor'] if 'snap_divisor' in dataset_arg else 8
-        self.sample_beats = dataset_arg['sample_beats'] if 'sample_beats' in dataset_arg else 16
-        self.pad_beats = dataset_arg['pad_beats'] if 'pad_beats' in dataset_arg else 4
-        self.pad_frames = self.pad_beats * self.beat_feature_frames
-        self.batch_size = data_arg['batch_size'] if 'batch_size' in dataset_arg else 1
-
-    # def preprocess(self, audio_file_path):
-    #     """
-    #     Resampling and padding/trimming.
-    #     """
-    #     audio_data, sample_rate = audio_util.audioread_get_audio_data(audio_file_path)
-    #     bpm, start_time, end_time = gen_util.extract_bpm(audio_file_path)
-    #     start_frame, end_frame = SegMultiLabelDBDataset.get_aligned_start_end_frame(
-    #         bpm, start_time, end_time, self.beat_feature_frames, self.sample_beats
-    #     )
-    #     resample_rate = round(self.beat_feature_frames * bpm / 60)  # * feature_frames_per_second
-    #     resampled_audio_data = torchaudio.functional.resample(
-    #         audio_data, sample_rate, resample_rate
-    #     )
-    #     data = SegMultiLabelDBDataset.preprocess(
-    #         resampled_audio_data, start_frame, end_frame, self.pad_beats
-    #     )
-    #     return data
 
     def generate_beatmapset(self, audio_file_path, speed_stars_list, meta_list,
                             osu_out_path_list=None, audio_info_path=None, audio_idx=0, **kwargs):

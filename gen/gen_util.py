@@ -13,6 +13,8 @@ from slider import curve
 from util import audio_util, beatmap_util
 import inference
 
+DEFAULT_AUDIO_INFO_DIR = './resources/gen/audio_info'
+
 
 def _timedelta_to_milliseconds(td):
     return td / timedelta(microseconds=1) / 1000

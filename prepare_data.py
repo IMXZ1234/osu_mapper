@@ -144,24 +144,29 @@ def old_prepare_dataset():
 class DataPreparer:
     def __init__(self, preprocessor_arg=None, filter_arg=None, fold_divider_arg=None,
                  do_preprocess=True, do_filter=True, do_fold_divide=True,
-                 preprocessed_audio_dir=None,
                  db_path=None,
+                 from_db_path=None,
+                 save_dir=None,
+                 from_dir=None,
+                 save_ext=None,
                  inference=False,
                  **kwargs):
         self.inference = inference
-        self.preprocessed_audio_dir, self.db_path = preprocessed_audio_dir, db_path
+        self.save_dir, self.db_path = save_dir, db_path
+        self.from_db_path, self.from_dir = from_db_path, from_dir
+        self.save_ext = save_ext
         self.do_preprocess = do_preprocess
         if self.do_preprocess:
             self.preprocessor = self.load_preprocessor(**preprocessor_arg)
         # when preparing inference data we do not need filtering or fold division
         if self.inference:
-            if self.preprocessed_audio_dir is None:
-                self.preprocessed_audio_dir = DEFAULT_INFERENCE_AUDIO_DIR
+            if self.save_dir is None:
+                self.save_dir = DEFAULT_INFERENCE_AUDIO_DIR
             if self.db_path is None:
                 self.db_path = DEFAULT_INFERENCE_DB_PATH
         else:
-            if self.preprocessed_audio_dir is None:
-                self.preprocessed_audio_dir = DEFAULT_TRAIN_AUDIO_DIR
+            if self.save_dir is None:
+                self.save_dir = DEFAULT_TRAIN_AUDIO_DIR
             if self.db_path is None:
                 self.db_path = DEFAULT_TRAIN_DB_PATH
             self.do_filter = do_filter
@@ -197,41 +202,72 @@ class DataPreparer:
             raise ValueError(
                 'DataPreparer initialized for inference data preparation can not be used to prepare train data'
             )
-        if not os.path.exists(self.preprocessed_audio_dir):
-            os.makedirs(self.preprocessed_audio_dir)
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
         database = db.OsuDB(self.db_path, connect=True)
         if self.do_preprocess:
-            database.gen_preprocessed(self.preprocessor, self.preprocessed_audio_dir, False)
+            if self.from_db_path is None:
+                database.gen_preprocessed(
+                    self.preprocessor,
+                    self.save_dir,
+                    use_beatmap_list=False,
+                    save_ext=self.save_ext,
+                )
+            else:
+                database.gen_preprocessed_from_db(
+                    self.preprocessor,
+                    self.from_db_path,
+                    self.save_dir,
+                    self.from_dir,
+                    save_ext=self.save_ext,
+                )
         # records = database.get_table_records('MAIN')
         # print([record[4] for record in records])
         if self.do_filter:
             database.delete_view(view_name=None)
-            print(self.filter)
-            if issubclass(self.filter.__class__, filter.OsuTrainDataFilterGroup):
-                print(self.filter.data_filters)
-            database.filter_data(self.filter, self.preprocessed_audio_dir)
+            # print(self.filter)
+            # if issubclass(self.filter.__class__, filter.OsuTrainDataFilterGroup):
+            #     print(self.filter.data_filters)
+            database.filter_data(self.filter, self.save_dir)
+        else:
+            if 'FILTERED' not in database.all_view_names():
+                database.create_view_from_rows('ID', database.get_column('ID', 'MAIN'), 'FILTERED')
         if self.do_fold_divide:
-            for fold in range(1, 1+self.fold_divider.folds):
-                database.delete_view(view_name='TRAINFOLD%d' % fold)
-                database.delete_view(view_name='TESTFOLD%d' % fold)
+            all_views = database.all_view_names()
+            for fold in range(1, 1 + self.fold_divider.folds):
+                for view_name in ['TRAINFOLD%d' % fold, 'TESTFOLD%d' % fold]:
+                    if view_name in all_views:
+                        database.delete_view(view_name=view_name)
             database.split_folds(self.fold_divider)
         database.close()
 
     def prepare_inference_data(self,
                                from_audio_path_list,
-                               beatmap_list):
+                               beatmap_list,
+                               start_id=None,
+                               end_id=None):
         assert len(from_audio_path_list) == len(beatmap_list)
-        if not os.path.exists(self.preprocessed_audio_dir):
-            os.makedirs(self.preprocessed_audio_dir)
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
         database = db.OsuDB(self.db_path, connect=True)
         if self.do_preprocess:
-            database.gen_preprocessed(self.preprocessor,
-                                      self.preprocessed_audio_dir,
-                                      use_beatmap_list=True,
-                                      beatmap_list=beatmap_list,
-                                      from_audio_path_list=from_audio_path_list)
-            # records = database.get_table_records('MAIN')
-            # print([record[4] for record in records])
+            start_id, end_id = database.gen_preprocessed(
+                self.preprocessor,
+                self.save_dir,
+                use_beatmap_list=True,
+                beatmap_list=beatmap_list,
+                from_audio_path_list=from_audio_path_list,
+                clear_table=False,
+                save_ext=self.save_ext
+            )
+        else:
+            assert start_id is not None
+            if end_id is None:
+                end_id = start_id + 1
+        print('current REFERENCE view: %d to %d' % (start_id, end_id))
+        database.create_inference_view(list(range(start_id, end_id)))
+        # records = database.get_table_records('MAIN')
+        # print([record[4] for record in records])
         database.close()
 
 
@@ -251,32 +287,88 @@ def prepare_inference_data_with_config(config_path,
     prepare.prepare_inference_data(from_audio_path_list, beatmap_list_save_path)
 
 
-def prepare_seg_multi_label_train_data():
-    config_path = r'resources/config/prepare_data/train/seg_multi_label_data.yaml'
+def prepare_mel_train_data():
+    config_path = r'resources/config/prepare_data/train/mel_data.yaml'
     preprocessor_arg = {
-        'preprocessor_type': 'util.data.preprocessor.ResamplePreprocessor',
+        'preprocessor_type': 'preprocess.preprocessor.MelPreprocessor',
         'beat_feature_frames': 16384,
+        'snap_offset': 0,
+        'n_fft': 1024,
+        'win_length': None,
+        'hop_length': 512,
+        'n_mels': 128,
+        'from_resampled': True
     }
     filter_arg = {
-        'filter_type': 'util.data.filter.OsuTrainDataFilterGroup',
+        'filter_type': 'preprocess.filter.OsuTrainDataFilterGroup',
         'filter_arg': [
             {
-                'filter_type': 'util.data.filter.HitObjectFilter',
+                'filter_type': 'preprocess.filter.HitObjectFilter',
             },
             {
-                'filter_type': 'util.data.filter.BeatmapsetSingleAudioFilter',
+                'filter_type': 'preprocess.filter.BeatmapsetSingleAudioFilter',
             },
             {
-                'filter_type': 'util.data.filter.SingleBMPFilter',
+                'filter_type': 'preprocess.filter.SingleBMPFilter',
             },
             {
-                'filter_type': 'util.data.filter.SingleUninheritedTimingPointFilter',
+                'filter_type': 'preprocess.filter.SingleUninheritedTimingPointFilter',
+            },
+            {
+                'filter_type': 'preprocess.filter.SnapDivisorFilter',
             },
         ]
     }
     fold_divider_arg = {
-        'fold_divider_type': 'util.data.fold_divider.OsuTrainDBFoldDivider',
-        # 'fold_divider_type': 'util.data.fold_divider.OsuTrainDBDebugFoldDivider',
+        'fold_divider_type': 'preprocess.fold_divider.OsuTrainDBFoldDivider',
+        # 'fold_divider_type': 'preprocess.fold_divider.OsuTrainDBDebugFoldDivider',
+        'folds': 5,
+        'shuffle': False,
+    }
+    prepare_data_config = {
+        'preprocessor_arg': preprocessor_arg,
+        'filter_arg': filter_arg,
+        'fold_divider_arg': fold_divider_arg,
+        'do_preprocess': True,
+        'do_filter': True,
+        'do_fold_divide': True,
+        'save_dir': r'./resources/data/mel',
+        'from_dir': DEFAULT_TRAIN_AUDIO_DIR,
+        'db_path': r'./resources/data/osu_train_mel.db',
+        'from_db_path': DEFAULT_TRAIN_DB_PATH,
+        'save_ext': '.pkl',
+    }
+    with open(os.path.join(config_path), 'w') as f:
+        yaml.dump(prepare_data_config, f)
+    prepare_train_data_with_config(config_path)
+
+
+def prepare_seg_multi_label_train_data():
+    config_path = r'resources/config/prepare_data/train/seg_multi_label_data.yaml'
+    preprocessor_arg = {
+        'preprocessor_type': 'preprocess.preprocessor.ResamplePreprocessor',
+        'beat_feature_frames': 16384,
+    }
+    filter_arg = {
+        'filter_type': 'preprocess.filter.OsuTrainDataFilterGroup',
+        'filter_arg': [
+            {
+                'filter_type': 'preprocess.filter.HitObjectFilter',
+            },
+            {
+                'filter_type': 'preprocess.filter.BeatmapsetSingleAudioFilter',
+            },
+            {
+                'filter_type': 'preprocess.filter.SingleBMPFilter',
+            },
+            {
+                'filter_type': 'preprocess.filter.SingleUninheritedTimingPointFilter',
+            },
+        ]
+    }
+    fold_divider_arg = {
+        'fold_divider_type': 'preprocess.fold_divider.OsuTrainDBFoldDivider',
+        # 'fold_divider_type': 'preprocess.fold_divider.OsuTrainDBDebugFoldDivider',
         'folds': 5,
         'shuffle': False,
     }
@@ -287,7 +379,7 @@ def prepare_seg_multi_label_train_data():
         'do_preprocess': False,
         'do_filter': False,
         'do_fold_divide': True,
-        'preprocessed_audio_dir': DEFAULT_TRAIN_AUDIO_DIR,
+        'save_dir': DEFAULT_TRAIN_AUDIO_DIR,
         'db_path': DEFAULT_TRAIN_DB_PATH,
     }
     with open(os.path.join(config_path), 'w') as f:
@@ -305,13 +397,13 @@ def prepare_seg_multi_label_inference_data(from_audio_path_list, bpm_list, snap_
         pickle.dump(beatmap_list, f)
     config_path = r'resources/config/prepare_data/inference/seg_multi_label_data.yaml'
     preprocessor_arg = {
-        'preprocessor_type': 'util.data.preprocessor.ResamplePreprocessor',
+        'preprocessor_type': 'preprocess.preprocessor.ResamplePreprocessor',
         'beat_feature_frames': 16384,
     }
     prepare_data_config = {
         'preprocessor_arg': preprocessor_arg,
         'do_preprocess': False,
-        'preprocessed_audio_dir': DEFAULT_INFERENCE_AUDIO_DIR,
+        'save_dir': DEFAULT_INFERENCE_AUDIO_DIR,
         'db_path': DEFAULT_INFERENCE_DB_PATH,
     }
     with open(os.path.join(config_path), 'w') as f:
@@ -322,7 +414,7 @@ def prepare_seg_multi_label_inference_data(from_audio_path_list, bpm_list, snap_
 
 
 if __name__ == '__main__':
-    prepare_seg_multi_label_train_data()
+    prepare_mel_train_data()
     # database = db.OsuTrainDB(DEFAULT_DB_PATH)
     # # database.delete_view()
     # all_values = set(database.get_column('AUDIOFILENAME'))

@@ -1,0 +1,57 @@
+cal_acc_func: metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: dataset.collate_fn.data_array_to_tensor
+data_arg:
+  batch_size: 1
+  dataset: dataset.mel_db_dataset.MelDBDataset
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    audio_dir: ./resources/data/mel
+    db_path: ./resources/data/osu_train_mel.db
+    multi_label: true
+    pad_beats: 4
+    sample_beats: 16
+    snap_divisor: 8
+    snap_mel: 4
+    snap_offset: 0
+    table_name: TESTFOLD%d
+  train_dataset_arg:
+    audio_dir: ./resources/data/mel
+    db_path: ./resources/data/osu_train_mel.db
+    multi_label: true
+    pad_beats: 4
+    sample_beats: 16
+    snap_divisor: 8
+    snap_mel: 4
+    snap_offset: 0
+    table_name: TRAINFOLD%d
+loss_arg:
+  loss_type: loss.multi_pred_loss.MultiPredLoss
+model_arg:
+  extract_hidden_layer_num: 2
+  model_type: net.mel_mlp.MelMLP
+  n_mel: 128
+  num_classes: 3
+  pad_beats: 4
+  sample_beats: 16
+  snap_divisor: 8
+  snap_mel: 4
+optimizer_arg:
+  lr: 0.1
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/mel_mlp_cs_lr0.1/0.1/%d
+  model_save_dir: ./resources/result/mel_mlp_cs_lr0.1/0.1/%d
+  model_save_step: 1
+output_device: 0
+pred_arg:
+  pred_type: pred.multi_pred.MultiPred
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 1
+train_arg:
+  epoch: 4
+  eval_step: 1

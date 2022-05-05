@@ -134,7 +134,7 @@ dependencies:
     - resampy==0.2.2
     - scikit-learn==1.0.2
     - scipy==1.8.0
-    - slider==0.5.5
+    - slider==0.6.0
     - soundfile==0.10.3.post1
     - threadpoolctl==3.1.0
     - tomli==2.0.1
