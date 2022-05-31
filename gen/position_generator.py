@@ -76,8 +76,8 @@ class RandomWalkInRectangle:
                     valid_angle_range_list.remove_interval((center - angle, center + angle))
         #     print('valid_angle_range_list')
         #     print(valid_angle_range_list)
-        print('valid_angle_range_list')
-        print([(l * 180 / math.pi, r * 180 / math.pi) for l, r in valid_angle_range_list.interval_list()])
+        # print('valid_angle_range_list')
+        # print([(l * 180 / math.pi, r * 180 / math.pi) for l, r in valid_angle_range_list.interval_list()])
         # remove invalid range of angle
         total_len = random.random() * valid_angle_range_list.total_len()
         angle = valid_angle_range_list.map_len_to_value(total_len)

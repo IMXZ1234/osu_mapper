@@ -4,10 +4,9 @@ from datetime import timedelta
 
 import yaml
 
-import inference
-import prepare_data
+from nn import inference
 from gen import gen_util
-from preprocess import prepare_data_util
+from preprocess import prepare_data_util, prepare_data
 from util import general_util, beatmap_util
 
 
@@ -62,10 +61,10 @@ class BeatmapGenerator:
         ]
         for beatmap, speed_stars, meta in zip(beatmap_list, speed_stars_list, meta_list):
             beatmap_util.set_bpm(beatmap, audio_info[0], snap_divisor)
-            beatmap.timing_points[0].offset = timedelta(microseconds=audio_info[1])
+            beatmap.timing_points[0].offset = timedelta(milliseconds=audio_info[1])
             # add two dummy hitobjects to pin down start_time, end_time
-            beatmap_util.set_start_time(beatmap, timedelta(microseconds=audio_info[1]))
-            beatmap_util.set_end_time(beatmap, timedelta(microseconds=audio_info[2]))
+            beatmap_util.set_start_time(beatmap, timedelta(milliseconds=audio_info[1]))
+            beatmap_util.set_end_time(beatmap, timedelta(milliseconds=audio_info[2]))
             # use overall_difficulty field to record speed_stars for simplicity
             beatmap.overall_difficulty = speed_stars
             beatmap_util.set_meta(beatmap, meta)

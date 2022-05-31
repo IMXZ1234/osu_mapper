@@ -112,8 +112,8 @@ class ResamplePreprocessor(OsuAudioFilePreprocessor):
 
 
 class MelPreprocessor(OsuAudioFilePreprocessor):
-    EXTRA_COLUMNS = ['RESAMPLE_RATE', 'CROP_START_TIME', 'SNAP_MEL', 'MEL_FRAME_TIME']
-    EXTRA_COLUMNS_TYPE = ['REAL', 'REAL', 'INT', 'REAL']
+    EXTRA_COLUMNS = ['RESAMPLE_RATE', 'SNAP_OFFSET', 'CROP_START_TIME', 'CROP_START_FRAME', 'SNAP_MEL', 'MEL_FRAME_TIME']
+    EXTRA_COLUMNS_TYPE = ['REAL', 'INT', 'REAL', 'REAL', 'INT', 'REAL']
 
     def __init__(self,
                  beat_feature_frames,
@@ -122,6 +122,7 @@ class MelPreprocessor(OsuAudioFilePreprocessor):
                  win_length=None,
                  hop_length=512,
                  n_mels=128,
+                 snap_divisor=8,
                  from_resampled=True):
         """
         If from_resampled, in self.preprocess resampling is skipped and
@@ -135,6 +136,7 @@ class MelPreprocessor(OsuAudioFilePreprocessor):
         self.win_length = win_length
         self.hop_length = hop_length
         self.n_mels = n_mels
+        self.snap_divisor = snap_divisor
 
         self.from_resampled = from_resampled
 
@@ -144,32 +146,36 @@ class MelPreprocessor(OsuAudioFilePreprocessor):
         Essential for beat/snap based classification.
         """
         audio_data, sample_rate = audio_util.audioread_get_audio_data(path_from)
+        bpm = beatmap.bpm_min()
 
         # do resampling if necessary
         if self.from_resampled:
             resample_rate = sample_rate
             resampled = audio_data
         else:
-            bpm = beatmap.bpm_min()
-            resample_rate = int(self.beat_feature_frames * bpm / 60)
+            resample_rate = round(self.beat_feature_frames * bpm / 60)
             resampled = torchaudio.functional.resample(audio_data, sample_rate, resample_rate)
 
         # # intensity normalization
         # resampled /= torch.mean(resampled)
 
         snap_frames = self.beat_feature_frames // 8
-        start_time = beatmap_util.get_first_hit_object_time_microseconds(beatmap)
+        start_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
 
         snap_frame_offset = round(snap_frames * self.snap_offset)
         # put snap to the center
-        start_frame = round(start_time * resample_rate / 1000000) - snap_frame_offset
+        start_frame = round(start_time * resample_rate / 1000) - snap_frame_offset
 
         # align with snap
         crop_start_frame = start_frame % snap_frames
+        snap_offset = (start_frame - crop_start_frame) / snap_frames
+        print('snap_offset')
+        print(snap_offset)
+        snap_offset = round(snap_offset)
 
         crop_end_frame = resampled.shape[1]
         # align with snap
-        crop_end_frame = round((crop_end_frame - crop_start_frame - snap_frame_offset) / snap_frames) * snap_frames + crop_start_frame
+        crop_end_frame = round((crop_end_frame - crop_start_frame) / snap_frames) * snap_frames + crop_start_frame
         cropped = resampled[:, crop_start_frame:crop_end_frame]
 
         mel_spectrogram = torchaudio.transforms.MelSpectrogram(
@@ -190,11 +196,22 @@ class MelPreprocessor(OsuAudioFilePreprocessor):
         with open(path_to, 'wb') as f:
             pickle.dump(melspec, f)
 
-        crop_start_time = crop_start_frame / resample_rate * 1000000
+        crop_start_time = crop_start_frame / resample_rate * 1000
+        print('resample_rate')
+        print(resample_rate)
+        print('crop_start_time')
+        print(crop_start_time)
+        print('crop_start_frame')
+        print(crop_start_frame)
         snap_mel = snap_frames // self.hop_length
-        mel_frame_time = snap_frames / resample_rate * 1000000 / snap_mel
+        print('snap_time v1')
+        print(snap_frames / resample_rate * 1000)
+        snap_time = 60000 / (bpm * self.snap_divisor)
+        print('snap_time v2')
+        print(snap_time)
+        mel_frame_time = snap_time / snap_mel
         print('snap_mel')
         print(snap_mel)
         print('mel_frame_time')
         print(mel_frame_time)
-        return [resample_rate, crop_start_time, snap_mel, mel_frame_time]
+        return [resample_rate, snap_offset, crop_start_time, crop_start_frame, snap_mel, mel_frame_time]

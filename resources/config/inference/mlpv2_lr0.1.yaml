@@ -1,0 +1,22 @@
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.feeder.Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    data_path: ./resources/data/fit/mlp/snap_1/test%d_data.pkl
+    label_path: ./resources/data/fit/mlp/snap_1/test%d_label.pkl
+model_arg:
+  layers:
+  - 562
+  - 1124
+  - 1124
+  - 3
+  model_type: nn.net.mlpv2.MLPv2
+output_device: 0
+pred_arg:
+  pred_type: null
+rnn: false
+weights_path: './resources/result/mlpv2_lr0.1/0.1/1/model_final.pt'

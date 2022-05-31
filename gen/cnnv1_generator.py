@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import slider
 
-import inference
+from nn import inference
 from gen.beatmap_generator import BeatmapGenerator
 from gen.gen_util import extract_bpm
 from util import beatmap_util

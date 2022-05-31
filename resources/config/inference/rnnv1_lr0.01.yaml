@@ -1,0 +1,24 @@
+collate_fn: nn.dataset.collate_fn.data_array_to_tensor
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.rnn_feeder.RNNFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnn/snap_1/test%d_data.pkl
+    label_path: ./resources/data/fit/rnn/snap_1/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 64
+model_arg:
+  in_channels: 515
+  model_type: nn.net.rnnv1.RNNv1
+  num_classes: 3
+  num_layers: 2
+output_device: 0
+pred_arg:
+  pred_type: null
+rnn: true
+weights_path: ./resources/result/rnnv1_lr0.01/0.01/1/model_final.pt

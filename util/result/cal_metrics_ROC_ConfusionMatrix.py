@@ -81,7 +81,7 @@ if __name__ == '__main__':
         result_path = "./" + method + "/training-result" + fold
         # label scores
         r = open(os.path.join(result_path, 'epoch70_test_score.pkl'), 'rb')
-        r = list(pickle.load(r).items()) # name、score元组构成的列表
+        r = list(pickle.load(r).item_names()) # name、score元组构成的列表
         for j in range(len(label[0])):
             name1, ls = label[:, j]  # 样本的名字和真实类别
             name2, rs = r[j]  # 预测分数

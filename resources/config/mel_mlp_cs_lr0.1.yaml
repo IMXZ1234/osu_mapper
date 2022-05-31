@@ -51,7 +51,7 @@ pred_arg:
 scheduler_arg:
   gamma: 0.1
   scheduler_type: StepLR
-  step_size: 1
+  step_size: 6
 train_arg:
-  epoch: 4
+  epoch: 24
   eval_step: 1

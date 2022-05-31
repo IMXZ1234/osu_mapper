@@ -88,7 +88,7 @@ def set_meta(beatmap: slider.Beatmap, meta: dict):
             print('unknown meta: %s' % k)
 
 
-def pack_to_osz(audio_path, osu_path_list, osz_path=None, beatmap_list: list[slider.Beatmap] = None):
+def pack_to_osz(audio_path, osu_path_list, osz_path=None, beatmap_list: list = None):
     if beatmap_list is None:
         beatmap_list = [slider.Beatmap.from_path(osu_path) for osu_path in osu_path_list]
     if osz_path is None:
@@ -141,6 +141,22 @@ def get_first_hit_object_time_microseconds(beatmap: slider.Beatmap,
     return None
 
 
+def get_first_hit_object_time_milliseconds(beatmap: slider.Beatmap,
+                                           include_circle=True,
+                                           include_slider=True,
+                                           include_spinner=False,
+                                           include_holdnote=False):
+    """
+    The time offset of the first hit object, in microsecond
+    """
+    valid_types = _valid_types(include_circle, include_slider, include_spinner, include_holdnote)
+    for ho in beatmap._hit_objects:
+        if isinstance(ho, valid_types):
+            return ho.time / timedelta(milliseconds=1)
+    print('no hitobject found!')
+    return None
+
+
 def get_conscious_start_time_microseconds(beatmap: slider.Beatmap,
                                           include_circle=True,
                                           include_slider=True,
@@ -155,6 +171,25 @@ def get_conscious_start_time_microseconds(beatmap: slider.Beatmap,
     for timing_point in beatmap.timing_points:
         if timing_point.bpm is not None:
             first_timing_point = timing_point.offset / timedelta(microseconds=1)
+            return min(first_obj_time, first_timing_point)
+    print('no uninherited timing point found, beatmap corrupted?')
+    return first_obj_time
+
+
+def get_conscious_start_time_milliseconds(beatmap: slider.Beatmap,
+                                          include_circle=True,
+                                          include_slider=True,
+                                          include_spinner=False,
+                                          include_holdnote=False):
+    """
+    The time offset of min(the first uninherited timing point, the first hit object), in microsecond
+    """
+    first_obj_time = get_first_hit_object_time_microseconds(
+        beatmap, include_circle, include_slider, include_spinner, include_holdnote
+    )
+    for timing_point in beatmap.timing_points:
+        if timing_point.bpm is not None:
+            first_timing_point = timing_point.offset / timedelta(milliseconds=1)
             return min(first_obj_time, first_timing_point)
     print('no uninherited timing point found, beatmap corrupted?')
     return first_obj_time
@@ -195,6 +230,32 @@ def get_last_hit_object_time_microseconds(beatmap: slider.Beatmap,
         # Circle
         # https://osu.ppy.sh/wiki/zh/Client/File_formats/Osu_%28file_format%29
         return last_obj.time / timedelta(microseconds=1)
+
+
+def get_last_hit_object_time_milliseconds(beatmap: slider.Beatmap,
+                                          include_circle=True,
+                                          include_slider=True,
+                                          include_spinner=False,
+                                          include_holdnote=False):
+    """
+    The end_time/time offset of the last hit object, in microsecond
+    """
+    valid_types = _valid_types(include_circle, include_slider, include_spinner, include_holdnote)
+    last_obj = None
+    for last_obj in reversed(beatmap._hit_objects):
+        if isinstance(last_obj, valid_types):
+            break
+    if last_obj is None:
+        print('no hitobject found!')
+        return None
+    if isinstance(last_obj, slider.beatmap.Slider):
+        return last_obj.end_time / timedelta(milliseconds=1)
+    elif isinstance(last_obj, slider.beatmap.Spinner):
+        return last_obj.end_time / timedelta(milliseconds=1)
+    else:
+        # Circle
+        # https://osu.ppy.sh/wiki/zh/Client/File_formats/Osu_%28file_format%29
+        return last_obj.time / timedelta(milliseconds=1)
 
 
 def get_empty_beatmap():
@@ -245,6 +306,47 @@ def set_end_time(beatmap: slider.Beatmap, end_time: timedelta):
             0
         )
     )
+
+
+def get_snap_per_microseconds(beatmap: slider.Beatmap, snap_divisor=8):
+    bpm = beatmap.bpm_min()
+    return bpm * snap_divisor / 60000000
+
+
+def get_snap_microseconds(beatmap: slider.Beatmap, snap_divisor=8):
+    bpm = beatmap.bpm_min()
+    return 60000000 / bpm / snap_divisor
+
+
+def get_snap_milliseconds(beatmap: slider.Beatmap, snap_divisor=8):
+    bpm = beatmap.bpm_min()
+    return 60000 / bpm / snap_divisor
+
+
+def get_total_snaps(beatmap: slider.Beatmap, snap_divisor=8,
+                    include_circle=True,
+                    include_slider=True,
+                    include_spinner=False,
+                    include_holdnote=False):
+    snap_ms = get_snap_milliseconds(beatmap, snap_divisor)
+    first_ho_time = get_first_hit_object_time_milliseconds(
+        beatmap,
+        include_circle,
+        include_slider,
+        include_spinner,
+        include_holdnote
+    )
+    last_ho_time = get_last_hit_object_time_milliseconds(
+        beatmap,
+        include_circle,
+        include_slider,
+        include_spinner,
+        include_holdnote
+    )
+    total_snaps = (last_ho_time - first_ho_time) / snap_ms
+    # include last snap
+    total_snaps = round(total_snaps)
+    return total_snaps + 1
 
 
 def get_difficulty(beatmap: slider.Beatmap):

@@ -1,0 +1,40 @@
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 64
+  dataset: nn.dataset.feeder.Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    data_path: ./resources/data/fit/mlp_nolabel/test%d_data.pkl
+    label_path: ./resources/data/fit/mlp_nolabel/test%d_label.pkl
+  train_dataset_arg:
+    data_path: ./resources/data/fit/mlp_nolabel/train%d_data.pkl
+    label_path: ./resources/data/fit/mlp_nolabel/train%d_label.pkl
+loss_arg:
+  loss_type: CrossEntropy
+model_arg:
+  layers:
+  - 514
+  - 1028
+  - 1028
+  - 3
+  model_type: nn.net.mlpv2.MLPv2
+optimizer_arg:
+  lr: 0.1
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/mlpv2_nolabel_lr0.1/0.1/%d
+  model_save_dir: ./resources/result/mlpv2_nolabel_lr0.1/0.1/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: null
+rnn: false
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 2
+train_arg:
+  epoch: 8
+  eval_step: 1

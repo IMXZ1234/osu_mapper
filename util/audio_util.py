@@ -3,8 +3,6 @@ import os
 import audioread
 import numpy as np
 import torch
-import wave
-
 import torchaudio
 
 FFMPEG_PATH = r'C:\Users\asus\coding\vsc++\ffmpeg-4.4.1-full_build-shared\bin\ffmpeg.exe'
@@ -133,9 +131,11 @@ def get_audio_attr(audio_file_path, attr):
     return value
 
 
-def audioread_get_audio_data(audio_file_path):
+def audioread_get_audio_data(audio_file_path, ret_tensor=True):
     """
     Conforms to torchaudio I/O api gen format.
+
+    If ret_tensor return pytorch tensor, else return ndarray.
     """
     with audioread.audio_open(audio_file_path) as f:
         # channel, sample_rate, duration can be obtained by f.channels, f.samplerate, f.duration
@@ -149,7 +149,9 @@ def audioread_get_audio_data(audio_file_path):
             buf_num += 1
         # normalize to (-1, 1)
         audio_cs = np.concatenate(audio_cs, axis=1, dtype=float) / (2 ** 15)
-    return torch.tensor(audio_cs, dtype=torch.float), f.samplerate
+    if ret_tensor:
+        return torch.tensor(audio_cs, dtype=torch.float), f.samplerate
+    return audio_cs, f.samplerate
 
 
 def save_audio(file_path, audio_data, sample_rate, temp_wav_file_path=None):
@@ -178,6 +180,11 @@ def crop_audio(audio_file_path: str, save_audio_file_path: str = None,
     audio_data, sample_rate = audioread_get_audio_data(audio_file_path)
     cropped_audio_data = audio_data[:, offset:offset + frame_num]
     save_audio(save_audio_file_path, cropped_audio_data, sample_rate)
+
+
+def audio_len(audio_file_path: str):
+    audio_data, sample_rate = audioread_get_audio_data(audio_file_path)
+    return audio_data.shape[1] / sample_rate
 
 
 if __name__ == '__main__':

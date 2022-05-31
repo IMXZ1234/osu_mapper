@@ -1,6 +1,10 @@
 import os
 from abc import abstractmethod
+from datetime import timedelta
+
 import slider
+
+from util import beatmap_util
 
 
 class OsuTrainDataFilter:
@@ -20,7 +24,7 @@ class OsuTrainDataFilter:
 
 
 class OsuTrainDataFilterGroup(OsuTrainDataFilter):
-    def __init__(self, data_filters: list[OsuTrainDataFilter] = None):
+    def __init__(self, data_filters: list = None):
         super().__init__()
         self.data_filters = data_filters
 
@@ -81,6 +85,23 @@ class SingleUninheritedTimingPointFilter(OsuTrainDataFilter):
             # print('uninherited_tp_num')
             # print(uninherited_tp_num)
             return False
+        return True
+
+
+class SnapInNicheFilter(OsuTrainDataFilter):
+    def filter(self, beatmap: slider.Beatmap, audio_file_path):
+        bpm = beatmap.bpm_min()
+        snap_milliseconds = 60000 / (bpm * 8)
+        # tp_time = beatmap_util.get_first_uninherited_timing_point(beatmap).offset / timedelta(milliseconds=1)
+        first_ho_time = beatmap._hit_objects[0].time / timedelta(milliseconds=1)
+        for ho in beatmap._hit_objects:
+            ho_time = ho.time / timedelta(milliseconds=1)
+            snap_idx = (ho_time - first_ho_time) / snap_milliseconds
+            if abs(snap_idx - round(snap_idx)) > 0.1:
+                print('not in niche!')
+                print(beatmap.beatmap_set_id)
+                print()
+                return False
         return True
 
 

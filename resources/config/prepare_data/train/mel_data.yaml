@@ -9,6 +9,7 @@ filter_arg:
   - filter_type: preprocess.filter.SingleBMPFilter
   - filter_type: preprocess.filter.SingleUninheritedTimingPointFilter
   - filter_type: preprocess.filter.SnapDivisorFilter
+  - filter_type: preprocess.filter.SnapInNicheFilter
   filter_type: preprocess.filter.OsuTrainDataFilterGroup
 fold_divider_arg:
   fold_divider_type: preprocess.fold_divider.OsuTrainDBFoldDivider
@@ -23,6 +24,7 @@ preprocessor_arg:
   n_fft: 1024
   n_mels: 128
   preprocessor_type: preprocess.preprocessor.MelPreprocessor
+  snap_divisor: 8
   snap_offset: 0
   win_length: null
 save_dir: ./resources/data/mel

@@ -1,17 +1,11 @@
-import argparse
 import math
-import os
 from datetime import timedelta
-import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 import slider
 from BeatNet.BeatNet import BeatNet
 from slider import curve
-
-from util import audio_util, beatmap_util
-import inference
 
 DEFAULT_AUDIO_INFO_DIR = './resources/gen/audio_info'
 
@@ -216,7 +210,7 @@ def dump_beatmap(beatmap: slider.Beatmap, f):
 
     def dump_group(group, group_items):
         f.write('[' + group + ']\n')
-        for field, field_content in group_items.items():
+        for field, field_content in group_items.item_names():
             f.write(field)
             f.write(':')
             f.write(field_content[1](field_content[0]))
@@ -367,13 +361,13 @@ def thresh_bin_mean(itv_list, bin_size=0.1, thresh=0.3):
 
 def extract_bpm(audio_file_path):
     """
-    returns bpm, first beat microsecond, last beat microsecond
+    returns bpm, first beat millisecond, last beat millisecond
     """
-    estimator = BeatNet(1, mode='online', inference_model='PF', plot=['activations'], thread=False)
+    estimator = BeatNet(1, mode='online', inference_model='PF', plot=[], thread=False)
     output = estimator.process(audio_file_path)
     itv = np.diff(output[:, 0])
     bpm = 60 / thresh_bin_mean(itv, 0.02)
     first_beat = output[0, 0]
     last_beat = output[-1, 0]
-    return float(bpm), float(first_beat) * 1000000, float(last_beat) * 1000000
+    return float(bpm), float(first_beat) * 1000, float(last_beat) * 1000
 

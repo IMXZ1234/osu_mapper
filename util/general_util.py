@@ -60,3 +60,69 @@ def change_ext(path: str, ext: str):
     if not ext.startswith('.'):
         ext = '.' + ext
     return os.path.splitext(path)[0] + ext
+
+
+def list_of_list_categorize(list_of_list, list_pos_as_key=0,
+                            key_in_item=False,
+                            ret_zipped=False,
+                            ret_as_dict=True, reverse=False):
+    """
+    Change a list into dict with list at position of list_pos_reference as the key list.
+
+    :param list_of_list:
+    :param list_pos_as_key:
+    :param key_in_item:
+    :param ret_zipped: if False, value for each key is list of sub lists. else value for each key is zipped version of sub lists.
+    :param ret_as_dict: if False, return keys_list, values_list.
+    keys_list will be sorted, if `reverse` is True, sort to descending, otherwise ascending
+
+    :param reverse: only considered when ret_as_dict is False.
+    :return: dict(if ret_as_dict) or (keys, values)(if not ret_as_dict)
+    """
+    assert 0 <= list_pos_as_key < len(list_of_list)
+    list_len = len(list_of_list[0])
+    try:
+        for lst in list_of_list:
+            assert len(lst) == list_len
+    except AssertionError:
+        print('length not same!')
+        print([len(lst) for lst in list_of_list])
+        raise AssertionError
+    if key_in_item:
+        key_list = list_of_list[list_pos_as_key]
+    else:
+        key_list = list_of_list.pop(list_pos_as_key)
+    zipped = tuple(zip(*list_of_list))
+    dict_out = {key: [] for key in key_list}
+    for i, key in enumerate(key_list):
+        dict_out[key].append(zipped[i])
+    if not ret_zipped:
+        for key in dict_out.keys():
+            dict_out[key] = list(zip(*dict_out[key]))
+    if ret_as_dict:
+        return dict_out
+    else:
+        keys = list(dict_out.keys())
+        keys.sort(reverse=reverse)
+        return keys, [dict_out[key] for key in keys]
+
+
+def try_format_dict_with_path(dict_in, path, fmt_elem):
+    """
+    If value with path exists in dict_in, format it with fmt_elem using % format.
+    Returns True if successfully formatted.
+    """
+    item = dict_in
+    for p in path[:-1]:
+        if p not in item:
+            return False
+        item = item[p]
+    if path[-1] not in item:
+        return False
+    try:
+        item[path[-1]] = item[path[-1]] % fmt_elem
+        # print('formatted %s' % str(item[path[-1]]))
+    except Exception:
+        print('%s can not be formatted with %s' % (str(item[path[-1]]), fmt_elem))
+        return False
+    return True

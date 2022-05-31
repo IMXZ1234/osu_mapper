@@ -172,6 +172,14 @@ class OsuDB(SQLite3DB):
     DEFAULT_COLUMNS_DATA_TYPE = ['INT', 'INT', 'INT', 'BLOB', 'BLOB']
     DEFAULT_COLUMNS_NUM = 5
 
+    ID_POS = 0
+    BEATMAPID_POS = 1
+    BEATMAPSETID_POS = 2
+    BEATMAP_POS = 3
+    AUDIOFILENAME_POS = 4
+    DATA_POS = 4
+    EXTRA_START_POS = 5
+
     @staticmethod
     def beatmap_sql_adaptor(beatmap: slider.Beatmap):
         return pickle.dumps(beatmap)
@@ -204,7 +212,7 @@ class OsuDB(SQLite3DB):
                          save_dir: str = None,
                          use_beatmap_list: bool = False,
                          osu_songs_dir: str = prepare_data_util.OsuSongsDir.DEFAULT_OSU_SONGS_DIR,
-                         beatmap_list: list[slider.Beatmap] = None,
+                         beatmap_list: list = None,
                          from_audio_path_list: str = None,
                          clear_table=True,
                          save_ext=None):
@@ -378,7 +386,7 @@ class OsuDB(SQLite3DB):
                 audio_to_path = os.path.join(save_dir, save_audio_filename)
                 beatmap.audio_filename = save_audio_filename
                 if audio_from_path in audio_extra_columns:
-                    print('%s already processed' % audio_filename)
+                    # print('%s already processed' % audio_filename)
                     self.insert_row([current_id,
                                      beatmap.beatmap_id,
                                      beatmap.beatmap_set_id,
@@ -427,3 +435,9 @@ class OsuDB(SQLite3DB):
         self.create_view_from_rows(
             'ID', id_list, 'INFERENCE', 'MAIN'
         )
+
+    def all_ids(self, table_name='FILTERED'):
+        return self.get_column('ID', table_name)
+
+    def get_record(self, id_, table_name='FILTERED'):
+        return self.get_row('ID', id_, table_name)
