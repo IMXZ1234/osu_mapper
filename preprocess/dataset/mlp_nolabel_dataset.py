@@ -14,7 +14,7 @@ from preprocess.preprocessor import MelPreprocessor
 
 
 class MLPNoLabelDataset(fit_dataset.FitDataset):
-    DEFAULT_SAVE_DIR = r'./resources/data/fit/mlp_nolabel/'
+    DEFAULT_SAVE_DIR = r'./resources/cond_data/fit/mlp_nolabel/'
     """
     A snap may be of label 0-5:
     We predict label of every snap with features:
@@ -76,8 +76,8 @@ class MLPNoLabelDataset(fit_dataset.FitDataset):
     def preprocess_audio(self, audio_path, beatmap):
         # to 1 channel
         preprocessor = MelPreprocessor(**self.preprocess_arg)
-        path_to = r'./resources/data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
-        path_to_snap_offset = r'./resources/data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to = r'./resources/cond_data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
         print('path_to')
         print(path_to)
         if not os.path.exists(path_to):
@@ -141,7 +141,7 @@ class MLPNoLabelDataset(fit_dataset.FitDataset):
             random.seed(self.random_seed)
         table_name = 'FILTERED'
         ids = self.db.all_ids(table_name)
-        # data, label
+        # cond_data, label
         self.items = [[], []]
         data, label = self.items
         if self.take_first is not None:
@@ -196,7 +196,7 @@ class MLPNoLabelDataset(fit_dataset.FitDataset):
             end_snap = min(
                 # snaps_from_start_label
                 len(beatmap_label) + first_ho_snap,
-                # available snaps in audio data - self.half_audio_mel
+                # available snaps in audio cond_data - self.half_audio_mel
                 (audio_data.shape[1] - start_snap * self.snap_mel - self.half_audio_mel) // self.snap_mel + start_snap
             )
             end_label = end_snap - start_snap + start_label
@@ -240,7 +240,7 @@ class MLPNoLabelDataset(fit_dataset.FitDataset):
         print(np.min(data))
         self.items[0] = data
         self.items[1] = label
-        print('data.shape')
+        print('cond_data.shape')
         print(data.shape)
         print('label.shape')
         print(label.shape)

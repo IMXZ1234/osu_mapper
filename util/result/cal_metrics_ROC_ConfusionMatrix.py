@@ -67,7 +67,7 @@ def plot_confusion_matrix(cm, classes, normalize=False, cmap=plt.cm.GnBu, title=
 if __name__ == '__main__':
     method = "200frame"
 
-    # true labels
+    # true data
     gt = ['val1_label.pkl', 'val2_label.pkl', 'val3_label.pkl', 'val4_label.pkl', 'val5_label.pkl']
     y_true = []
     y_pred = []
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         for j in range(len(label[0])):
             name1, ls = label[:, j]  # 样本的名字和真实类别
             name2, rs = r[j]  # 预测分数
-            assert name1 == name2 # 顺序一致
+            assert name1 == name2  # 顺序一致
             y_score_nosoftmax.append(rs.tolist())  # 没有经过softmax的预测概率
             rr = np.argmax(rs)  # 预测类别
             y_name.append(name1)  # 样本名字

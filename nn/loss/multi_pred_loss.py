@@ -16,9 +16,9 @@ class MultiPredLoss(nn.Module):
         if self.weight is None:
             self.weight = [1] * data[0].shape[-1]
         if isinstance(data, torch.Tensor):
-            # print('loss data shape')
-            # print(data.shape)
-            # print('label data shape')
+            # print('loss cond_data shape')
+            # print(cond_data.shape)
+            # print('label cond_data shape')
             # print(label.shape)
             data = data.reshape([-1, data.shape[-1]])
             label = label.reshape(-1)
@@ -28,8 +28,8 @@ class MultiPredLoss(nn.Module):
                                                        dtype=torch.float))
         # else pred and label are lists
         total_loss = []
-        # print('len(data)')
-        # print(len(data))
+        # print('len(cond_data)')
+        # print(len(cond_data))
         for sample_idx in range(len(data)):
             sample_out = data[sample_idx]
             sample_label = label[sample_idx]
@@ -48,14 +48,14 @@ class ValidIntervalMultiPredLoss(nn.Module):
         self.weight = weight
 
     # def forward(self, gen, label):
-    #     data, speed_stars, valid_interval = gen
+    #     cond_data, speed_stars, valid_interval = gen
     #     total_loss = 0
-    #     data = [torch.softmax(sample_data, dim=1) for sample_data in data]
-    #     for sample_idx in range(len(data)):
+    #     cond_data = [torch.softmax(sample_data, dim=1) for sample_data in cond_data]
+    #     for sample_idx in range(len(cond_data)):
     #         sample_label = label[sample_idx]
     #         sample_speed_stars, sample_valid_interval = speed_stars[sample_idx], valid_interval[sample_idx]
     #         thresh = min(10, max(0, 10 - sample_speed_stars))
-    #         sample_out = data[sample_idx]
+    #         sample_out = cond_data[sample_idx]
     #         for snap_idx in range(sample_valid_interval[0], sample_valid_interval[1]):
     #             snap_out = sample_out[snap_idx]
     #             snap_label = sample_label[snap_idx]
@@ -67,8 +67,8 @@ class ValidIntervalMultiPredLoss(nn.Module):
     def forward(self, output, label):
         data, speed_stars, valid_interval = output
         total_loss = []
-        # print('len(data)')
-        # print(len(data))
+        # print('len(cond_data)')
+        # print(len(cond_data))
         for sample_idx in range(len(data)):
             sample_speed_stars, sample_valid_interval = speed_stars[sample_idx], valid_interval[sample_idx]
             # thresh = min(10, max(0, 10 - sample_speed_stars))

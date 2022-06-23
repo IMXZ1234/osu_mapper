@@ -2,10 +2,9 @@ import os
 import pickle
 
 import yaml
-import numpy as np
 
-from preprocess.dataset import mlp_dataset, rnn_dataset, rnn_nolabel_dataset, mlp_nolabel_dataset
-from preprocess import db
+from preprocess.dataset import mlp_dataset, rnn_dataset, rnn_nolabel_dataset, mlp_nolabel_dataset, rnnv2_dataset, \
+    rnnv3_dataset, rnnv3_nolabel_dataset, rnnv4_dataset
 from preprocess.prepare_data import (
     DEFAULT_TRAIN_AUDIO_DIR,
     DEFAULT_TRAIN_DB_PATH,
@@ -68,9 +67,9 @@ def prepare_mel_train_data():
         'do_preprocess': True,
         'do_filter': True,
         'do_fold_divide': True,
-        'save_dir': r'./resources/data/mel',
+        'save_dir': r'./resources/cond_data/mel',
         'from_dir': DEFAULT_TRAIN_AUDIO_DIR,
-        'db_path': r'./resources/data/osu_train_mel.db',
+        'db_path': r'./resources/cond_data/osu_train_mel.db',
         'from_db_path': DEFAULT_TRAIN_DB_PATH,
         'save_ext': '.pkl',
     }
@@ -162,6 +161,48 @@ def prepare_rnn_dataset():
     ds.div_folds(save_first=1)
 
 
+def prepare_rnnv2_dataset():
+    ds = rnnv2_dataset.RNNDataset(
+        r'./resources/data/fit/rnn_v2',
+        audio_mel=4,
+        take_first=100,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
+def prepare_rnnv3_dataset():
+    ds = rnnv3_dataset.RNNDataset(
+        r'./resources/data/fit/rnnv3',
+        audio_mel=4,
+        take_first=100,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=4,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
+def prepare_rnnv3_nolabel_dataset():
+    ds = rnnv3_nolabel_dataset.RNNDataset(
+        r'./resources/data/fit/rnnv3_nolabel',
+        audio_mel=4,
+        take_first=100,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=4,
+        switch_label=False,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
 def prepare_rnn_nolabel_dataset():
     ds = rnn_nolabel_dataset.RNNNoLabelDataset(
         r'./resources/data/fit/rnn_nolabel',
@@ -202,18 +243,33 @@ def prepare_mlp_nolabel_dataset():
     ds.div_folds(save_first=1)
 
 
+def prepare_rnnv4_dataset():
+    ds = rnnv4_dataset.RNNDataset(
+        r'./resources/data/fit/rnnv4',
+        step_snaps=6*8,
+        switch_label=False,
+        take_first=100,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=3,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
 if __name__ == '__main__':
-    db = db.OsuDB()
+    prepare_rnnv3_nolabel_dataset()
     # prepare_mel_train_data()
     # prepare_rnn_dataset()
-    # data = rnn_dataset.RNNDataset(
-    #     r'./resources/data/fit/rnn/snap_1',
+    # cond_data = rnn_dataset.RNNDataset(
+    #     r'./resources/cond_data/fit/rnn/snap_1',
     #     audio_mel=4,
     #     take_first=100,
     #     random_seed=404
     # ).get_raw_data()
-    # print([np.max(seq_data[0]) for seq_data in data])
-    # print([np.min(seq_data[0]) for seq_data in data])
+    # print([np.max(seq_data[0]) for seq_data in cond_data])
+    # print([np.min(seq_data[0]) for seq_data in cond_data])
     # database = db.OsuTrainDB(DEFAULT_DB_PATH)
     # # database.delete_view()
     # all_values = set(database.get_column('AUDIOFILENAME'))

@@ -24,13 +24,13 @@ class SegMultiLabelDBDataset(Dataset):
                  multi_label=False,
                  inference=False):
         """
-        pad_beats extra data is padded on both sides of one sample.
+        pad_beats extra cond_data is padded on both sides of one sample.
         Therefore, total beats for every sample is sample_beats + 2 * pad_beats,
-        while total number of labels/(snaps whose hit object class are to be predicted)
+        while total number of cond_data/(snaps whose hit object class are to be predicted)
         is sample_beats * snap_divisor.
         """
         super(SegMultiLabelDBDataset, self).__init__()
-        # if inference, labels will not be yielded
+        # if inference, cond_data will not be yielded
         self.inference = inference
         # self.dataset_name = table_name
         database = db.OsuDB(db_path, connect=True)
@@ -120,8 +120,8 @@ class SegMultiLabelDBDataset(Dataset):
                                 zip(self.beatmaps, self.audio_info_list, self.audio_snap_per_microsecond,
                                     self.audio_snap_num)]
         self.cache_len = 2
-        # we cache the audio data before final processing
-        # we assume that the most time consuming part is I/O of audio data
+        # we cache the audio cond_data before final processing
+        # we assume that the most time consuming part is I/O of audio cond_data
         # just take up the place
         self.cache = {i: None for i in range(self.cache_len)}
         self.cache_order = deque(i for i in range(self.cache_len))
@@ -142,7 +142,7 @@ class SegMultiLabelDBDataset(Dataset):
     @staticmethod
     def cal_snap_num(bpm, start_time, end_time, snap_divisor=8):
         """
-        Determine how many samples there will be in one audio data.
+        Determine how many samples there will be in one audio cond_data.
         """
         snaps_per_microsecond = bpm * snap_divisor / 60000000
         if start_time < 0:
@@ -184,13 +184,13 @@ class SegMultiLabelDBDataset(Dataset):
     @staticmethod
     def preprocess(resampled_audio_data, start_frame, end_frame, pad_frames):
         """
-        Pad/trim resampled audio data in database for train use.
+        Pad/trim resampled audio cond_data in database for train use.
         start_time, end_time in microsecond, should be aligned with snaps
         sample_rate in Hz
-        Note we have two channels for audio data: audio_data.shape=[2, frame_num]
+        Note we have two channels for audio cond_data: audio_data.shape=[2, frame_num]
         """
         resampled_frame_num = resampled_audio_data.shape[1]
-        # pad/trim at the start and end of the audio data
+        # pad/trim at the start and end of the audio cond_data
         pad_start_frame = pad_frames - start_frame
         pad_end_frame = pad_frames - (resampled_frame_num - end_frame)
         resampled_audio_data = resampled_audio_data[:,
@@ -209,10 +209,10 @@ class SegMultiLabelDBDataset(Dataset):
     #                audio_sample_num=None,
     #                pad_beats=4):
     #     """
-    #     Pad/trim resampled audio data in database for train use.
+    #     Pad/trim resampled audio cond_data in database for train use.
     #     start_time, end_time in microsecond, should be aligned with snaps
     #     sample_rate in Hz
-    #     Note we have two channels for audio data: audio_data.shape=[2, frame_num]
+    #     Note we have two channels for audio cond_data: audio_data.shape=[2, frame_num]
     #     """
     #     resampled_frame_num = resampled_audio_data.shape[1]
     #     resample_rate = round(beat_feature_frames * bpm / 60)  # * feature_frames_per_second
@@ -222,7 +222,7 @@ class SegMultiLabelDBDataset(Dataset):
     #     # we ensure there are frames enough for an additional sample at the tail
     #     end_time_frame = round(end_time * resample_rate_MHz) + sample_feature_frames
     #
-    #     # pad/trim at the start and end of the audio data
+    #     # pad/trim at the start and end of the audio cond_data
     #     pad_frames = pad_beats * beat_feature_frames
     #     pad_start_frame = pad_frames - start_time_frame
     #     pad_end_frame = pad_frames - (resampled_frame_num - end_time_frame)
@@ -259,7 +259,7 @@ class SegMultiLabelDBDataset(Dataset):
         else:
             # print('calculating')
             # print(audio_file_path)
-            # this is resampled data
+            # this is resampled cond_data
             audio_data, sample_rate = audio_util.audioread_get_audio_data(audio_file_path)
             preprocessed_audio_data = SegMultiLabelDBDataset.preprocess(audio_data,
                                                                         *(self.group_start_end_frame[audio_file_path]),
@@ -295,7 +295,7 @@ class SegMultiLabelDBDataset(Dataset):
         sample_feature_start_idx = start_frame - first_frame + sample_idx * self.sample_feature_frames
         sample_data = preprocessed_audio_data[:, sample_feature_start_idx:
                                                  sample_feature_start_idx + self.sample_feature_frames_padded]
-        # print('data itv')
+        # print('cond_data itv')
         # print('%d %d' % (sample_feature_start_idx, sample_feature_start_idx + self.sample_feature_frames_padded))
         sample_snap_start_idx = sample_idx * self.sample_snaps
         # print('label itv')
@@ -312,7 +312,7 @@ class SegMultiLabelDBDataset(Dataset):
             return [sample_data, speed_stars], sample_label, index
 
 # if __name__ == '__main__':
-#     audio_file_path = r'C:\Users\asus\coding\python\osu_auto_mapper\resources\data\bgm\audio.mp3'
+#     audio_file_path = r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\bgm\audio.mp3'
 #     audio_data, sample_rate = audio_util.audioread_get_audio_data(audio_file_path)
 #     print(sample_rate)
 #     print(audio_data.shape)
@@ -322,7 +322,7 @@ class SegMultiLabelDBDataset(Dataset):
 #     resampled_audio_data = torchaudio.functional.resample(audio_data, sample_rate, target_sample_rate)
 #     print(resampled_audio_data.shape)
 #     torchaudio.save(
-#         r'C:\Users\asus\coding\python\osu_auto_mapper\resources\data\bgm\resampled.wav',
+#         r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\bgm\resampled.wav',
 #         resampled_audio_data,
 #         target_sample_rate,
 #     )

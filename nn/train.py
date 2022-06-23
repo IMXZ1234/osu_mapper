@@ -12,6 +12,9 @@ import torch
 import yaml
 from tensorboardX import SummaryWriter
 from torch import nn
+from torch.autograd import Variable
+from torch.nn.utils import clip_grad_norm_
+from torch.nn import functional as F
 from torch.utils import data
 from tqdm import tqdm
 
@@ -28,11 +31,17 @@ class Train:
                  task_type='classification',
                  **kwargs):
         self.task_type = task_type
-        if 'rnn' in kwargs:
-            self.rnn = kwargs['rnn']
+
+        if 'output_device' in kwargs and kwargs['output_device'] is not None:
+            self.output_device = kwargs['output_device']
+        else:
+            self.output_device = 'cpu'
+
+        if 'train_type' in kwargs:
+            self.train_type = kwargs['train_type']
             # self.use_random_iter = kwargs['use_random_iter']
         else:
-            self.rnn = False
+            self.train_type = 'default'
 
         if self.task_type == 'classification':
             if 'cal_acc_func' in kwargs and kwargs['cal_acc_func'] is not None:
@@ -57,15 +66,19 @@ class Train:
             self.output_collate_fn = dynamic_import(kwargs['output_collate_fn'])
         else:
             self.output_collate_fn = collate_fn.output_collate_fn
-        if 'output_device' in kwargs and kwargs['output_device'] is not None:
-            self.output_device = kwargs['output_device']
-        else:
-            self.output_device = 'cpu'
         if 'grad_alter_fn' in kwargs and kwargs['grad_alter_fn'] is not None:
             self.grad_alter_fn = dynamic_import(kwargs['grad_alter_fn'])
             self.grad_alter_fn_arg = kwargs['grad_alter_fn_arg']
         else:
             self.grad_alter_fn = None
+        if 'train_extra' in kwargs and kwargs['train_extra'] is not None:
+            self.train_extra = kwargs['train_extra']
+        else:
+            self.train_extra = dict()
+        if 'test_extra' in kwargs and kwargs['test_extra'] is not None:
+            self.test_extra = kwargs['test_extra']
+        else:
+            self.test_extra = dict()
 
         self.train_state_dir = kwargs['train_state_dir'] if 'train_state_dir' in kwargs else None
 
@@ -105,32 +118,40 @@ class Train:
         return writer, logger, log_dir, model_save_dir, model_save_step
 
     def load_model(self, model_type, **kwargs):
-        if model_type == 'mlp':
-            net = nn.Sequential(
-                nn.Linear(9, 64),
-                nn.ReLU(),
-                nn.Linear(64, 256),
-                nn.ReLU(),
-                nn.Linear(256, 64),
-                nn.ReLU(),
-                nn.Linear(64, 1))
+        if isinstance(model_type, (list, tuple)):
+            net = [
+                dynamic_import(mt)(kwargs['params'][i])
+                for i, mt in enumerate(model_type)
+            ]
         else:
             net = dynamic_import(model_type)(**kwargs)
         self.logger.info('loaded model: %s' % model_type)
         return net
 
     def load_optimizer(self, optimizer_type, **kwargs):
-        if optimizer_type == 'SGD':
-            optimizer = torch.optim.SGD(self.model.parameters(), **kwargs)
+        if isinstance(optimizer_type, (list, tuple)):
+            optimizer = [
+                self.load_optimizer(ot)(self.model[i].parameters(), kwargs['params'][i])
+                for i, ot in enumerate(optimizer_type)
+            ]
         else:
-            optimizer = dynamic_import(optimizer_type)(**kwargs)
+            if optimizer_type == 'SGD':
+                optimizer = torch.optim.SGD(self.model.parameters(), **kwargs)
+            else:
+                optimizer = dynamic_import(optimizer_type)(self.model.parameters(), **kwargs)
         return optimizer
 
     def load_scheduler(self, scheduler_type, **kwargs):
-        if scheduler_type == 'StepLR':
-            scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, **kwargs)
+        if isinstance(scheduler_type, (list, tuple)):
+            scheduler = [
+                self.load_scheduler(st)(self.optimizer[i], kwargs['params'][i])
+                for i, st in enumerate(scheduler_type)
+            ]
         else:
-            scheduler = dynamic_import(scheduler_type)(**kwargs)
+            if scheduler_type == 'StepLR':
+                scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, **kwargs)
+            else:
+                scheduler = dynamic_import(scheduler_type)(self.optimizer, **kwargs)
         return scheduler
 
     def load_data(self,
@@ -159,9 +180,16 @@ class Train:
         return train_iter, test_iter
 
     def load_loss(self, loss_type, **kwargs):
+        if isinstance(loss_type, (list, tuple)):
+            return [
+                self.load_loss(lt)(kwargs['params'][i])
+                for i, lt in enumerate(loss_type)
+            ]
         if loss_type == 'MSE':
             loss = nn.MSELoss(**kwargs)
         elif loss_type == 'CrossEntropy':
+            if 'weight' in kwargs:
+                kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
             loss = nn.CrossEntropyLoss(**kwargs)
         else:
             loss = dynamic_import(loss_type)(**kwargs)
@@ -211,52 +239,80 @@ class Train:
         except:
             self.logger.error('fail to react to control!')
 
-    def run_train(self):
-        if self.train_state_dir is not None:
-            self.from_train_state()
+    def save_model(self, epoch=-1):
+        if not isinstance(self.model, (list, tuple)):
+            models = [self.model]
         else:
-            self.model.apply(init_weights)
-            self.start_epoch = 0
-        if isinstance(self.output_device, int):
-            self.model.cuda(self.output_device)
+            models = self.model
+        pt_filename = 'model_%d_epoch_{}.pt'.format(epoch)
+        for index, model in enumerate(models):
+            torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
+        print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
 
+    def init_train_state(self):
+        if not isinstance(self.model, (list, tuple)):
+            models = [self.model]
+            optimizers = [self.optimizer]
+        else:
+            models = self.model
+            optimizers = self.optimizer
+        for index, (optimizer, model) in enumerate(zip(optimizers, models)):
+            if self.train_state_dir is not None:
+                self.start_epoch = self.from_train_state(model, optimizer, index)
+            else:
+                model.apply(init_weights)
+                self.start_epoch = 0
+            if isinstance(self.output_device, int):
+                model.cuda(self.output_device)
+
+    def run_train(self):
+        self.init_train_state()
         control_dict = {'save_model_next_epoch': False}
         with open(self.control_file_path, 'w') as f:
             yaml.dump(control_dict, f)
         for epoch in range(self.start_epoch, self.epoch):
+            if isinstance(self.model, (list, tuple)):
+                for model in self.model:
+                    model.train()
+            else:
+                self.model.train()
             self.train_epoch(epoch)
             if (epoch + 1) % self.eval_step == 0:
                 with torch.no_grad():
-                    self.model.eval()
+                    if isinstance(self.model, (list, tuple)):
+                        for model in self.model:
+                            model.eval()
+                    else:
+                        self.model.eval()
                     self.eval_epoch(epoch)
-                    self.model.train()
             if (epoch + 1) % self.model_save_step == 0:
-                torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
-                print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
-            self.inspect_control(epoch)
+                self.save_model(epoch)
+            # self.inspect_control(epoch)
         # if self.save_model_flag:
         #     torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
         #     self.save_model_flag = False
         # if epoch == num_epoch - 1:
         #     plot_difference_distribution(epoch_output_list, epoch_label_list, 100)
         # finally save the model
-        torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_final.pt'))
+        self.save_model(-1)
         self.save_properties()
 
-    def iter_pass(self, data, label, other):
+    def iter_pass(self, data, label, other, extra=dict()):
         """
         Returns (output(predict probabilities or regression results), loss)
         """
         data = recursive_wrap_data(data, self.output_device)
         label = recursive_wrap_data(label, self.output_device)
-        if self.rnn:
+        # print('other')
+        # print(other)
+        if self.train_type == 'rnn':
             state = None
-            if state is None or other['clear_state']:
+            if state is None or True in other['clear_state']:
                 # batch of subsequence
                 # detach state across batches(subsequences)
                 # Initialize `state` when either it is the first iteration or
                 # using random sampling
-                state = self.model.begin_state(batch_size=len(data[0]), device=data[0].device)
+                state = self.model.begin_state(batch_size=len(label), device=self.output_device)
             else:
                 if not isinstance(state, tuple):
                     # `state` is a tensor for `nn.GRU`
@@ -277,24 +333,190 @@ class Train:
             #   ...
             # ]
             label = label.reshape([-1])
-            output, state = self.model(data, state)
+            output, state = self.model(data, state, **extra)
         else:
-            output = self.model(data)
-        # print('output.shape')
-        # print(output.shape)
-        # print('label')
-        # print(label)
+            output = self.model(data, **extra)
         l = self.loss(output, label)
         return output, l, label
 
+    def train_epoch_gan(self, epoch):
+        epoch_g_loss_list = []
+        epoch_d_loss_list = []
+        epoch_gen_output_list = []
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        generator, discriminator = self.model
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size, feature_num = cond_data.shape
+
+            # Adversarial ground truths
+            valid = Variable(torch.ones(batch_size, dtype=torch.long), requires_grad=False)
+            fake = Variable(torch.zeros(batch_size, dtype=torch.long), requires_grad=False)
+
+            # -----------------
+            #  Train Generator
+            # -----------------
+
+            optimizer_G.zero_grad()
+
+            # Sample noise and cond_data as generator input
+            noise = Variable(torch.randn(batch_size, feature_num))
+
+            # Generate a batch of images
+            gen_output = generator(noise, cond_data)
+            epoch_gen_output_list.append(recursive_to_cpu(gen_output))
+
+            # Loss measures generator's ability to fool the discriminator
+            validity = discriminator(gen_output, cond_data)
+            g_loss = loss_G(validity, valid)
+            epoch_g_loss_list.append(g_loss.item())
+
+            g_loss.backward()
+            optimizer_G.step()
+
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
+
+            optimizer_D.zero_grad()
+
+            # Loss for real images
+            validity_real = discriminator(real_gen_output, cond_data)
+            d_real_loss = loss_D(validity_real, valid)
+
+            # Loss for fake images
+            validity_fake = discriminator(gen_output.detach(), cond_data)
+            d_fake_loss = loss_D(validity_fake, fake)
+
+            # Total discriminator loss
+            d_loss = (d_real_loss + d_fake_loss) / 2
+            epoch_d_loss_list.append(d_loss.item())
+
+            d_loss.backward()
+            optimizer_D.step()
+        epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
+
+        self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
+        self.writer.add_scalar('mean_eval_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
+        self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
+
+        self.logger.debug('\tmean eval d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
+        self.writer.add_scalar('mean_eval_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
+        self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
+
+        epoch_properties = dict()
+        epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
+
+        self.save_epoch_properties(epoch_properties, epoch, False)
+        self.scheduler.step()
+
+    def eval_epoch_gan(self, epoch):
+        epoch_g_loss_list = []
+        epoch_d_loss_list = []
+        epoch_gen_output_list = []
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        generator, discriminator = self.model
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.test_iter)):
+            batch_size, feature_num = cond_data.shape
+            # Adversarial ground truths
+            valid = Variable(torch.ones(batch_size, dtype=torch.long), requires_grad=False)
+            fake = Variable(torch.zeros(batch_size, dtype=torch.long), requires_grad=False)
+            # -----------------
+            #  Train Generator
+            # -----------------
+            # Sample noise and cond_data as generator input
+            noise = Variable(torch.randn(batch_size, feature_num))
+            # Generate a batch of images
+            gen_output = generator(noise, cond_data)
+            epoch_gen_output_list.append(recursive_to_cpu(gen_output))
+
+            # Loss measures generator's ability to fool the discriminator
+            validity = discriminator(gen_output, cond_data)
+
+            g_loss = loss_G(validity, valid)
+            epoch_g_loss_list.append(g_loss.item())
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
+            # Loss for real images
+            validity_real = discriminator(real_gen_output, cond_data)
+            d_real_loss = loss_D(validity_real, valid)
+
+            # Loss for fake images
+            validity_fake = discriminator(gen_output.detach(), cond_data)
+            d_fake_loss = loss_D(validity_fake, fake)
+
+            # Total discriminator loss
+            d_loss = (d_real_loss + d_fake_loss) / 2
+            epoch_d_loss_list.append(d_loss.item())
+        epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
+
+        self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
+        self.writer.add_scalar('mean_eval_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
+        self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
+
+        self.logger.debug('\tmean eval d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
+        self.writer.add_scalar('mean_eval_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
+        self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
+
+        epoch_properties = dict()
+        epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
+
+        self.save_epoch_properties(epoch_properties, epoch, False)
+
+    def train_epoch_seq2seq(self, epoch):
+        total_loss = 0
+        epoch_loss_list = []
+        epoch_output_list = []
+        epoch_label_list = []
+        self.logger.info('train epoch: {}'.format(epoch + 1))
+        for batch, (data, label, other) in enumerate(tqdm(self.train_iter)):
+            data = recursive_wrap_data(data, self.output_device)
+            label = recursive_wrap_data(label, self.output_device)
+
+            self.optimizer.zero_grad()
+            output = self.model(data, label)
+            loss = self.loss(output, label)
+            loss.backward()
+            clip_grad_norm_(self.model.parameters(), 10.0)
+            self.optimizer.step()
+            total_loss += loss.data.item()
+        self.logger.debug('\tmean train loss: {}'.format(total_loss / len(self.train_iter)))
+
+    def eval_epoch_seq2seq(self, epoch):
+        total_loss = 0
+        epoch_loss_list = []
+        epoch_output_list = []
+        epoch_label_list = []
+        self.logger.info('test epoch: {}'.format(epoch + 1))
+        for batch, (data, label, other) in enumerate(tqdm(self.test_iter)):
+            data = recursive_wrap_data(data, self.output_device)
+            label = recursive_wrap_data(label, self.output_device)
+
+            self.optimizer.zero_grad()
+            output = self.model(data, label, 0)
+            loss = self.loss(output, label)
+
+            total_loss += loss.data.item()
+        self.logger.debug('\tmean test loss: {}'.format(total_loss / len(self.test_iter)))
+
     def train_epoch(self, epoch):
+        if self.train_type == 'gan':
+            return self.train_epoch_gan(epoch)
+        elif self.train_type == 'seq2seq':
+            return self.train_epoch_seq2seq(epoch)
         epoch_loss_list = []
         epoch_output_list = []
         epoch_label_list = []
         self.logger.info('train epoch: {}'.format(epoch + 1))
         for batch, (data, label, other) in enumerate(tqdm(self.train_iter)):
             self.optimizer.zero_grad()
-            output, l, label = self.iter_pass(data, label, other)
+            output, l, label = self.iter_pass(data, label, other, self.train_extra)
 
             # print('before backward')
             # print([param for param in self.model.parameters()])
@@ -310,10 +532,13 @@ class Train:
 
             epoch_label_list.append(recursive_to_cpu(label))
             epoch_output_list.append(recursive_to_cpu(output))
+            # print('batch %d' % batch)
+            # print('l.item() %f' % l.item())
             epoch_loss_list.append(l.item())
         # print('len(epoch_output_list)')
         # print(len(epoch_output_list))
         epoch_output_list = self.output_collate_fn(epoch_output_list)
+        # flatten batch dim
         epoch_label_list = torch.cat(epoch_label_list)
         # print('len(epoch_output_list)')
         # print(len(epoch_output_list))
@@ -344,17 +569,21 @@ class Train:
         epoch_properties['epoch_label_list'] = epoch_label_list
         epoch_properties['epoch_output_list'] = epoch_output_list
 
-        self.save_epoch_properties(epoch_properties, epoch, False)
+        # self.save_epoch_properties(epoch_properties, epoch, False)
 
         self.scheduler.step()
 
     def eval_epoch(self, epoch):
+        if self.train_type == 'gan':
+            return self.eval_epoch_gan(epoch)
+        elif self.train_type == 'seq2seq':
+            return self.eval_epoch_seq2seq(epoch)
         epoch_loss_list = []
         epoch_output_list = []
         epoch_label_list = []
         self.logger.info('eval epoch: {}'.format(epoch + 1))
         for batch, (data, label, other) in enumerate(tqdm(self.test_iter)):
-            output, l, label = self.iter_pass(data, label, other)
+            output, l, label = self.iter_pass(data, label, other, self.test_extra)
 
             epoch_label_list.append(recursive_to_cpu(label))
             epoch_output_list.append(recursive_to_cpu(output))
@@ -383,7 +612,7 @@ class Train:
         epoch_properties['epoch_label_list'] = epoch_label_list
         epoch_properties['epoch_output_list'] = epoch_output_list
 
-        self.save_epoch_properties(epoch_properties, epoch, True)
+        # self.save_epoch_properties(epoch_properties, epoch, True)
 
     def save_epoch_properties(self, out_dict, epoch, is_test=True):
         for k, v in out_dict.items():
@@ -414,19 +643,22 @@ class Train:
         print('eva_loss_list\n', self.eva_loss_list)
         print('learning_rate_list\n', self.learning_rate_list)
 
-    def save_train_state(self, epoch):
+    def save_train_state(self, model, optimizer, epoch, index=None):
         state = {'epoch': epoch,
-                 'model': self.model.state_dict(),
-                 'optimizer': self.optimizer.state_dict()}
-        filename = os.path.join(self.train_state_dir, 'train_state.pt')
+                 'model': model.state_dict(),
+                 'optimizer': optimizer.state_dict()}
+        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+        filename = os.path.join(self.train_state_dir, pt_filename)
         torch.save(state, filename)
 
-    def from_train_state(self):
-        filename = os.path.join(self.train_state_dir, 'train_state.pt')
+    def from_train_state(self, model, optimizer, index=None):
+        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+        filename = os.path.join(self.train_state_dir, pt_filename)
         state = torch.load(filename)
-        self.model.load_state_dict(state['model'])
-        self.optimizer.load_state_dict(state['model'])
-        self.start_epoch = state['epoch']
+        model.load_state_dict(state['model'])
+        optimizer.load_state_dict(state['model'])
+        start_epoch = state['epoch']
+        return start_epoch
 
 
 def init_weights(m):

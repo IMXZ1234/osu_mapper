@@ -1974,14 +1974,14 @@
                 var i = function (e) {
                     var r = t(this), i = r.attr("href");
                     i && (i = i.replace(/.*(?=#[^\s]+$)/, ""));
-                    var o = r.attr("data-target") || i, a = t(document).find(o);
+                    var o = r.attr("cond_data-target") || i, a = t(document).find(o);
                     if (a.hasClass("carousel")) {
-                        var s = t.extend({}, a.data(), r.data()), u = r.attr("data-slide-to");
+                        var s = t.extend({}, a.data(), r.data()), u = r.attr("cond_data-slide-to");
                         u && (s.interval = !1), n.call(a, s), u && a.data("bs.carousel").to(u), e.preventDefault()
                     }
                 };
-                t(document).on("click.bs.carousel.data-api", "[data-slide]", i).on("click.bs.carousel.data-api", "[data-slide-to]", i), t(window).on("load", (function () {
-                    t('[data-ride="carousel"]').each((function () {
+                t(document).on("click.bs.carousel.cond_data-api", "[cond_data-slide]", i).on("click.bs.carousel.cond_data-api", "[cond_data-slide-to]", i), t(window).on("load", (function () {
+                    t('[cond_data-ride="carousel"]').each((function () {
                         var e = t(this);
                         n.call(e, e.data())
                     }))
@@ -3077,7 +3077,7 @@
 
             function et(t, e, n) {
                 var r;
-                if (void 0 === n && 1 === t.nodeType) if (r = "data-" + e.replace(tt, "-$&").toLowerCase(), "string" == typeof (n = t.getAttribute(r))) {
+                if (void 0 === n && 1 === t.nodeType) if (r = "cond_data-" + e.replace(tt, "-$&").toLowerCase(), "string" == typeof (n = t.getAttribute(r))) {
                     try {
                         n = function (t) {
                             return "true" === t || "false" !== t && ("null" === t ? null : t === +t + "" ? +t : J.test(t) ? JSON.parse(t) : t)
@@ -3106,7 +3106,7 @@
                     var n, r, i, o = this[0], a = o && o.attributes;
                     if (void 0 === t) {
                         if (this.length && (i = Z.get(o), 1 === o.nodeType && !Q.get(o, "hasDataAttrs"))) {
-                            for (n = a.length; n--;) a[n] && 0 === (r = a[n].name).indexOf("data-") && (r = G(r.slice(5)), et(o, r, i[r]));
+                            for (n = a.length; n--;) a[n] && 0 === (r = a[n].name).indexOf("cond_data-") && (r = G(r.slice(5)), et(o, r, i[r]));
                             Q.set(o, "hasDataAttrs", !0)
                         }
                         return i
@@ -4917,7 +4917,7 @@
                         return t(a)
                     },
                     _removeCurrentsFromItems: function () {
-                        var e = this.currentItem.find(":data(" + this.widgetName + "-item)");
+                        var e = this.currentItem.find(":cond_data(" + this.widgetName + "-item)");
                         this.items = t.grep(this.items, (function (t) {
                             for (var n = 0; n < e.length; n++) if (e[n] === t.item[0]) return !1;
                             return !0
@@ -6680,17 +6680,17 @@
                 void 0 !== t.rails && t.error("jquery-ujs has already been loaded!");
                 var r = t(document);
                 t.rails = n = {
-                    linkClickSelector: "a[data-confirm], a[data-method], a[data-remote]:not([disabled]), a[data-disable-with], a[data-disable]",
-                    buttonClickSelector: "button[data-remote]:not([form]):not(form button), button[data-confirm]:not([form]):not(form button)",
-                    inputChangeSelector: "select[data-remote], input[data-remote], textarea[data-remote]",
+                    linkClickSelector: "a[cond_data-confirm], a[cond_data-method], a[cond_data-remote]:not([disabled]), a[cond_data-disable-with], a[cond_data-disable]",
+                    buttonClickSelector: "button[cond_data-remote]:not([form]):not(form button), button[cond_data-confirm]:not([form]):not(form button)",
+                    inputChangeSelector: "select[cond_data-remote], input[cond_data-remote], textarea[cond_data-remote]",
                     formSubmitSelector: "form",
                     formInputClickSelector: "form input[type=submit], form input[type=image], form button[type=submit], form button:not([type]), input[type=submit][form], input[type=image][form], button[type=submit][form], button[form]:not([type])",
-                    disableSelector: "input[data-disable-with]:enabled, button[data-disable-with]:enabled, textarea[data-disable-with]:enabled, input[data-disable]:enabled, button[data-disable]:enabled, textarea[data-disable]:enabled",
-                    enableSelector: "input[data-disable-with]:disabled, button[data-disable-with]:disabled, textarea[data-disable-with]:disabled, input[data-disable]:disabled, button[data-disable]:disabled, textarea[data-disable]:disabled",
+                    disableSelector: "input[cond_data-disable-with]:enabled, button[cond_data-disable-with]:enabled, textarea[cond_data-disable-with]:enabled, input[cond_data-disable]:enabled, button[cond_data-disable]:enabled, textarea[cond_data-disable]:enabled",
+                    enableSelector: "input[cond_data-disable-with]:disabled, button[cond_data-disable-with]:disabled, textarea[cond_data-disable-with]:disabled, input[cond_data-disable]:disabled, button[cond_data-disable]:disabled, textarea[cond_data-disable]:disabled",
                     requiredInputSelector: "input[name][required]:not([disabled]), textarea[name][required]:not([disabled])",
                     fileInputSelector: "input[name][type=file]:not([disabled])",
-                    linkDisableSelector: "a[data-disable-with], a[data-disable]",
-                    buttonDisableSelector: "button[data-remote][data-disable-with], button[data-remote][data-disable]",
+                    linkDisableSelector: "a[cond_data-disable-with], a[cond_data-disable]",
+                    buttonDisableSelector: "button[cond_data-remote][cond_data-disable-with], button[cond_data-remote][cond_data-disable]",
                     csrfToken: function () {
                         return t("meta[name=csrf-token]").attr("content")
                     },
@@ -10736,7 +10736,7 @@
                     for (t = i.length; t--;) a != o[t] && e >= i[t] && (void 0 === i[t + 1] || e < i[t + 1]) && this.activate(o[t])
                 }, e.prototype.activate = function (e) {
                     this.activeTarget = e, this.clear();
-                    var n = this.selector + '[data-target="' + e + '"],' + this.selector + '[href="' + e + '"]',
+                    var n = this.selector + '[cond_data-target="' + e + '"],' + this.selector + '[href="' + e + '"]',
                         r = t(n).parents("li").addClass("active");
                     r.parent(".dropdown-menu").length && (r = r.closest("li.dropdown").addClass("active")), r.trigger("activate.bs.scrollspy")
                 }, e.prototype.clear = function () {
@@ -10745,8 +10745,8 @@
                 var r = t.fn.scrollspy;
                 t.fn.scrollspy = n, t.fn.scrollspy.Constructor = e, t.fn.scrollspy.noConflict = function () {
                     return t.fn.scrollspy = r, this
-                }, t(window).on("load.bs.scrollspy.data-api", (function () {
-                    t('[data-spy="scroll"]').each((function () {
+                }, t(window).on("load.bs.scrollspy.cond_data-api", (function () {
+                    t('[cond_data-spy="scroll"]').each((function () {
                         var e = t(this);
                         n.call(e, e.data())
                     }))
@@ -10847,12 +10847,12 @@
         (function (t) {
             !function (t) {
                 "use strict";
-                var e = ".dropdown-backdrop", n = '[data-toggle="dropdown"]', r = function (e) {
+                var e = ".dropdown-backdrop", n = '[cond_data-toggle="dropdown"]', r = function (e) {
                     t(e).on("click.bs.dropdown", this.toggle)
                 };
 
                 function i(e) {
-                    var n = e.attr("data-target");
+                    var n = e.attr("cond_data-target");
                     n || (n = (n = e.attr("href")) && /#[A-Za-z]/.test(n) && n.replace(/.*(?=#[^\s]*$)/, ""));
                     var r = "#" !== n ? t(document).find(n) : null;
                     return r && r.length ? r : e.parent()
@@ -10899,9 +10899,9 @@
                     }))
                 }, t.fn.dropdown.Constructor = r, t.fn.dropdown.noConflict = function () {
                     return t.fn.dropdown = a, this
-                }, t(document).on("click.bs.dropdown.data-api", o).on("click.bs.dropdown.data-api", ".dropdown form", (function (t) {
+                }, t(document).on("click.bs.dropdown.cond_data-api", o).on("click.bs.dropdown.cond_data-api", ".dropdown form", (function (t) {
                     t.stopPropagation()
-                })).on("click.bs.dropdown.data-api", n, r.prototype.toggle).on("keydown.bs.dropdown.data-api", n, r.prototype.keydown).on("keydown.bs.dropdown.data-api", ".dropdown-menu", r.prototype.keydown)
+                })).on("click.bs.dropdown.cond_data-api", n, r.prototype.toggle).on("keydown.bs.dropdown.cond_data-api", n, r.prototype.keydown).on("keydown.bs.dropdown.cond_data-api", ".dropdown-menu", r.prototype.keydown)
             }(t)
         }).call(this, n("5wds"))
     }, DmM8: function (t, e) {
@@ -14800,7 +14800,7 @@
                         case"symbol":
                             return !0;
                         case"boolean":
-                            return !r && (null !== n ? !n.acceptsBooleans : "data-" !== (t = t.toLowerCase().slice(0, 5)) && "aria-" !== t);
+                            return !r && (null !== n ? !n.acceptsBooleans : "cond_data-" !== (t = t.toLowerCase().slice(0, 5)) && "aria-" !== t);
                         default:
                             return !1
                     }
@@ -15348,7 +15348,7 @@
                         p = null, f ? xt.hasOwnProperty(w) || (p = D(p = w) && null != h ? p + '="' + U(h) + '"' : "") : p = V(w, h), p && (d += " " + p)
                     }
                 }
-                c || l && (d += ' data-reactroot=""');
+                c || l && (d += ' cond_data-reactroot=""');
                 var w = d;
                 u = "", ct.hasOwnProperty(a) ? w += "/>" : (w += ">", u = "</" + t.type + ">");
                 t:{
@@ -16735,7 +16735,7 @@ object-assign
                         r[i](null == o[e] ? this.options[e] : o[e]), "loadingText" == e ? (this.isLoading = !0, r.addClass(n).attr(n, n).prop(n, !0)) : this.isLoading && (this.isLoading = !1, r.removeClass(n).removeAttr(n).prop(n, !1))
                     }), this), 0)
                 }, e.prototype.toggle = function () {
-                    var t = !0, e = this.$element.closest('[data-toggle="buttons"]');
+                    var t = !0, e = this.$element.closest('[cond_data-toggle="buttons"]');
                     if (e.length) {
                         var n = this.$element.find("input");
                         "radio" == n.prop("type") ? (n.prop("checked") && (t = !1), e.find(".active").removeClass("active"), this.$element.addClass("active")) : "checkbox" == n.prop("type") && (n.prop("checked") !== this.$element.hasClass("active") && (t = !1), this.$element.toggleClass("active")), n.prop("checked", this.$element.hasClass("active")), t && n.trigger("change")
@@ -16744,10 +16744,10 @@ object-assign
                 var r = t.fn.button;
                 t.fn.button = n, t.fn.button.Constructor = e, t.fn.button.noConflict = function () {
                     return t.fn.button = r, this
-                }, t(document).on("click.bs.button.data-api", '[data-toggle^="button"]', (function (e) {
+                }, t(document).on("click.bs.button.cond_data-api", '[cond_data-toggle^="button"]', (function (e) {
                     var r = t(e.target).closest(".btn");
                     n.call(r, "toggle"), t(e.target).is('input[type="radio"], input[type="checkbox"]') || (e.preventDefault(), r.is("input,button") ? r.trigger("focus") : r.find("input:visible,button:visible").first().trigger("focus"))
-                })).on("focus.bs.button.data-api blur.bs.button.data-api", '[data-toggle^="button"]', (function (e) {
+                })).on("focus.bs.button.cond_data-api blur.bs.button.cond_data-api", '[cond_data-toggle^="button"]', (function (e) {
                     t(e.target).closest(".btn").toggleClass("focus", /^focus(in)?$/.test(e.type))
                 }))
             }(t)
@@ -16759,7 +16759,7 @@ object-assign
                 var e = function (n, r) {
                     this.options = t.extend({}, e.DEFAULTS, r);
                     var i = this.options.target === e.DEFAULTS.target ? t(this.options.target) : t(document).find(this.options.target);
-                    this.$target = i.on("scroll.bs.affix.data-api", t.proxy(this.checkPosition, this)).on("click.bs.affix.data-api", t.proxy(this.checkPositionWithEventLoop, this)), this.$element = t(n), this.affixed = null, this.unpin = null, this.pinnedOffset = null, this.checkPosition()
+                    this.$target = i.on("scroll.bs.affix.cond_data-api", t.proxy(this.checkPosition, this)).on("click.bs.affix.cond_data-api", t.proxy(this.checkPositionWithEventLoop, this)), this.$element = t(n), this.affixed = null, this.unpin = null, this.pinnedOffset = null, this.checkPosition()
                 };
 
                 function n(n) {
@@ -16804,7 +16804,7 @@ object-assign
                 t.fn.affix = n, t.fn.affix.Constructor = e, t.fn.affix.noConflict = function () {
                     return t.fn.affix = r, this
                 }, t(window).on("load", (function () {
-                    t('[data-spy="affix"]').each((function () {
+                    t('[cond_data-spy="affix"]').each((function () {
                         var e = t(this), r = e.data();
                         r.offset = r.offset || {}, null != r.offsetBottom && (r.offset.bottom = r.offsetBottom), null != r.offsetTop && (r.offset.top = r.offsetTop), n.call(e, r)
                     }))
@@ -17269,9 +17269,9 @@ object-assign
         e.a = function () {
             var t = arguments.length > 0 && void 0 !== arguments[0] ? arguments[0] : {}, e = l(), n = void 0,
                 r = void 0, o = void 0, a = {
-                    normal: t.normal || "data-normal",
-                    retina: t.retina || "data-retina",
-                    srcset: t.srcset || "data-srcset",
+                    normal: t.normal || "cond_data-normal",
+                    retina: t.retina || "cond_data-retina",
+                    srcset: t.srcset || "cond_data-srcset",
                     threshold: t.threshold || 0
                 }, s = document.body.classList.contains("srcset") || "srcset" in document.createElement("img"),
                 u = window.devicePixelRatio || window.screen.deviceXDPI / window.screen.logicalXDPI,
@@ -17951,7 +17951,7 @@ object-assign
                     if (this.$element.trigger(i), !i.isDefaultPrevented()) return r.removeClass("in"), t.support.transition && r.hasClass("fade") ? r.one("bsTransitionEnd", o).emulateTransitionEnd(u.TRANSITION_DURATION) : o(), this.hoverState = null, this
                 }, u.prototype.fixTitle = function () {
                     var t = this.$element;
-                    (t.attr("title") || "string" != typeof t.attr("data-original-title")) && t.attr("data-original-title", t.attr("title") || "").attr("title", "")
+                    (t.attr("title") || "string" != typeof t.attr("cond_data-original-title")) && t.attr("cond_data-original-title", t.attr("title") || "").attr("title", "")
                 }, u.prototype.hasContent = function () {
                     return this.getTitle()
                 }, u.prototype.getPosition = function (e) {
@@ -17988,7 +17988,7 @@ object-assign
                     return i
                 }, u.prototype.getTitle = function () {
                     var t = this.$element, e = this.options;
-                    return t.attr("data-original-title") || ("function" == typeof e.title ? e.title.call(t[0]) : e.title)
+                    return t.attr("cond_data-original-title") || ("function" == typeof e.title ? e.title.call(t[0]) : e.title)
                 }, u.prototype.getUID = function (t) {
                     do {
                         t += ~~(1e6 * Math.random())
@@ -18264,7 +18264,7 @@ object-assign
                         case"symbol":
                             return !0;
                         case"boolean":
-                            return !r && (null !== n ? !n.acceptsBooleans : "data-" !== (t = t.toLowerCase().slice(0, 5)) && "aria-" !== t);
+                            return !r && (null !== n ? !n.acceptsBooleans : "cond_data-" !== (t = t.toLowerCase().slice(0, 5)) && "aria-" !== t);
                         default:
                             return !1
                     }
@@ -22800,7 +22800,7 @@ object-assign
                 $u(e, a, t, i)
             } else {
                 if (o = n._reactRootContainer = function (t, e) {
-                    if (e || (e = !(!(e = t ? 9 === t.nodeType ? t.documentElement : t.firstChild : null) || 1 !== e.nodeType || !e.hasAttribute("data-reactroot"))), !e) for (var n; n = t.lastChild;) t.removeChild(n);
+                    if (e || (e = !(!(e = t ? 9 === t.nodeType ? t.documentElement : t.firstChild : null) || 1 !== e.nodeType || !e.hasAttribute("cond_data-reactroot"))), !e) for (var n; n = t.lastChild;) t.removeChild(n);
                     return new Xu(t, 0, e ? {hydrate: !0} : void 0)
                 }(n, r), a = o._internalRoot, "function" == typeof i) {
                     var u = i;
@@ -23602,7 +23602,7 @@ object-assign
                         }, o = function (t) {
                             return n(t) ? "script" : r(t) ? "stylesheet" : void 0
                         }, i = function (t) {
-                            return "reload" === t.getAttribute("data-turbolinks-track")
+                            return "reload" === t.getAttribute("cond_data-turbolinks-track")
                         }, n = function (t) {
                             return "script" === t.tagName.toLowerCase()
                         }, r = function (t) {
@@ -23639,9 +23639,9 @@ object-assign
                             } catch (o) {
                             }
                         }, t.prototype.getPermanentElements = function () {
-                            return this.bodyElement.querySelectorAll("[id][data-turbolinks-permanent]")
+                            return this.bodyElement.querySelectorAll("[id][cond_data-turbolinks-permanent]")
                         }, t.prototype.getPermanentElementById = function (t) {
-                            return this.bodyElement.querySelector("#" + t + "[data-turbolinks-permanent]")
+                            return this.bodyElement.querySelector("#" + t + "[cond_data-turbolinks-permanent]")
                         }, t.prototype.getPermanentElementsPresentInSnapshot = function (t) {
                             var e, n, r, i, o;
                             for (o = [], n = 0, r = (i = this.getPermanentElements()).length; r > n; n++) e = i[n], t.getPermanentElementById(e.id) && o.push(e);
@@ -23681,7 +23681,7 @@ object-assign
                             return this.delegate.viewInvalidated()
                         }, e.prototype.createScriptElement = function (t) {
                             var e;
-                            return "false" === t.getAttribute("data-turbolinks-eval") ? t : ((e = document.createElement("script")).textContent = t.textContent, e.async = !1, n(e, t), e)
+                            return "false" === t.getAttribute("cond_data-turbolinks-eval") ? t : ((e = document.createElement("script")).textContent = t.textContent, e.async = !1, n(e, t), e)
                         }, n = function (t, e) {
                             var n, r, i, o, a, s, u;
                             for (s = [], n = 0, r = (o = e.attributes).length; r > n; n++) i = (a = o[n]).name, u = a.value, s.push(t.setAttribute(i, u));
@@ -23821,7 +23821,7 @@ object-assign
                             var n, r, i;
                             return i = t.snapshot, n = t.error, r = t.isPreview, this.markAsPreview(r), null != i ? this.renderSnapshot(i, r, e) : this.renderError(n, e)
                         }, t.prototype.markAsPreview = function (t) {
-                            return t ? this.htmlElement.setAttribute("data-turbolinks-preview", "") : this.htmlElement.removeAttribute("data-turbolinks-preview")
+                            return t ? this.htmlElement.setAttribute("cond_data-turbolinks-preview", "") : this.htmlElement.removeAttribute("cond_data-turbolinks-preview")
                         }, t.prototype.renderSnapshot = function (t, e, n) {
                             return o.SnapshotRenderer.render(this.delegate, n, this.getSnapshot(), o.Snapshot.wrap(t), e)
                         }, t.prototype.renderError = function (t, e) {
@@ -24109,10 +24109,10 @@ object-assign
                             return e = new o.Location(t.getAttribute("href")), this.locationIsVisitable(e) ? e : void 0
                         }, e.prototype.getActionForLink = function (t) {
                             var e;
-                            return null != (e = t.getAttribute("data-turbolinks-action")) ? e : "advance"
+                            return null != (e = t.getAttribute("cond_data-turbolinks-action")) ? e : "advance"
                         }, e.prototype.nodeIsVisitable = function (t) {
                             var e;
-                            return !(e = o.closest(t, "[data-turbolinks]")) || "false" !== e.getAttribute("data-turbolinks")
+                            return !(e = o.closest(t, "[cond_data-turbolinks]")) || "false" !== e.getAttribute("data-turbolinks")
                         }, e.prototype.locationIsVisitable = function (t) {
                             return t.isPrefixedBy(this.view.getRootLocation()) && t.isHTML()
                         }, e.prototype.getCurrentRestorationData = function () {
@@ -24125,7 +24125,7 @@ object-assign
                 }.call(this), function () {
                     !function () {
                         var t, e;
-                        if ((t = e = document.currentScript) && !e.hasAttribute("data-turbolinks-suppress-warning")) for (; t = t.parentNode;) if (t === document.body) return console.warn("You are loading Turbolinks from a <script> element inside the <body> element. This is probably not what you meant to do!\n\nLoad your applicationâ€™s JavaScript bundle inside the <head> element instead. <script> elements in <body> are evaluated with each page change.\n\nFor more information, see: https://github.com/turbolinks/turbolinks#working-with-script-elements\n\nâ€”â€”\nSuppress this warning by adding a `data-turbolinks-suppress-warning` attribute to: %s", e.outerHTML)
+                        if ((t = e = document.currentScript) && !e.hasAttribute("cond_data-turbolinks-suppress-warning")) for (; t = t.parentNode;) if (t === document.body) return console.warn("You are loading Turbolinks from a <script> element inside the <body> element. This is probably not what you meant to do!\n\nLoad your applicationâ€™s JavaScript bundle inside the <head> element instead. <script> elements in <body> are evaluated with each page change.\n\nFor more information, see: https://github.com/turbolinks/turbolinks#working-with-script-elements\n\nâ€”â€”\nSuppress this warning by adding a `cond_data-turbolinks-suppress-warning` attribute to: %s", e.outerHTML)
                     }()
                 }.call(this), function () {
                     var t, e, n;
@@ -24318,7 +24318,7 @@ object-assign
                     } catch (a) {
                         if (!a.message.includes('Permission denied to access property "nodeType"')) throw a
                     }
-                    return !!n && (n.closest("[data-slate-editor]") === o && (!i || n.isContentEditable || !!n.getAttribute("data-slate-zero-width")))
+                    return !!n && (n.closest("[cond_data-slate-editor]") === o && (!i || n.isContentEditable || !!n.getAttribute("data-slate-zero-width")))
                 }, insertData(t, e) {
                     t.insertData(e)
                 }, setFragmentData(t, e) {
@@ -24330,7 +24330,7 @@ object-assign
                 }, toDOMPoint(t, e) {
                     var n, [r] = o.a.node(t, e.path), i = z.toDOMNode(t, r);
                     o.a.void(t, {at: e}) && (e = {path: e.path, offset: 0});
-                    var a = Array.from(i.querySelectorAll("[data-slate-string], [data-slate-zero-width]")), s = 0;
+                    var a = Array.from(i.querySelectorAll("[cond_data-slate-string], [cond_data-slate-zero-width]")), s = 0;
                     for (var u of a) {
                         var c = u.childNodes[0];
                         if (null != c && null != c.textContent) {
@@ -24354,7 +24354,7 @@ object-assign
                     return u.setStart(c, h ? 1 : l), u.setEnd(d, p ? 1 : f), u
                 }, toSlateNode(t, e) {
                     var n = j(e) ? e : e.parentElement;
-                    n && !n.hasAttribute("data-slate-node") && (n = n.closest("[data-slate-node]"));
+                    n && !n.hasAttribute("data-slate-node") && (n = n.closest("[cond_data-slate-node]"));
                     var r = n ? A.get(n) : null;
                     if (!r) throw new Error("Cannot resolve a Slate node from DOM node: ".concat(n));
                     return r
@@ -24390,16 +24390,16 @@ object-assign
                         return [e, n]
                     })(e), i = n.parentNode, o = null, a = 0;
                     if (i) {
-                        var s = i.closest('[data-slate-void="true"]'), u = i.closest("[data-slate-leaf]"), c = null;
+                        var s = i.closest('[cond_data-slate-void="true"]'), u = i.closest("[cond_data-slate-leaf]"), c = null;
                         if (u) {
-                            o = u.closest('[data-slate-node="text"]');
+                            o = u.closest('[cond_data-slate-node="text"]');
                             var l = window.document.createRange();
                             l.setStart(o, 0), l.setEnd(n, r);
                             var d = l.cloneContents();
-                            [...d.querySelectorAll("[data-slate-zero-width]"), ...d.querySelectorAll("[contenteditable=false]")].forEach(t => {
+                            [...d.querySelectorAll("[cond_data-slate-zero-width]"), ...d.querySelectorAll("[contenteditable=false]")].forEach(t => {
                                 t.parentNode.removeChild(t)
                             }), a = d.textContent.length, c = o
-                        } else s && (o = (u = s.querySelector("[data-slate-leaf]")).closest('[data-slate-node="text"]'), a = (c = u).textContent.length);
+                        } else s && (o = (u = s.querySelector("[cond_data-slate-leaf]")).closest('[cond_data-slate-node="text"]'), a = (c = u).textContent.length);
                         c && a === c.textContent.length && i.hasAttribute("data-slate-zero-width") && a--
                     }
                     if (!o) throw new Error("Cannot resolve a Slate point from DOM point: ".concat(e));
@@ -24464,7 +24464,7 @@ object-assign
                                 var [d] = s, f = u.cloneRange(), h = z.toDOMNode(e, d);
                                 f.setEndAfter(h), c = f.cloneContents()
                             }
-                            if (a && (l = c.querySelector("[data-slate-spacer]")), Array.from(c.querySelectorAll("[data-slate-zero-width]")).forEach(t => {
+                            if (a && (l = c.querySelector("[cond_data-slate-spacer]")), Array.from(c.querySelectorAll("[cond_data-slate-zero-width]")).forEach(t => {
                                 var e = "n" === t.getAttribute("data-slate-zero-width");
                                 t.textContent = e ? "\n" : ""
                             }), L(l)) {
@@ -24472,7 +24472,7 @@ object-assign
                                 p.style.whiteSpace = "pre", p.appendChild(l), c.appendChild(p), l = p
                             }
                             var m = e.getFragment(), g = JSON.stringify(m), v = window.btoa(encodeURIComponent(g));
-                            l.setAttribute("data-slate-fragment", v), t.setData("application/x-slate-fragment", v);
+                            l.setAttribute("cond_data-slate-fragment", v), t.setData("application/x-slate-fragment", v);
                             var y = document.createElement("div");
                             y.appendChild(c), y.setAttribute("hidden", "true"), document.body.appendChild(y), t.setData("text/html", y.innerHTML), t.setData("text/plain", V(y)), document.body.removeChild(y)
                         }
@@ -25396,7 +25396,7 @@ object-assign
                     return this.isShown ? this.hide() : this.show(t)
                 }, e.prototype.show = function (n) {
                     var r = this, i = t.Event("show.bs.modal", {relatedTarget: n});
-                    this.$element.trigger(i), this.isShown || i.isDefaultPrevented() || (this.isShown = !0, this.checkScrollbar(), this.setScrollbar(), this.$body.addClass("modal-open"), this.escape(), this.resize(), this.$element.on("click.dismiss.bs.modal", '[data-dismiss="modal"]', t.proxy(this.hide, this)), this.$dialog.on("mousedown.dismiss.bs.modal", (function () {
+                    this.$element.trigger(i), this.isShown || i.isDefaultPrevented() || (this.isShown = !0, this.checkScrollbar(), this.setScrollbar(), this.$body.addClass("modal-open"), this.escape(), this.resize(), this.$element.on("click.dismiss.bs.modal", '[cond_data-dismiss="modal"]', t.proxy(this.hide, this)), this.$dialog.on("mousedown.dismiss.bs.modal", (function () {
                         r.$element.one("mouseup.dismiss.bs.modal", (function (e) {
                             t(e.target).is(r.$element) && (r.ignoreBackdropClick = !0)
                         }))
@@ -25481,9 +25481,9 @@ object-assign
                 var r = t.fn.modal;
                 t.fn.modal = n, t.fn.modal.Constructor = e, t.fn.modal.noConflict = function () {
                     return t.fn.modal = r, this
-                }, t(document).on("click.bs.modal.data-api", '[data-toggle="modal"]', (function (e) {
+                }, t(document).on("click.bs.modal.cond_data-api", '[cond_data-toggle="modal"]', (function (e) {
                     var r = t(this), i = r.attr("href"),
-                        o = r.attr("data-target") || i && i.replace(/.*(?=#[^\s]+$)/, ""), a = t(document).find(o),
+                        o = r.attr("cond_data-target") || i && i.replace(/.*(?=#[^\s]+$)/, ""), a = t(document).find(o),
                         s = a.data("bs.modal") ? "toggle" : t.extend({remote: !/#/.test(i) && i}, a.data(), r.data());
                     r.is("a") && e.preventDefault(), a.one("show.bs.modal", (function (t) {
                         t.isDefaultPrevented() || a.one("hidden.bs.modal", (function () {
@@ -25612,7 +25612,7 @@ object-assign
                     return r(this, void 0, void 0, (function () {
                         var e;
                         return i(this, (function (n) {
-                            if (s && !t.getData(c) && u("clipboard.write() was called without a `text/plain` data type. On some platforms, this may result in an empty clipboard. Call clipboard.suppressWarnings() to suppress this warning."), S()) {
+                            if (s && !t.getData(c) && u("clipboard.write() was called without a `text/plain` cond_data type. On some platforms, this may result in an empty clipboard. Call clipboard.suppressWarnings() to suppress this warning."), S()) {
                                 if (function (t) {
                                     var e = t.getData(c);
                                     if (void 0 === e) throw"No `text/plain` value was specified.";
@@ -25789,7 +25789,7 @@ object-assign
                     }
 
                     return t.prototype.setData = function (t, e) {
-                        o && -1 === r.indexOf(t) && i("Unknown data type: " + t, "Call clipboard.suppressWarnings() to suppress this warning."), this.m[t] = e
+                        o && -1 === r.indexOf(t) && i("Unknown cond_data type: " + t, "Call clipboard.suppressWarnings() to suppress this warning."), this.m[t] = e
                     }, t.prototype.getData = function (t) {
                         return this.m[t]
                     }, t.prototype.forEach = function (t) {
@@ -26179,7 +26179,7 @@ object-assign
                         a = i && t.support.transition && (o.length && o.hasClass("fade") || !!r.find("> .fade").length);
 
                     function s() {
-                        o.removeClass("active").find("> .dropdown-menu > .active").removeClass("active").end().find('[data-toggle="tab"]').attr("aria-expanded", !1), n.addClass("active").find('[data-toggle="tab"]').attr("aria-expanded", !0), a ? (n[0].offsetWidth, n.addClass("in")) : n.removeClass("fade"), n.parent(".dropdown-menu").length && n.closest("li.dropdown").addClass("active").end().find('[data-toggle="tab"]').attr("aria-expanded", !0), i && i()
+                        o.removeClass("active").find("> .dropdown-menu > .active").removeClass("active").end().find('[cond_data-toggle="tab"]').attr("aria-expanded", !1), n.addClass("active").find('[cond_data-toggle="tab"]').attr("aria-expanded", !0), a ? (n[0].offsetWidth, n.addClass("in")) : n.removeClass("fade"), n.parent(".dropdown-menu").length && n.closest("li.dropdown").addClass("active").end().find('[cond_data-toggle="tab"]').attr("aria-expanded", !0), i && i()
                     }
 
                     o.length && a ? o.one("bsTransitionEnd", s).emulateTransitionEnd(e.TRANSITION_DURATION) : s(), o.removeClass("in")
@@ -26191,7 +26191,7 @@ object-assign
                 var i = function (e) {
                     e.preventDefault(), n.call(t(this), "show")
                 };
-                t(document).on("click.bs.tab.data-api", '[data-toggle="tab"]', i).on("click.bs.tab.data-api", '[data-toggle="pill"]', i)
+                t(document).on("click.bs.tab.cond_data-api", '[cond_data-toggle="tab"]', i).on("click.bs.tab.cond_data-api", '[cond_data-toggle="pill"]', i)
             }(t)
         }).call(this, n("5wds"))
     }, k4GU: function (t, e, n) {
@@ -41006,11 +41006,11 @@ object-assign
         (function (t) {
             !function (t) {
                 "use strict";
-                var e = '[data-dismiss="alert"]', n = function (n) {
+                var e = '[cond_data-dismiss="alert"]', n = function (n) {
                     t(n).on("click", e, this.close)
                 };
                 n.VERSION = "3.4.1", n.TRANSITION_DURATION = 150, n.prototype.close = function (e) {
-                    var r = t(this), i = r.attr("data-target");
+                    var r = t(this), i = r.attr("cond_data-target");
                     i || (i = (i = r.attr("href")) && i.replace(/.*(?=#[^\s]*$)/, "")), i = "#" === i ? [] : i;
                     var o = t(document).find(i);
 
@@ -41028,7 +41028,7 @@ object-assign
                     }))
                 }, t.fn.alert.Constructor = n, t.fn.alert.noConflict = function () {
                     return t.fn.alert = r, this
-                }, t(document).on("click.bs.alert.data-api", e, n.prototype.close)
+                }, t(document).on("click.bs.alert.cond_data-api", e, n.prototype.close)
             }(t)
         }).call(this, n("5wds"))
     }, "pq+g": function (t, e, n) {
@@ -42009,7 +42009,7 @@ and limitations under the License.
     }, "sko/": function (t, e, n) {
         var r, i, o;
         /*!
- * jQuery UI :data 1.13.0
+ * jQuery UI :cond_data 1.13.0
  * http://jqueryui.com
  *
  * Copyright jQuery Foundation and other contributors
@@ -44061,11 +44061,11 @@ and limitations under the License.
             !function (t) {
                 "use strict";
                 var e = function (n, r) {
-                    this.$element = t(n), this.options = t.extend({}, e.DEFAULTS, r), this.$trigger = t('[data-toggle="collapse"][href="#' + n.id + '"],[data-toggle="collapse"][data-target="#' + n.id + '"]'), this.transitioning = null, this.options.parent ? this.$parent = this.getParent() : this.addAriaAndCollapsedClass(this.$element, this.$trigger), this.options.toggle && this.toggle()
+                    this.$element = t(n), this.options = t.extend({}, e.DEFAULTS, r), this.$trigger = t('[cond_data-toggle="collapse"][href="#' + n.id + '"],[cond_data-toggle="collapse"][cond_data-target="#' + n.id + '"]'), this.transitioning = null, this.options.parent ? this.$parent = this.getParent() : this.addAriaAndCollapsedClass(this.$element, this.$trigger), this.options.toggle && this.toggle()
                 };
 
                 function n(e) {
-                    var n, r = e.attr("data-target") || (n = e.attr("href")) && n.replace(/.*(?=#[^\s]+$)/, "");
+                    var n, r = e.attr("cond_data-target") || (n = e.attr("href")) && n.replace(/.*(?=#[^\s]+$)/, "");
                     return t(document).find(r)
                 }
 
@@ -44113,7 +44113,7 @@ and limitations under the License.
                 }, e.prototype.toggle = function () {
                     this[this.$element.hasClass("in") ? "hide" : "show"]()
                 }, e.prototype.getParent = function () {
-                    return t(document).find(this.options.parent).find('[data-toggle="collapse"][data-parent="' + this.options.parent + '"]').each(t.proxy((function (e, r) {
+                    return t(document).find(this.options.parent).find('[cond_data-toggle="collapse"][cond_data-parent="' + this.options.parent + '"]').each(t.proxy((function (e, r) {
                         var i = t(r);
                         this.addAriaAndCollapsedClass(n(i), i)
                     }), this)).end()
@@ -44124,9 +44124,9 @@ and limitations under the License.
                 var i = t.fn.collapse;
                 t.fn.collapse = r, t.fn.collapse.Constructor = e, t.fn.collapse.noConflict = function () {
                     return t.fn.collapse = i, this
-                }, t(document).on("click.bs.collapse.data-api", '[data-toggle="collapse"]', (function (e) {
+                }, t(document).on("click.bs.collapse.cond_data-api", '[cond_data-toggle="collapse"]', (function (e) {
                     var i = t(this);
-                    i.attr("data-target") || e.preventDefault();
+                    i.attr("cond_data-target") || e.preventDefault();
                     var o = n(i), a = o.data("bs.collapse") ? "toggle" : i.data();
                     r.call(o, a)
                 }))
@@ -44275,7 +44275,7 @@ and limitations under the License.
                 i = [n("5wds")], (o = "function" == typeof (r = function (t) {
                     var e, n, r, i, o, c = !0, l = !1, d = null, f = "x", h = "y", p = "width", m = "top", g = "left",
                         v = "right", y = "center", b = "flipinvert", _ = "shift", w = {}, x = "qtip",
-                        k = "data-hasqtip", C = "data-qtip-id", S = ["ui-widget", "ui-tooltip"], E = "." + x,
+                        k = "cond_data-hasqtip", C = "cond_data-qtip-id", S = ["ui-widget", "ui-tooltip"], E = "." + x,
                         A = "click dblclick mousedown mouseup mousemove mouseleave mouseenter".split(" "),
                         P = x + "-fixed", T = x + "-default", O = x + "-focus", M = x + "-hover", F = x + "-disabled",
                         D = "_replacedByqTip", I = "oldtitle", N = {

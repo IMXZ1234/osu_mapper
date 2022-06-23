@@ -8,7 +8,7 @@ from torch.utils import data
 
 class RNNFeeder(torch.utils.data.Dataset):
     """
-    Simplest feeder yielding (data, label, index).
+    Simplest feeder yielding (cond_data, label, index).
     Data may be either .pkl or .npy, style determined from path suffix.
     """
 
@@ -45,14 +45,14 @@ class RNNFeeder(torch.utils.data.Dataset):
         if self.binary:
             for i in range(len(self.label)):
                 self.label[i][np.where(self.label[i] != 0)[0]] = 1
-        # load data
+        # load cond_data
         if self.data_path.endswith('.npy'):
             self.data = np.load(self.data_path)
         else:
             with open(self.data_path, 'rb') as f:
                 self.data = pickle.load(f)
-        # print('data.shape')
-        # print([seq_data[0].shape for seq_data in self.data])
+        # print('cond_data.shape')
+        # print([seq_data[0].shape for seq_data in self.cond_data])
         # print('label.shape')
         # print([seq_label.shape for seq_label in self.label])
         self.n_seq = len(self.data)

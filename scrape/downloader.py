@@ -189,7 +189,7 @@ if __name__ == '__main__':
     #
     # beatmapset_id = int(meta[0]['beatmapset_id'])
     # downloader.retrieve_meta_v2(
-    #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\data\meta_v2.json',
+    #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\meta_v2.json',
     #     id=beatmapset_id,
     # )
     downloader.download_beatmapset(1590176)

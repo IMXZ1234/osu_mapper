@@ -30,13 +30,13 @@ class MelDBDataset(Dataset):
                  density_label=False,
                  inference=False):
         """
-        pad_beats extra data is padded on both sides of one sample.
+        pad_beats extra cond_data is padded on both sides of one sample.
         Therefore, total beats for every sample is sample_beats + 2 * pad_beats,
-        while total number of labels/(snaps whose hit object class are to be predicted)
+        while total number of cond_data/(snaps whose hit object class are to be predicted)
         is sample_beats * snap_divisor.
         """
         super(MelDBDataset, self).__init__()
-        # if inference, labels will not be yielded
+        # if inference, cond_data will not be yielded
         self.inference = inference
         # self.dataset_name = table_name
         database = db.OsuDB(db_path, connect=True)
@@ -102,8 +102,8 @@ class MelDBDataset(Dataset):
             ) for idx in range(len(self.beatmaps))
         ]
 
-        # we preprocess(pad/trim) data for each audio once
-        # samples data from different beatmaps in on beatmapset are slices of preprocessed audio data
+        # we preprocess(pad/trim) cond_data for each audio once
+        # samples cond_data from different beatmaps in on beatmapset are slices of preprocessed audio cond_data
         self.groups = {}
         for idx, audio_file_path in enumerate(self.audio_file_paths):
             if audio_file_path not in self.groups:
@@ -146,8 +146,8 @@ class MelDBDataset(Dataset):
                                     zip(self.beatmaps, self.start_time_list, self.audio_snap_per_microsecond,
                                         self.audio_snap_num)]
         self.cache_len = 2
-        # we cache the audio data before final processing
-        # we assume that the most time consuming part is I/O of audio data
+        # we cache the audio cond_data before final processing
+        # we assume that the most time consuming part is I/O of audio cond_data
         # just take up the place
         self.cache = {i: None for i in range(self.cache_len)}
         self.cache_order = deque(i for i in range(self.cache_len))
@@ -168,7 +168,7 @@ class MelDBDataset(Dataset):
     @staticmethod
     def cal_snap_num(bpm, start_time, end_time, snap_divisor=8):
         """
-        Determine how many samples there will be in one audio data.
+        Determine how many samples there will be in one audio cond_data.
         """
         snaps_per_microsecond = bpm * snap_divisor / 60000000
         if start_time < 0:
@@ -222,16 +222,16 @@ class MelDBDataset(Dataset):
     @staticmethod
     def preprocess(data, start_mel, end_mel, pad_mel):
         """
-        Pad/trim resampled audio data in database for train use.
+        Pad/trim resampled audio cond_data in database for train use.
         start_time, end_time in microsecond, should be aligned with snaps
         sample_rate in Hz
-        Note we have 3 channels for audio data: audio_data.shape=[2, freq, mel_frame]
+        Note we have 3 channels for audio cond_data: audio_data.shape=[2, freq, mel_frame]
         """
         # normalize intensity
         data = data / torch.mean(data)
 
         resampled_mel = data.shape[2]
-        # pad/trim at the start and end of the audio data
+        # pad/trim at the start and end of the audio cond_data
         pad_start_mel = pad_mel - start_mel
         pad_end_mel = pad_mel - (resampled_mel - end_mel)
         data = data[:, :, -min(pad_start_mel, 0):min(pad_end_mel, 0) + resampled_mel]
@@ -266,7 +266,7 @@ class MelDBDataset(Dataset):
         else:
             # print('calculating')
             # print(audio_file_path)
-            # this is resampled data
+            # this is resampled cond_data
             with open(audio_file_path, 'rb') as f:
                 audio_data = pickle.load(f)
             preprocessed_audio_data = MelDBDataset.preprocess(audio_data,
@@ -303,7 +303,7 @@ class MelDBDataset(Dataset):
 
         sample_start_mel = audio_start_mel - group_start_mel + sample_idx * self.sample_mel
         sample_data = preprocessed_audio_data[:, :, sample_start_mel:sample_start_mel + self.sample_mel_padded]
-        # print('data itv')
+        # print('cond_data itv')
         # print('%d %d' % (sample_start_mel, sample_start_mel + self.sample_mel_padded))
         sample_start_snap = sample_idx * self.sample_snaps
         if self.inference:

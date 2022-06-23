@@ -735,7 +735,7 @@
                         if (Object(u.b)(t)) return t;
                         console.debug("message missing event type.")
                     } catch (t) {
-                        console.debug("Failed parsing data:", e.data)
+                        console.debug("Failed parsing cond_data:", e.data)
                     }
                 }
             };
@@ -2885,7 +2885,7 @@
                         configurable: !0,
                         writable: !0,
                         value: e => {
-                            if (null != this.layzr) for (const t of e) for (const e of t.addedNodes) if (e instanceof HTMLElement && (null != e.dataset.normal || null != e.querySelector("[data-normal]"))) return void this.reinit()
+                            if (null != this.layzr) for (const t of e) for (const e of t.addedNodes) if (e instanceof HTMLElement && (null != e.dataset.normal || null != e.querySelector("[cond_data-normal]"))) return void this.reinit()
                         }
                     }), this.observer = new MutationObserver(this.observePage), this.observer.observe(document, {
                         childList: !0,
@@ -6850,7 +6850,7 @@
                             var s, r;
                             const i = this.tree();
                             this.current = t;
-                            const a = this.tree(), o = document.querySelectorAll(".js-click-menu[data-click-menu-id]");
+                            const a = this.tree(), o = document.querySelectorAll(".js-click-menu[cond_data-click-menu-id]");
                             let l = null, c = !1;
                             for (const e of o) {
                                 if (!(e instanceof HTMLElement)) continue;
@@ -6905,11 +6905,11 @@
                         value: t => {
                             this.documentMouseEventTarget === t.target && 0 === t.button && (Object(r.a)() || null != this.current && (e(t.target).closest(".js-click-menu").length > 0 || this.show()))
                         }
-                    }), e(document).on("click", ".js-click-menu--close", this.close), e(document).on("click", ".js-click-menu[data-click-menu-target]", this.toggle), e(document).on("mousedown", this.onDocumentMousedown), e(document).on("mouseup", this.onDocumentMouseup), document.addEventListener("turbolinks:load", this.restoreSaved), document.addEventListener("turbolinks:before-cache", this.saveCurrent)
+                    }), e(document).on("click", ".js-click-menu--close", this.close), e(document).on("click", ".js-click-menu[cond_data-click-menu-target]", this.toggle), e(document).on("mousedown", this.onDocumentMousedown), e(document).on("mouseup", this.onDocumentMouseup), document.addEventListener("turbolinks:load", this.restoreSaved), document.addEventListener("turbolinks:before-cache", this.saveCurrent)
                 }
 
                 closestMenuId(t) {
-                    if (null != t) return e(t).parents("[data-click-menu-id]").attr("data-click-menu-id")
+                    if (null != t) return e(t).parents("[cond_data-click-menu-id]").attr("data-click-menu-id")
                 }
 
                 menu(e) {
@@ -9499,7 +9499,7 @@
                 }) : Object(i.span)({dangerouslySetInnerHTML: {__html: n}}), null != s.github_url ? Object(i.span)(null, " (", Object(i.a)({
                     className: "changelog-entry__link",
                     href: s.github_url
-                }, s.repository.replace(/^.*\//, "") + "#" + s.github_pull_request_id), ")") : void 0, (u = e.escape(s.github_user.display_name), a = null != (c = null != (o = s.github_user.github_url) ? o : s.github_user.user_url) ? "<a data-user-id='" + (null != (l = s.github_user.user_id) ? l : "") + "' class='changelog-entry__user-link js-usercard' href='" + e.escape(c) + "' >" + u + "</a>" : u, Object(i.span)({
+                }, s.repository.replace(/^.*\//, "") + "#" + s.github_pull_request_id), ")") : void 0, (u = e.escape(s.github_user.display_name), a = null != (c = null != (o = s.github_user.github_url) ? o : s.github_user.user_url) ? "<a cond_data-user-id='" + (null != (l = s.github_user.user_id) ? l : "") + "' class='changelog-entry__user-link js-usercard' href='" + e.escape(c) + "' >" + u + "</a>" : u, Object(i.span)({
                     className: "changelog-entry__user",
                     dangerouslySetInnerHTML: {__html: osu.trans("changelog.entry.by", {user: a})}
                 })))), null != s.message_html ? Object(i.div)({
@@ -10330,11 +10330,11 @@
                         writable: !0,
                         value: t => {
                             const s = e(t.target).parents(".js-forum-poll--container");
-                            if ("1" === s.attr("data-edit")) {
-                                s.attr("data-edit", "0");
+                            if ("1" === s.attr("cond_data-edit")) {
+                                s.attr("cond_data-edit", "0");
                                 const r = e(t.target).closest("form")[0];
                                 null != r && r.reset()
-                            } else s.attr("data-edit", "1")
+                            } else s.attr("cond_data-edit", "1")
                         }
                     }), Object.defineProperty(this, "switchPage", {
                         enumerable: !0,
@@ -10344,7 +10344,7 @@
                             const s = t.currentTarget;
                             if (!(s instanceof HTMLElement)) return;
                             const r = s.dataset.targetPage;
-                            "string" == typeof r && e(t.target).parents(".js-forum-poll--container").attr("data-page", r)
+                            "string" == typeof r && e(t.target).parents(".js-forum-poll--container").attr("cond_data-page", r)
                         }
                     }), e(document).on("click", ".js-forum-poll--switch-page", this.switchPage).on("click", ".js-forum-poll--switch-edit", this.switchEdit)
                 }
@@ -11636,7 +11636,7 @@
                             var s;
                             t.preventDefault(), e.publish("forum-post-input:clear", [t.target]);
                             const n = e(t.target).parents(".js-forum-post-edit--container");
-                            n.html(null !== (s = n.attr("data-original-post")) && void 0 !== s ? s : "").attr("data-original-post", null), Object(r.a)()
+                            n.html(null !== (s = n.attr("cond_data-original-post")) && void 0 !== s ? s : "").attr("cond_data-original-post", null), Object(r.a)()
                         }
                     }), Object.defineProperty(this, "handleEditSaved", {
                         enumerable: !0,
@@ -11673,7 +11673,7 @@
                         value: (t, s) => {
                             if (!(t instanceof HTMLElement)) throw new Error("target must be instance of HTMLElement");
                             const n = e(t).parents(".js-forum-post-edit--container");
-                            n.attr("data-original-post", n.html()).html(s).find("[name=body]").focus(), e.publish("forum-post-input:restore", [n[0]]), Object(r.a)()
+                            n.attr("cond_data-original-post", n.html()).html(s).find("[name=body]").focus(), e.publish("forum-post-input:restore", [n[0]]), Object(r.a)()
                         }
                     }), e(document).on("ajax:success", ".js-edit-post-start", this.handleEditStart).on("click", ".js-edit-post-cancel", this.handleCancel).on("ajax:success", ".js-forum-post-edit", this.handleEditSaved)
                 }
@@ -12015,7 +12015,7 @@
             })), s.d(t, "g", (function () {
                 return u
             }));
-            const l = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+            const l = "cond_data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
             function c(e) {
                 if (null != e) return e.replace(/(\.[^.]+)$/, "@2x$1")

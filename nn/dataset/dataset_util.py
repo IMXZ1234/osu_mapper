@@ -3,14 +3,20 @@ import numpy as np
 
 import slider
 
-
 from util import beatmap_util
 
-
+NOHO_LABEL = 0
 CIRCLE_LABEL = 1
 SLIDER_LABEL = 2
 SPINNER_LABEL = 3
-HOLDNOTE_LABEL = 1
+HOLDNOTE_LABEL = 4
+
+KEEP_STATE_LABEL = 0
+SWITCH_NOHO_LABEL = 1
+SWITCH_CIRCLE_LABEL = 2
+SWITCH_SLIDER_LABEL = 3
+SWITCH_SPINNER_LABEL = 4
+SWITCH_HOLDNOTE_LABEL = 5
 
 
 def hitobjects_to_label(beatmap: slider.Beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
@@ -137,23 +143,92 @@ def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms, snap_ms, total_s
     return label
 
 
-def hitobjects_to_density(beatmap: slider.Beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
-                         align_to_snaps=None,
-                         include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
-    cls_label = hitobjects_to_label(beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
-                                    align_to_snaps, include_circle, include_slider, include_spinner, include_holdnote)
+def hitobjects_to_label_switch(beatmap: slider.Beatmap, aligned_ms, snap_ms, total_snap_num,
+                               align_to_snaps=None, multi_label=False,
+                               include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
+    """
+    if multi_label:
+    0: keep state
+    1: switch to state which outputs nothing
+    2: circle
+    3: switch to state which outputs slider
+    4: switch to state which outputs spinner
+    5: hold note
+
+    if not multi_label:
+    0: keep state
+    1: switch to state which outputs nothing
+    2: switch to state which outputs hit objects
+    """
+    # print(audio_start_time_offset)
+    mapping = list(range(6))
+    if not multi_label:
+        for i in range(3, 6):
+            mapping[i] = 2
+    if align_to_snaps is not None:
+        if total_snap_num % align_to_snaps != 0:
+            total_snap_num = (total_snap_num // align_to_snaps + 1) * align_to_snaps
+    label = [mapping[KEEP_STATE_LABEL] for _ in range(total_snap_num)]
+    for ho in beatmap_util.hit_objects(beatmap,
+                                       include_circle,
+                                       include_slider,
+                                       include_spinner,
+                                       include_holdnote):
+        snap_idx = (ho.time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
+        if abs(round(snap_idx) - snap_idx) > 0.1:
+            print('snap_idx error to large!')
+            print(snap_idx)
+        snap_idx = round(snap_idx)
+        if snap_idx >= total_snap_num:
+            print('snap index %d out of bound! total snap num %d' % (snap_idx, total_snap_num))
+            snap_idx = total_snap_num - 1
+        if isinstance(ho, slider.beatmap.Circle):
+            label[snap_idx] = mapping[SWITCH_CIRCLE_LABEL]
+            continue
+        elif isinstance(ho, slider.beatmap.Slider):
+            label[snap_idx] = mapping[SWITCH_SLIDER_LABEL]
+        elif isinstance(ho, slider.beatmap.Spinner):
+            label[snap_idx] = mapping[SWITCH_SPINNER_LABEL]
+        elif isinstance(ho, slider.beatmap.HoldNote):
+            label[snap_idx] = mapping[SWITCH_HOLDNOTE_LABEL]
+
+        end_snap_idx = (ho.end_time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
+        if end_snap_idx >= total_snap_num:
+            print('end snap index %d out of bound! total snap num %d' % (end_snap_idx, total_snap_num))
+            end_snap_idx = total_snap_num - 1
+        end_snap_idx = round(end_snap_idx)
+        label[end_snap_idx] = mapping[SWITCH_NOHO_LABEL]
+    return label
+
+
+def cls_label_to_density(cls_label):
     # print('cls_label')
     # print(len(cls_label))
     kernel = np.array([0.2, 0.5, 1, 0.5, 0.2])
     kernel_half_len = len(kernel) // 2
     density = np.zeros(len(cls_label) + len(kernel) - 1)
-    should_add_kernel = [False, include_circle, include_slider, include_spinner, include_holdnote]
     for i in range(len(cls_label)):
-        if should_add_kernel[cls_label[i]]:
-            density[i:i+2*kernel_half_len+1] += kernel
-    density_label = density[kernel_half_len:len(cls_label)+kernel_half_len]
+        density[i:i + 2 * kernel_half_len + 1] += kernel
+    density_label = density[kernel_half_len:len(cls_label) + kernel_half_len]
     density_label = np.clip(density_label, a_min=None, a_max=1)
     # print('density_label')
     # print(len(density_label))
     # assert density_label == cls_label
     return density_label
+
+
+def hitobjects_to_density(beatmap: slider.Beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
+                          align_to_snaps=None,
+                          include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
+    cls_label = hitobjects_to_label(beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
+                                    align_to_snaps, include_circle, include_slider, include_spinner, include_holdnote)
+    return cls_label_to_density(cls_label)
+
+
+def hitobjects_to_density_v2(beatmap: slider.Beatmap, aligned_ms, snap_ms, total_snap_num,
+                             align_to_snaps=None, multi_label=False,
+                             include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
+    cls_label = hitobjects_to_label_v2(beatmap, aligned_ms, snap_ms, total_snap_num,
+                                       align_to_snaps, multi_label,
+                                       include_circle, include_slider, include_spinner, include_holdnote)
+    return cls_label_to_density(cls_label)

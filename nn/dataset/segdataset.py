@@ -58,7 +58,7 @@ class SegDataset(Dataset):
     """
     Using index_file_path as reference.
     Load and convert mp3 file to wav on the fly to save disk space.
-    Audio data are cut into segments(samples), each used to predict the
+    Audio cond_data are cut into segments(samples), each used to predict the
     hit object class of the snap at the center of the segment.
     Same as in https://www.nicksypteras.com/blog/aisu.html
     """
@@ -89,8 +89,8 @@ class SegDataset(Dataset):
                                   for beatmap in self.audio_osu_data.beatmaps]
         # self.audio_valid_snap_interval_list = [SegDataset.get_valid_snap_interval(*beatmap_info)
         #                                        for beatmap_info in self.beatmap_info_list]
-        # audio: audio data of an audio file
-        # sample: a segment of audio data surrounding a snap
+        # audio: audio cond_data of an audio file
+        # sample: a segment of audio cond_data surrounding a snap
         # self.audio_sample_num = [valid_snap_interval[1] - valid_snap_interval[0]
         #                          for valid_snap_interval in self.audio_valid_snap_interval_list]
         self.audio_sample_num = [functools.partial(SegDataset.cal_snap_num,
@@ -118,7 +118,7 @@ class SegDataset(Dataset):
     #     snap_per_microsecond = bpm * snap_divisor / 60000000
     #     # [start_time, end_time] is the valid time interval during which hit objects exist.
     #     # outside this music can flow but no hit objects is assigned by the mapper.
-    #     # such period of audio data may act as a superior kind of padding data,
+    #     # such period of audio cond_data may act as a superior kind of padding cond_data,
     #     # as they contain helpful information.
     #     # get audio_start_time_offset, which should be on a snap
     #     if start_time < 0:
@@ -127,7 +127,7 @@ class SegDataset(Dataset):
     #         start_time = start_time % (1 / snap_per_microsecond)
     #     # aligned_start_time is the earliest time point which aligns with snaps
     #     # push the aligned_start_time as early as possible to keep the most
-    #     # part of the useful audio data
+    #     # part of the useful audio cond_data
     #     aligned_start_time = start_time % (1 / snap_per_microsecond)
     #     valid_snap_interval = (round((start_time - aligned_start_time) * snap_per_microsecond),
     #                            round((end_time - aligned_start_time) * snap_per_microsecond) + 1)
@@ -142,7 +142,7 @@ class SegDataset(Dataset):
     #     snap_per_microsecond = bpm * snap_divisor / 60000000
     #     # [start_time, end_time] is the valid time interval during which hit objects exist.
     #     # outside this music can flow but no hit objects is assigned by the mapper.
-    #     # such period of audio data may act as a superior kind of padding data,
+    #     # such period of audio cond_data may act as a superior kind of padding cond_data,
     #     # as they contain helpful information.
     #     # get audio_start_time_offset, which should be on a snap
     #     if start_time < 0:
@@ -152,7 +152,7 @@ class SegDataset(Dataset):
     #         start_time = start_time % (1 / snap_per_microsecond)
     #     # aligned_start_time is the earliest time point which aligns with snaps
     #     # push the aligned_start_time as early as possible to keep the most
-    #     # part of the useful audio data
+    #     # part of the useful audio cond_data
     #     aligned_start_time = start_time % (1 / snap_per_microsecond)
     #     valid_snap_interval = (round((start_time - aligned_start_time) * snap_per_microsecond),
     #                            round((end_time - aligned_start_time) * snap_per_microsecond) + 1)
@@ -182,12 +182,12 @@ class SegDataset(Dataset):
                    feature_frames_per_beat=32768,  # 512 * 64, 2**15
                    beats_per_sample=9, ):
         """
-        Resample the audio data to expand feature_frames_per_beat to target value
+        Resample the audio cond_data to expand feature_frames_per_beat to target value
         Generally we have bpm of about 120 and sample rate of 44100Hz,
         which leads to about 22100 frames per beat.
         start_time, end_time in microsecond, should be aligned with snaps
         sample_rate in Hz
-        Note we have two channels for audio data: audio_data.shape=[2, frame_num]
+        Note we have two channels for audio cond_data: audio_data.shape=[2, frame_num]
         """
         # print('bpm, start_time, end_time')
         # print(bpm, start_time, end_time)

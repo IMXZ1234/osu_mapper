@@ -18,8 +18,8 @@ class RNNv1Generator(BeatmapGenerator):
 
     def generate_beatmapset(self, audio_file_path, speed_stars_list, meta_list,
                             osu_out_path_list=None, audio_info_path=None, audio_idx=0, **kwargs):
-        # prepare inference data
-        print('preparing inference data...')
+        # prepare inference cond_data
+        print('preparing inference cond_data...')
         audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path)
         # if multiple beatmaps of different difficulties are to be generated for a single audio,
         # meta should not be None, as `version` must be specified for each beatmap.
@@ -64,7 +64,7 @@ class RNNv1Generator(BeatmapGenerator):
         print(beatmap_label_list)
 
         # generate .osu files
-        print('generating .osu from predicted labels')
+        print('generating .osu from predicted cond_data')
         if osu_out_path_list is None:
             osu_out_path_list = [
                 # generate .osu under same directory as audio file

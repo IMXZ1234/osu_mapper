@@ -18,7 +18,7 @@ class MelGenerator(BeatmapGenerator):
 
     def generate_beatmapset(self, audio_file_path, speed_stars_list, meta_list,
                             osu_out_path_list=None, audio_info_path=None, audio_idx=0, **kwargs):
-        # prepare inference data
+        # prepare inference cond_data
         print('preparing inference dara...')
         audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path)
         # if multiple beatmaps of different difficulties are to be generated for a single audio,
@@ -51,7 +51,7 @@ class MelGenerator(BeatmapGenerator):
         beatmapset_label_div = self.inference.data_iter.dataset.accumulate_audio_sample_num
         beatmapset_label_div = [0] + beatmapset_label_div
         # although all beatmaps in beatmapset share same audio,
-        # they may have different labels due to different difficulty
+        # they may have different cond_data due to different difficulty
         beatmap_label_list = [
             beatmapset_label[beatmapset_label_div[i - 1]:beatmapset_label_div[i]].reshape([-1])
             for i in range(1, len(beatmapset_label_div))
@@ -59,7 +59,7 @@ class MelGenerator(BeatmapGenerator):
         print(beatmap_label_list)
 
         # generate .osu files
-        print('generating .osu from predicted labels')
+        print('generating .osu from predicted cond_data')
         if osu_out_path_list is None:
             osu_out_path_list = [
                 # generate .osu under same directory as audio file

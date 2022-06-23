@@ -1,0 +1,20 @@
+fit_dataset: true
+fit_dataset_arg:
+  dataset_type: preprocess.dataset.rnnv3_dataset.RNNDataset
+  save_dir: ./resources/data/fit/inference/rnnv3
+  audio_mel: 4
+  snap_mel: 4
+  label_num: 4
+  snap_divisor: 8
+  coeff_speed_stars: 2.5
+  coeff_bpm: 120
+  preprocess_arg:
+    beat_feature_frames: 16384
+    snap_offset: 0
+    n_fft: 1024
+    win_length: null
+    hop_length: 512
+    n_mels: 128
+    snap_divisor: 8
+    from_resampled: false
+inference: true

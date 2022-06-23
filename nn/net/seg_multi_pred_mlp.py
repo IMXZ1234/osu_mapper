@@ -18,7 +18,7 @@ class SegMultiPredMLP(nn.Module):
         times = [2 ** i for i in range(extract_hidden_layer_num, -1, -1)]
         hidden = 512
         self.fc_layers = nn.ModuleList(
-            # we have two channels for audio data
+            # we have two channels for audio cond_data
             [nn.Linear(2 * self.sample_beats_padded * self.beat_feature_frames, times[0] * hidden)]
         )
         for i in range(extract_hidden_layer_num):

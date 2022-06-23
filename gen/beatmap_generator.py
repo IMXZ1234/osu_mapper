@@ -46,6 +46,7 @@ class BeatmapGenerator:
         else:
             with open(audio_info_path, 'rt') as f:
                 audio_info_dict = yaml.load(f, Loader=yaml.FullLoader)
+            print(audio_info_dict)
             audio_info = [
                 audio_info_dict['bpm'],
                 audio_info_dict['start_time'],

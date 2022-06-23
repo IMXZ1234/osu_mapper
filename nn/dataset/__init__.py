@@ -11,4 +11,6 @@ from . import (
 
     feeder,
     rnn_feeder,
+    rnnv2_feeder,
+    subseq_feeder,
 )

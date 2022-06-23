@@ -1,0 +1,25 @@
+collate_fn: nn.dataset.collate_fn.default_collate_other
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.rnnv2_feeder.RNNv2Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnnv4/test%d_data.pkl
+    label_path: ./resources/data/fit/rnnv4/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 1
+model_arg:
+  model_type: nn.net.rnnv2_seg.RNNv2Seg
+  num_classes: 3
+  num_layers: 2
+  in_channels: 24722
+  step_snaps: 48
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+train_type: rnn
+weights_path: ./resources/result/rnnv4_lr0.01/0.01/1/model_0_epoch_63.pt

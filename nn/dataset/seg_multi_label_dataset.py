@@ -15,7 +15,7 @@ class SegMultiLabelDataset(Dataset):
     """
     Using index_file_path as reference.
     Load and convert mp3 file to wav on the fly to save disk space.
-    Audio data are cut into segments(samples), for each segment there are
+    Audio cond_data are cut into segments(samples), for each segment there are
     multiple snaps whose hit object class are to be predicted.
     """
 
@@ -24,9 +24,9 @@ class SegMultiLabelDataset(Dataset):
                  multi_label=False,
                  shuffle=False):
         """
-        pad_beats extra data is padded on both sides of one sample.
+        pad_beats extra cond_data is padded on both sides of one sample.
         Therefore, total beats for every sample is sample_beats + 2 * pad_beats,
-        while total number of labels/(snaps whose hit object class are to be predicted)
+        while total number of cond_data/(snaps whose hit object class are to be predicted)
         is sample_beats * snap_divisor.
         """
         super(SegMultiLabelDataset, self).__init__()
@@ -79,7 +79,7 @@ class SegMultiLabelDataset(Dataset):
     @staticmethod
     def cal_snap_num(bpm, start_time, end_time, snap_divisor=8):
         """
-        Determine how many samples there will be in one audio data.
+        Determine how many samples there will be in one audio cond_data.
         """
         snaps_per_microsecond = bpm * snap_divisor / 60000000
         if start_time < 0:
@@ -99,12 +99,12 @@ class SegMultiLabelDataset(Dataset):
                    sample_beats=8,
                    pad_beats=4, ):
         """
-        Resample the audio data to expand feature_frames_per_beat to target value
+        Resample the audio cond_data to expand feature_frames_per_beat to target value
         Generally we have bpm of about 120 and sample rate of 44100Hz,
         which leads to about 22100 frames per beat.
         start_time, end_time in microsecond, should be aligned with snaps
         sample_rate in Hz
-        Note we have two channels for audio data: audio_data.shape=[2, frame_num]
+        Note we have two channels for audio cond_data: audio_data.shape=[2, frame_num]
         """
         # print('bpm, start_time, end_time')
         # print(bpm, start_time, end_time)
@@ -128,7 +128,7 @@ class SegMultiLabelDataset(Dataset):
         print('total beats num resample')
         print((end_time_frame - start_time_frame) // beat_feature_frames)
 
-        # pad/trim at the start and end of the audio data
+        # pad/trim at the start and end of the audio cond_data
         pad_frames = pad_beats * beat_feature_frames
         pad_start_frame = pad_frames - start_time_frame
         pad_end_frame = pad_frames - (resampled_frame_num - 1 - end_time_frame)
@@ -213,7 +213,7 @@ class SegMultiLabelDataset(Dataset):
 
 
 # if __name__ == '__main__':
-#     audio_file_path = r'C:\Users\asus\coding\python\osu_auto_mapper\resources\data\bgm\audio.mp3'
+#     audio_file_path = r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\bgm\audio.mp3'
 #     audio_data, sample_rate = audio_util.audioread_get_audio_data(audio_file_path)
 #     print(sample_rate)
 #     print(audio_data.shape)
@@ -223,7 +223,7 @@ class SegMultiLabelDataset(Dataset):
 #     resampled_audio_data = torchaudio.functional.resample(audio_data, sample_rate, target_sample_rate)
 #     print(resampled_audio_data.shape)
 #     torchaudio.save(
-#         r'C:\Users\asus\coding\python\osu_auto_mapper\resources\data\bgm\resampled.wav',
+#         r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\bgm\resampled.wav',
 #         resampled_audio_data,
 #         target_sample_rate,
 #     )

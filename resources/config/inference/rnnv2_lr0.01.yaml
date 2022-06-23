@@ -1,0 +1,28 @@
+collate_fn: nn.dataset.collate_fn.default_collate_other
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.rnnv2_feeder.RNNv2Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnn_v2/test%d_data.pkl
+    label_path: ./resources/data/fit/rnn_v2/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 64
+model_arg:
+  in_channels: 517
+  model_type: nn.net.rnnv2.RNNv2
+  num_classes: 3
+  num_layers: 1
+output_arg:
+  log_dir: ./resources/result/rnnv2_lr0.01/0.01/%d
+  model_save_dir: ./resources/result/rnnv2_lr0.01/0.01/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: null
+rnn: true
+weights_path: ./resources/result/rnnv2_lr0.01/0.01/1/model_final.pt

@@ -65,7 +65,7 @@ class Inference:
 
     def run_inference(self):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
         because same model may be used on different datasets.
         """
         if self.data_arg is None:
@@ -83,7 +83,7 @@ class Inference:
 
     def run_inference_sample(self, data):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
         because same model may be used on different datasets.
         """
         data = torch.tensor(data, dtype=torch.float32)
@@ -98,7 +98,7 @@ class Inference:
 
     def run_inference_sample_rnn(self, data, state):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
         because same model may be used on different datasets.
         """
         # to batch of 1
@@ -110,10 +110,11 @@ class Inference:
                     for d in data]
         data = recursive_wrap_data(data, self.output_device)
         output, state = self.model(data, state)
-        print('output')
-        print(output)
+        # print('output')
+        # print(output)
         # print('state')
         # print(state)
+        # [0] get the label for the first batch
         label = self.pred(recursive_to_cpu(output))[0]
         # print('label')
         # print(label)

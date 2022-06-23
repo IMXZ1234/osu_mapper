@@ -12,7 +12,7 @@ from preprocess.dataset import fit_dataset
 
 
 class RecurDataset(fit_dataset.FitDataset):
-    DEFAULT_SAVE_DIR = r'./resources/data/fit/recur/'
+    DEFAULT_SAVE_DIR = r'./resources/cond_data/fit/recur/'
     """
     A snap may be of label 0-5:
     We predict label of every snap with features:
@@ -66,7 +66,7 @@ class RecurDataset(fit_dataset.FitDataset):
             random.seed(self.random_seed)
         table_name = 'FILTERED'
         ids = self.db.all_ids(table_name)
-        # data, label
+        # cond_data, label
         self.items = [[], []]
         data, label = self.items
         label_num = 3
@@ -178,7 +178,7 @@ class RecurDataset(fit_dataset.FitDataset):
             random.shuffle(data)
             random.shuffle(label)
         self.items[0] = np.stack(data)
-        print('data.shape')
+        print('cond_data.shape')
         print(self.items[0].shape)
         self.items[1] = np.asarray(label, dtype=int)
         print('label.shape')

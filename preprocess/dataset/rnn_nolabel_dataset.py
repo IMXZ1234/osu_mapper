@@ -14,7 +14,7 @@ from preprocess.dataset import fit_dataset
 
 
 class RNNNoLabelDataset(fit_dataset.FitDataset):
-    DEFAULT_SAVE_DIR = r'./resources/data/fit/rnn/'
+    DEFAULT_SAVE_DIR = r'./resources/cond_data/fit/rnn/'
     """
     A snap may be of label 0-5:
     We predict label of every snap with features:
@@ -62,8 +62,8 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
     def preprocess_audio(self, audio_path, beatmap):
         # to 1 channel
         preprocessor = MelPreprocessor(**self.preprocess_arg)
-        path_to = r'./resources/data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
-        path_to_snap_offset = r'./resources/data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to = r'./resources/cond_data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
         print('path_to')
         print(path_to)
         if not os.path.exists(path_to):
@@ -107,7 +107,7 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             random.seed(self.random_seed)
         table_name = 'FILTERED'
         ids = self.db.all_ids(table_name)
-        # data, label
+        # cond_data, label
         self.items = [[], []]
         data, label = self.items
         if self.take_first is not None:
@@ -153,7 +153,7 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             )
             # print('type(audio_data)')
             # print(type(audio_data))
-            # calculate from beginning of cropped audio data
+            # calculate from beginning of cropped audio cond_data
             first_ho_snap = snap_offset
             start_snap = max(first_ho_snap, self.half_audio_snap)
             # print('first_ho_snap')
@@ -164,7 +164,7 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             end_snap = min(
                 # snaps_from_start_label
                 len(beatmap_label) + first_ho_snap,
-                # available snaps in audio data - self.half_audio_mel
+                # available snaps in audio cond_data - self.half_audio_mel
                 (audio_data.shape[1] - start_snap * self.snap_mel - self.half_audio_snap) // self.snap_mel + start_snap
             )
             end_label = end_snap - start_snap + start_label
@@ -191,7 +191,7 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             data.append((np.stack(sample_data_list), speed_stars / self.coeff_speed_stars, beatmap.bpm_min() / self.coeff_bpm))
             label.append(np.asarray(beatmap_label))
 
-        print('data.shape')
+        print('cond_data.shape')
         print([seq_data[0].shape for seq_data in data])
         print([np.max(seq_data[0]) for seq_data in data])
         print('label.shape')
