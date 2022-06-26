@@ -4,6 +4,7 @@ from datetime import timedelta
 from preprocess import prepare_data_util
 import slider
 from util import beatmap_util, audio_util
+from nn.dataset import dataset_util
 import matplotlib.pyplot as plt
 
 
@@ -30,6 +31,30 @@ def speed_stars_dist():
             r'../../resources/test/all_speed_stars.pkl', 'wb'
     ) as f:
         pickle.dump(all_speed_stars, f)
+
+
+def snap_divisor_dist():
+    """
+    View distribution of snaps per beat under osu songs dir
+    """
+    sd = prepare_data_util.OsuSongsDir()
+    all_beat_divisors = []
+    for beatmapset_dirname, beatmapset_dir_path, osu_filename, osu_file_path in sd.beatmaps():
+        try:
+            beatmap = slider.Beatmap.from_path(osu_file_path)
+        except Exception:
+            continue
+        try:
+            all_beat_divisors.append(beatmap.beat_divisor)
+        except Exception:
+            continue
+    print(all_beat_divisors)
+    plt.hist(all_beat_divisors)
+    plt.show()
+    with open(
+            r'../../resources/test/all_beat_divisors.pkl', 'wb'
+    ) as f:
+        pickle.dump(all_beat_divisors, f)
 
 
 def visualize_beatmap_hitobjects(audio_len, beatmap: slider.Beatmap):
@@ -113,8 +138,25 @@ def is_snap_in_niche():
     print('not_in_niche')
     print(not_in_niche)
 
+
+def label_sample(snap_divisor=8):
+    sd = prepare_data_util.OsuSongsDir()
+    for beatmapset_dirname, beatmapset_dir_path, osu_filename, osu_file_path in sd.beatmaps():
+        try:
+            beatmap = slider.Beatmap.from_path(osu_file_path)
+            if beatmap.beat_divisor != snap_divisor:
+                continue
+        except Exception:
+            continue
+        print(dataset_util.hitobjects_to_label_v2(beatmap, multi_label=True))
+        break
+
+
 if __name__ == '__main__':
-    speed_stars_dist()
+    # dataset_util.hitobjects_to_label_v2()
+    # speed_stars_dist()
+    label_sample(8)
+    label_sample(4)
     # visualize_osu_audio_hitobjects(
     #     r'C:\Users\asus\AppData\Local\osu!\Songs\112197 Linked Horizon - Jiyuu no Tsubasa (TV Size)\OP2.mp3',
     #     r'C:\Users\asus\AppData\Local\osu!\Songs\112197 Linked Horizon - Jiyuu no Tsubasa (TV Size)\Linked Horizon - Jiyuu no Tsubasa (TV Size) (ritsu-tanaika) [Insane].osu',

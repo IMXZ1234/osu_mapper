@@ -6,4 +6,5 @@ from . import (
     rnnv1_generator_test,
     rnnv3_generator,
     rnnv3_generator_test,
+    cganv1_generator,
 )

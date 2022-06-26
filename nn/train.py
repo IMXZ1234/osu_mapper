@@ -5,6 +5,7 @@ import os
 import pickle
 import threading
 import copy
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +20,7 @@ from torch.utils import data
 from tqdm import tqdm
 
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
+from util.result import metrics_util
 from nn.metrics import default_metrices
 from nn.dataset import collate_fn
 
@@ -44,6 +46,8 @@ class Train:
             self.train_type = 'default'
 
         if self.task_type == 'classification':
+            if 'num_classes' in kwargs and kwargs['num_classes'] is not None:
+                self.num_classes = kwargs['num_classes']
             if 'cal_acc_func' in kwargs and kwargs['cal_acc_func'] is not None:
                 self.cal_epoch_acc = dynamic_import(kwargs['cal_acc_func'])
             else:
@@ -120,7 +124,7 @@ class Train:
     def load_model(self, model_type, **kwargs):
         if isinstance(model_type, (list, tuple)):
             net = [
-                dynamic_import(mt)(kwargs['params'][i])
+                self.load_model(mt, **kwargs['params'][i])
                 for i, mt in enumerate(model_type)
             ]
         else:
@@ -128,30 +132,38 @@ class Train:
         self.logger.info('loaded model: %s' % model_type)
         return net
 
-    def load_optimizer(self, optimizer_type, **kwargs):
+    def load_optimizer(self, optimizer_type, model_index=None, **kwargs):
         if isinstance(optimizer_type, (list, tuple)):
             optimizer = [
-                self.load_optimizer(ot)(self.model[i].parameters(), kwargs['params'][i])
+                self.load_optimizer(ot, i, **kwargs['params'][i])
                 for i, ot in enumerate(optimizer_type)
             ]
         else:
-            if optimizer_type == 'SGD':
-                optimizer = torch.optim.SGD(self.model.parameters(), **kwargs)
+            if model_index is None:
+                model = self.model
             else:
-                optimizer = dynamic_import(optimizer_type)(self.model.parameters(), **kwargs)
+                model = self.model[model_index]
+            if optimizer_type == 'SGD':
+                optimizer = torch.optim.SGD(model.parameters(), **kwargs)
+            else:
+                optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
         return optimizer
 
-    def load_scheduler(self, scheduler_type, **kwargs):
+    def load_scheduler(self, scheduler_type, optimizer_index=None, **kwargs):
         if isinstance(scheduler_type, (list, tuple)):
             scheduler = [
-                self.load_scheduler(st)(self.optimizer[i], kwargs['params'][i])
+                self.load_scheduler(st, i, **kwargs['params'][i])
                 for i, st in enumerate(scheduler_type)
             ]
         else:
-            if scheduler_type == 'StepLR':
-                scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, **kwargs)
+            if optimizer_index is None:
+                optimizer = self.optimizer
             else:
-                scheduler = dynamic_import(scheduler_type)(self.optimizer, **kwargs)
+                optimizer = self.optimizer[optimizer_index]
+            if scheduler_type == 'StepLR':
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+            else:
+                scheduler = dynamic_import(scheduler_type)(optimizer, **kwargs)
         return scheduler
 
     def load_data(self,
@@ -181,23 +193,26 @@ class Train:
 
     def load_loss(self, loss_type, **kwargs):
         if isinstance(loss_type, (list, tuple)):
-            return [
-                self.load_loss(lt)(kwargs['params'][i])
+            loss = [
+                self.load_loss(lt, **kwargs['params'][i])
                 for i, lt in enumerate(loss_type)
             ]
-        if loss_type == 'MSE':
-            loss = nn.MSELoss(**kwargs)
-        elif loss_type == 'CrossEntropy':
-            if 'weight' in kwargs:
-                kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
-            loss = nn.CrossEntropyLoss(**kwargs)
         else:
-            loss = dynamic_import(loss_type)(**kwargs)
+            if loss_type == 'MSE':
+                loss = nn.MSELoss(**kwargs)
+            elif loss_type == 'CrossEntropy':
+                if 'weight' in kwargs and kwargs['weight'] is not None:
+                    kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
+                loss = nn.CrossEntropyLoss(**kwargs)
+            else:
+                loss = dynamic_import(loss_type)(**kwargs)
         return loss
 
     def load_pred(self, pred_type, **kwargs):
         if pred_type is None or pred_type == 'argmax':
             pred = functools.partial(torch.argmax, dim=1)
+        elif pred_type == 'Identity':
+            pred = lambda x: x
         else:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
@@ -340,34 +355,45 @@ class Train:
         return output, l, label
 
     def train_epoch_gan(self, epoch):
+        self.logger.info('epoch %d' % epoch)
         epoch_g_loss_list = []
         epoch_d_loss_list = []
+        epoch_label_list = []
         epoch_gen_output_list = []
+        epoch_d_output = []
+        epoch_d_real = []
         optimizer_G, optimizer_D = self.optimizer
         loss_G, loss_D = self.loss
         generator, discriminator = self.model
+        # skip training discriminator: only do skip_D[1] batches' training for every skip_D[0] batches
+        skip_D = (2, 1)
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
-            batch_size, feature_num = cond_data.shape
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
+
+            batch_size = cond_data.shape[0]
 
             # Adversarial ground truths
-            valid = Variable(torch.ones(batch_size, dtype=torch.long), requires_grad=False)
-            fake = Variable(torch.zeros(batch_size, dtype=torch.long), requires_grad=False)
+            valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
+            fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
 
             # -----------------
             #  Train Generator
             # -----------------
-
             optimizer_G.zero_grad()
 
             # Sample noise and cond_data as generator input
-            noise = Variable(torch.randn(batch_size, feature_num))
+            noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
 
             # Generate a batch of images
-            gen_output = generator(noise, cond_data)
+            # here is (nearly) one-hot sequence, output of gumbel softmax
+            gen_output, ext_cond_data = generator(noise, cond_data)
+            ext_cond_data = ext_cond_data.detach()
             epoch_gen_output_list.append(recursive_to_cpu(gen_output))
 
             # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, cond_data)
+            validity = discriminator(gen_output, ext_cond_data)
             g_loss = loss_G(validity, valid)
             epoch_g_loss_list.append(g_loss.item())
 
@@ -377,64 +403,96 @@ class Train:
             # ---------------------
             #  Train Discriminator
             # ---------------------
+            if random.randint(0, skip_D[0]-1) < skip_D[1]:
+                optimizer_D.zero_grad()
 
-            optimizer_D.zero_grad()
+                # Loss for real images
+                validity_real = discriminator(real_gen_output_as_input, ext_cond_data)
+                d_real_loss = loss_D(validity_real, valid)
 
-            # Loss for real images
-            validity_real = discriminator(real_gen_output, cond_data)
-            d_real_loss = loss_D(validity_real, valid)
+                # Loss for fake images
+                validity_fake = discriminator(gen_output.detach(), ext_cond_data)
+                d_fake_loss = loss_D(validity_fake, fake)
 
-            # Loss for fake images
-            validity_fake = discriminator(gen_output.detach(), cond_data)
-            d_fake_loss = loss_D(validity_fake, fake)
+                # Total discriminator loss
+                d_loss = (d_real_loss + d_fake_loss) / 2
+                epoch_d_loss_list.append(d_loss.item())
 
-            # Total discriminator loss
-            d_loss = (d_real_loss + d_fake_loss) / 2
-            epoch_d_loss_list.append(d_loss.item())
-
-            d_loss.backward()
-            optimizer_D.step()
+                d_loss.backward()
+                optimizer_D.step()
+                epoch_d_output.append(validity_real)
+                epoch_d_output.append(validity_fake)
+                epoch_d_real.append(valid)
+                epoch_d_real.append(fake)
+            epoch_label_list.append(recursive_to_cpu(real_gen_output))
         epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
 
-        self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
-        self.writer.add_scalar('mean_eval_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
+        self.logger.debug('\tmean train g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
+        self.writer.add_scalar('mean_train_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
         self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
         self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
 
-        self.logger.debug('\tmean eval d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
-        self.writer.add_scalar('mean_eval_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
+        self.logger.debug('\tmean train d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
+        self.writer.add_scalar('mean_train_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
         self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
         self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
+
+        if self.task_type == 'classification':
+            epoch_pred_list = self.pred(epoch_gen_output_list)
+            # print('epoch_pred_list')
+            # print(epoch_pred_list)
+            # print('epoch_label_list')
+            # print(epoch_label_list)
+            epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
+            self.train_pred_list.append(epoch_pred_list)
+            self.logger.debug('\ttrain accuracy: {}'.format(epoch_acc))
+            self.writer.add_scalar('train_accuracy', epoch_acc, epoch)
+            self.train_accuracy_list.append(epoch_acc)
+            self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
+            epoch_d_output = torch.cat(epoch_d_output)
+            epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
+            epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
+            self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
+            self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
 
         epoch_properties = dict()
         epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
 
         self.save_epoch_properties(epoch_properties, epoch, False)
-        self.scheduler.step()
+        for scheduler in self.scheduler:
+            scheduler.step()
 
     def eval_epoch_gan(self, epoch):
         epoch_g_loss_list = []
         epoch_d_loss_list = []
+        epoch_label_list = []
         epoch_gen_output_list = []
+        epoch_d_output = []
+        epoch_d_real = []
         optimizer_G, optimizer_D = self.optimizer
         loss_G, loss_D = self.loss
         generator, discriminator = self.model
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.test_iter)):
-            batch_size, feature_num = cond_data.shape
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
+
+            batch_size = cond_data.shape[0]
             # Adversarial ground truths
-            valid = Variable(torch.ones(batch_size, dtype=torch.long), requires_grad=False)
-            fake = Variable(torch.zeros(batch_size, dtype=torch.long), requires_grad=False)
+            valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
+            fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
             # -----------------
             #  Train Generator
             # -----------------
             # Sample noise and cond_data as generator input
-            noise = Variable(torch.randn(batch_size, feature_num))
+            noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
             # Generate a batch of images
-            gen_output = generator(noise, cond_data)
+            gen_output, ext_cond_data = generator(noise, cond_data)
+            ext_cond_data = ext_cond_data.detach()
             epoch_gen_output_list.append(recursive_to_cpu(gen_output))
 
             # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, cond_data)
+            validity = discriminator(gen_output, ext_cond_data)
 
             g_loss = loss_G(validity, valid)
             epoch_g_loss_list.append(g_loss.item())
@@ -442,16 +500,23 @@ class Train:
             #  Train Discriminator
             # ---------------------
             # Loss for real images
-            validity_real = discriminator(real_gen_output, cond_data)
+            validity_real = discriminator(real_gen_output_as_input, ext_cond_data)
             d_real_loss = loss_D(validity_real, valid)
 
             # Loss for fake images
-            validity_fake = discriminator(gen_output.detach(), cond_data)
+            validity_fake = discriminator(gen_output.detach(), ext_cond_data)
             d_fake_loss = loss_D(validity_fake, fake)
 
             # Total discriminator loss
             d_loss = (d_real_loss + d_fake_loss) / 2
             epoch_d_loss_list.append(d_loss.item())
+
+            epoch_label_list.append(recursive_to_cpu(real_gen_output))
+
+            epoch_d_output.append(validity_real)
+            epoch_d_output.append(validity_fake)
+            epoch_d_real.append(valid)
+            epoch_d_real.append(fake)
         epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
 
         self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
@@ -464,52 +529,32 @@ class Train:
         self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
         self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
 
+        if self.task_type == 'classification':
+            epoch_pred_list = self.pred(epoch_gen_output_list)
+            # print('epoch_pred_list')
+            # print(epoch_pred_list)
+            # print('epoch_label_list')
+            # print(epoch_label_list)
+            epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
+            self.train_pred_list.append(epoch_pred_list)
+            self.logger.debug('\ttest accuracy: {}'.format(epoch_acc))
+            self.writer.add_scalar('test_accuracy', epoch_acc, epoch)
+            self.train_accuracy_list.append(epoch_acc)
+            self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
+            epoch_d_output = torch.cat(epoch_d_output)
+            epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
+            epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
+            self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
+            self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
+
         epoch_properties = dict()
         epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
 
         self.save_epoch_properties(epoch_properties, epoch, False)
 
-    def train_epoch_seq2seq(self, epoch):
-        total_loss = 0
-        epoch_loss_list = []
-        epoch_output_list = []
-        epoch_label_list = []
-        self.logger.info('train epoch: {}'.format(epoch + 1))
-        for batch, (data, label, other) in enumerate(tqdm(self.train_iter)):
-            data = recursive_wrap_data(data, self.output_device)
-            label = recursive_wrap_data(label, self.output_device)
-
-            self.optimizer.zero_grad()
-            output = self.model(data, label)
-            loss = self.loss(output, label)
-            loss.backward()
-            clip_grad_norm_(self.model.parameters(), 10.0)
-            self.optimizer.step()
-            total_loss += loss.data.item()
-        self.logger.debug('\tmean train loss: {}'.format(total_loss / len(self.train_iter)))
-
-    def eval_epoch_seq2seq(self, epoch):
-        total_loss = 0
-        epoch_loss_list = []
-        epoch_output_list = []
-        epoch_label_list = []
-        self.logger.info('test epoch: {}'.format(epoch + 1))
-        for batch, (data, label, other) in enumerate(tqdm(self.test_iter)):
-            data = recursive_wrap_data(data, self.output_device)
-            label = recursive_wrap_data(label, self.output_device)
-
-            self.optimizer.zero_grad()
-            output = self.model(data, label, 0)
-            loss = self.loss(output, label)
-
-            total_loss += loss.data.item()
-        self.logger.debug('\tmean test loss: {}'.format(total_loss / len(self.test_iter)))
-
     def train_epoch(self, epoch):
         if self.train_type == 'gan':
             return self.train_epoch_gan(epoch)
-        elif self.train_type == 'seq2seq':
-            return self.train_epoch_seq2seq(epoch)
         epoch_loss_list = []
         epoch_output_list = []
         epoch_label_list = []
@@ -576,8 +621,6 @@ class Train:
     def eval_epoch(self, epoch):
         if self.train_type == 'gan':
             return self.eval_epoch_gan(epoch)
-        elif self.train_type == 'seq2seq':
-            return self.eval_epoch_seq2seq(epoch)
         epoch_loss_list = []
         epoch_output_list = []
         epoch_label_list = []

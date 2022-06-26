@@ -192,11 +192,11 @@ def prepare_rnnv3_nolabel_dataset():
     ds = rnnv3_nolabel_dataset.RNNDataset(
         r'./resources/data/fit/rnnv3_nolabel',
         audio_mel=4,
-        take_first=100,
+        take_first=300,
         random_seed=404,
         coeff_speed_stars=2.5,
         coeff_bpm=120,
-        label_num=4,
+        label_num=3,
         switch_label=False,
     )
     ds.prepare()

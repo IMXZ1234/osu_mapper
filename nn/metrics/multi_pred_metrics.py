@@ -10,6 +10,8 @@ def multi_pred_cal_acc_func(pred, label, output):
     """
     if isinstance(pred, torch.Tensor):
         pred = pred.reshape(-1)
+        if isinstance(label, list):
+            label = torch.cat(label, dim=0)
         label = label.reshape(-1)
         return len(torch.where(pred == label)[0]) / len(pred)
     # else pred and label are lists
@@ -21,6 +23,8 @@ def multi_pred_cal_cm_func(pred, label, output):
     Calculates confusion matrix when a sample contains multiple predictions.
     """
     if isinstance(pred, torch.Tensor):
+        if isinstance(label, list):
+            label = torch.cat(label, dim=0)
         return metrics_util.get_epoch_confusion(pred.reshape(-1).numpy().astype(int),
                                                 label.reshape(-1).numpy().astype(int))
     # else pred and label are lists

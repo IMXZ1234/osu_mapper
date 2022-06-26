@@ -275,6 +275,10 @@ def data_array_to_tensor_inference(sample_list):
 def output_collate_fn(epoch_output_list):
     """
     Flatten batches.
+    if epoch_output_list[0](first batch output) is a single tensor(if model output is a single tensor),
+        cat into a single tensor [num_sample_in_all_batches, ...],
+    elif model output is a list,
+        cat every item in model output respectively like above and return them as a list.
     """
     if isinstance(epoch_output_list[0], torch.Tensor):
         # if model output is a single tensor

@@ -81,7 +81,7 @@ def hitobjects_to_label(beatmap: slider.Beatmap, aligned_start_time, snap_per_mi
     return label
 
 
-def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms, snap_ms, total_snap_num,
+def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms=None, snap_ms=None, total_snap_num=None,
                            align_to_snaps=None, multi_label=False,
                            include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
     """
@@ -96,6 +96,25 @@ def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms, snap_ms, total_s
     0: no hit object
     1: has hit object
     """
+    if aligned_ms is None:
+        aligned_ms = beatmap_util.get_first_hit_object_time_milliseconds(
+            beatmap,
+            include_circle,
+            include_slider,
+            include_spinner,
+            include_holdnote
+        )
+    if snap_ms is None:
+        # if not specified, we calculate using original snap_divisor
+        snap_ms = beatmap_util.get_snap_milliseconds(beatmap, beatmap.beat_divisor)
+    if total_snap_num is None:
+        total_snap_num = round((beatmap_util.get_last_hit_object_time_milliseconds(
+            beatmap,
+            include_circle,
+            include_slider,
+            include_spinner,
+            include_holdnote
+        ) - aligned_ms) / snap_ms) + 1
     # print(audio_start_time_offset)
     if align_to_snaps is not None:
         if total_snap_num % align_to_snaps != 0:

@@ -14,5 +14,5 @@ from . import (
     mlpv2,
     rnnv2_seg,
     seq2seq,
-    # cganv1,
+    cganv1,
 )

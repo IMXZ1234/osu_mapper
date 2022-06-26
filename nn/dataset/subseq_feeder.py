@@ -17,6 +17,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  label_path,
                  subseq_len,
                  use_random_iter=True,
+                 flatten=False,
                  # subseq_num for each batch
                  random_seed=None,
                  binary=False,
@@ -34,6 +35,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.subseq_len = subseq_len
 
         self.binary = binary
+        self.flatten = flatten
         self.load_data()
 
     def load_data(self):

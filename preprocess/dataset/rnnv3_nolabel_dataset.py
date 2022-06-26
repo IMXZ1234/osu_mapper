@@ -33,7 +33,7 @@ class RNNDataset(fit_dataset.FitDataset):
                  take_first=100, random_seed=None,
                  coeff_speed_stars=2.5,
                  coeff_bpm=120,
-                 label_num=4,
+                 label_num=3,
                  switch_label=False,
                  item_names=fit_dataset.FitDataset.DEFAULT_ITEM_NAMES, logger=None,
                  preprocess_arg=dict(),

@@ -1,202 +1,136 @@
-import argparse
-import os
-import numpy as np
-import math
-
-import torchvision.transforms as transforms
-from torchvision.utils import save_image
-
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from torch.autograd import Variable
-
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
-
-os.makedirs("images", exist_ok=True)
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
-parser.add_argument("--batch_size", type=int, default=64, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
-parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
-parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
-parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
-parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent space")
-parser.add_argument("--n_classes", type=int, default=10, help="number of classes for dataset")
-parser.add_argument("--img_size", type=int, default=32, help="size of each image dimension")
-parser.add_argument("--channels", type=int, default=1, help="number of image channels")
-parser.add_argument("--sample_interval", type=int, default=400, help="interval between image sampling")
-opt = parser.parse_args()
-print(opt)
-
-img_shape = (opt.channels, opt.img_size, opt.img_size)
-
-cuda = True if torch.cuda.is_available() else False
 
 
-class Generator(nn.Module):
-    def __init__(self, cond_data_feature_num, noise_feature_num, output_feature_num, num_classes):
-        super(Generator, self).__init__()
+class FeatureExtractor(nn.Module):
+    """
+    cond_data: N, L(output_len), snap_feature(514 here) -> N, L, out_feature -> N, -1
+    """
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
 
-        self.num_classes = num_classes
-
-        def block(in_feat, out_feat, normalize=True):
-            layers = [nn.Linear(in_feat, out_feat)]
+        def conv_block(in_feat, out_feat, normalize=True):
+            layers = [nn.Conv1d(in_feat, out_feat, kernel_size=3, padding=1)]
             if normalize:
-                layers.append(nn.BatchNorm1d(out_feat, 0.8))
+                layers.append(nn.BatchNorm1d(out_feat))
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
 
         self.model = nn.Sequential(
-            *block(cond_data_feature_num + noise_feature_num, output_feature_num*8, normalize=False),
-            *block(output_feature_num*8, output_feature_num*4),
-            *block(output_feature_num*4, output_feature_num*2),
-            nn.Linear(output_feature_num*2, output_feature_num),
-            nn.Tanh()
+            *conv_block(in_channels, in_channels // 4, normalize=False),
+            *conv_block(in_channels // 4, in_channels // 16),
+            nn.Conv1d(in_channels // 16, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm1d(out_channels),
+        )
+
+    def forward(self, cond_data):
+        cond_data = cond_data.transpose(1, 2)
+        cond_data = self.model(cond_data)
+        return cond_data.reshape([cond_data.shape[0], -1])
+
+
+class Generator(nn.Module):
+    def __init__(self, output_len, in_channels, num_classes, noise_feature_num,
+                 compressed_channels=16, **kwargs):
+        """
+        output_snaps = output_feature_num // num_classes
+        """
+        super(Generator, self).__init__()
+
+        self.num_classes = num_classes
+        self.output_len = output_len
+        self.ext_in_channels = in_channels
+        self.ext_out_channels = compressed_channels
+
+        output_feature_num = self.output_len * self.num_classes
+
+        # def block(in_feat, out_feat, normalize=True):
+        #     layers = [nn.Linear(in_feat, out_feat)]
+        #     # if normalize:
+        #     #     layers.append(nn.BatchNorm1d(out_feat, 0.8))
+        #     layers.append(nn.LeakyReLU(0.2, inplace=True))
+        #     return layers
+        self.ext = FeatureExtractor(self.ext_in_channels, self.ext_out_channels)
+        print('G first linear in')
+        print(noise_feature_num + self.ext_out_channels * self.output_len)
+        print('G first linear out')
+        print(16 * output_feature_num)
+
+        self.model = nn.Sequential(
+            nn.Linear(noise_feature_num + self.ext_out_channels * self.output_len, 16 * output_feature_num),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(16 * output_feature_num, 8 * output_feature_num),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(8 * output_feature_num, 2 * output_feature_num),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(2 * output_feature_num, output_feature_num),
         )
 
     def forward(self, noise, cond_data):
+        # print('in G')
+        # print('cond_data.shape')
+        # print(cond_data.shape)
+        # print('noise.shape')
+        # print(noise.shape)
         # Concatenate label embedding and image to produce input
+        cond_data = self.ext(cond_data)
+        # print('cond_data.shape')
+        # print(cond_data.shape)
+        noise = noise.reshape([noise.shape[0], -1])
+        # print('noise.shape')
+        # print(noise.shape)
         gen_input = torch.cat((cond_data, noise), dim=-1)
         gen_output = self.model(gen_input)
-        N, C = gen_output.shape
+        N, C = gen_output.shape  # N, output_feature_num
         gen_output = gen_output.reshape([N, C//self.num_classes, self.num_classes])
-        gen_output = torch.argmax(torch.softmax(gen_output, dim=-1), dim=-1)
-        return gen_output
+        # gen_output = torch.argmax(torch.softmax(gen_output, dim=-1), dim=-1)
+        gen_output = torch.nn.functional.gumbel_softmax(gen_output, dim=-1, hard=True)
+        # N, num_snaps, num_classes
+        # print('gen_output.shape')
+        # print(gen_output.shape)
+        return gen_output, cond_data
 
 
 class Discriminator(nn.Module):
-    def __init__(self, cond_data_feature_num, noise_feature_num, output_feature_num):
+    def __init__(self, output_len, in_channels, num_classes,
+                 compressed_channels=16, **kwargs):
+        """
+        output_feature_num = output_snaps * num_classes: generator output feature num, in one-hot format
+        """
         super(Discriminator, self).__init__()
-        in_features = cond_data_feature_num + output_feature_num
+        self.num_classes = num_classes
+        self.output_len = output_len
+        self.ext_in_channels = in_channels
+        self.ext_out_channels = compressed_channels
+
+        output_feature_num = self.output_len * self.num_classes
+
+        # self.ext = FeatureExtractor(self.ext_in_channels, self.ext_out_channels)
 
         self.model = nn.Sequential(
-            nn.Linear(in_features, in_features // 4),
+            nn.Linear(self.ext_out_channels * self.output_len + output_feature_num, 4 * output_feature_num),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features // 4, in_features // 16),
+            # nn.Linear(4 * output_feature_num, 2 * output_feature_num),
+            # nn.Dropout(0.4),
+            # nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(4 * output_feature_num, output_feature_num),
+            nn.Dropout(0.4),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features // 16, in_features // 64),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(in_features // 64, 2),
+            nn.Linear(output_feature_num, 2),
         )
 
     def forward(self, gen_output, cond_data):
+        # print('in D')
+        # print('cond_data.shape')
+        # print(cond_data.shape)
+        # print('gen_output.shape')
+        # print(gen_output.shape)
+        # cond_data = self.ext(cond_data)
+        gen_output = gen_output.reshape([gen_output.shape[0], -1])
+        # gen_output = torch.nn.functional.one_hot(gen_output)
         # Concatenate label embedding and image to produce input
         d_in = torch.cat([gen_output, cond_data], dim=-1)
         validity = self.model(d_in)
+        # N, 2
         return validity
-
-
-# Loss functions
-adversarial_loss = torch.nn.MSELoss()
-
-# Initialize generator and discriminator
-generator = Generator()
-discriminator = Discriminator()
-
-if cuda:
-    generator.cuda()
-    discriminator.cuda()
-    adversarial_loss.cuda()
-
-# Configure cond_data loader
-os.makedirs("../../cond_data/mnist", exist_ok=True)
-dataloader = torch.utils.data.DataLoader(
-    datasets.MNIST(
-        "../../cond_data/mnist",
-        train=True,
-        download=True,
-        transform=transforms.Compose(
-            [transforms.Resize(opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
-        ),
-    ),
-    batch_size=opt.batch_size,
-    shuffle=True,
-)
-
-# Optimizers
-optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-
-FloatTensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if cuda else torch.LongTensor
-
-
-def sample_image(n_row, batches_done):
-    """Saves a grid of generated digits ranging from 0 to n_classes"""
-    # Sample noise
-    z = Variable(FloatTensor(np.random.normal(0, 1, (n_row ** 2, opt.latent_dim))))
-    # Get cond_data ranging from 0 to n_classes for n rows
-    labels = np.array([num for _ in range(n_row) for num in range(n_row)])
-    labels = Variable(LongTensor(labels))
-    gen_imgs = generator(z, labels)
-    save_image(gen_imgs.data, "images/%d.png" % batches_done, nrow=n_row, normalize=True)
-
-
-# ----------
-#  Training
-# ----------
-
-for epoch in range(opt.n_epochs):
-    for i, (imgs, labels) in enumerate(dataloader):
-
-        batch_size = imgs.shape[0]
-
-        # Adversarial ground truths
-        valid = Variable(FloatTensor(batch_size, 1).fill_(1.0), requires_grad=False)
-        fake = Variable(FloatTensor(batch_size, 1).fill_(0.0), requires_grad=False)
-
-        # Configure input
-        real_imgs = Variable(imgs.type(FloatTensor))
-        labels = Variable(labels.type(LongTensor))
-
-        # -----------------
-        #  Train Generator
-        # -----------------
-
-        optimizer_G.zero_grad()
-
-        # Sample noise and cond_data as generator input
-        z = Variable(FloatTensor(np.random.normal(0, 1, (batch_size, opt.latent_dim))))
-        gen_labels = Variable(LongTensor(np.random.randint(0, opt.n_classes, batch_size)))
-
-        # Generate a batch of images
-        gen_imgs = generator(z, gen_labels)
-
-        # Loss measures generator's ability to fool the discriminator
-        validity = discriminator(gen_imgs, gen_labels)
-        g_loss = adversarial_loss(validity, valid)
-
-        g_loss.backward()
-        optimizer_G.step()
-
-        # ---------------------
-        #  Train Discriminator
-        # ---------------------
-
-        optimizer_D.zero_grad()
-
-        # Loss for real images
-        validity_real = discriminator(real_imgs, labels)
-        d_real_loss = adversarial_loss(validity_real, valid)
-
-        # Loss for fake images
-        validity_fake = discriminator(gen_imgs.detach(), gen_labels)
-        d_fake_loss = adversarial_loss(validity_fake, fake)
-
-        # Total discriminator loss
-        d_loss = (d_real_loss + d_fake_loss) / 2
-
-        d_loss.backward()
-        optimizer_D.step()
-
-        print(
-            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, opt.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
-        )
-
-        batches_done = epoch * len(dataloader) + i
-        if batches_done % opt.sample_interval == 0:
-            sample_image(n_row=10, batches_done=batches_done)
