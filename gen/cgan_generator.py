@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from gen.beatmap_generator import BeatmapGenerator
-from gen.label_interpreter import SwitchInterpreter, MultiLabelInterpreter
+from gen.label_interpreter import SwitchInterpreter, MultiLabelInterpreter, AssembledLabelOutputInterpreter
 from util import beatmap_util
 
 
@@ -39,18 +39,14 @@ class CGANGenerator(BeatmapGenerator):
         )
 
         # same audio for all beatmaps in beatmapset
-        self.data_preparer.prepare_inference_data(
-            [audio_file_path] * len(beatmap_list), beatmap_list,
-            audio_idx, audio_idx + 1
-        )
+        self.data_preparer.dataset.prepare_from_raw(audio_file_path, beatmap_list, save=True)
 
         # run inference and get beatmapset_label for each audio
         print('running inference...')
         # into batch of size 1 to conform to the model input format
         beatmapset_label = self.inference.run_inference()
         print(beatmapset_label)
-        beatmapset_label_div = self.inference.data_iter.dataset.accumulate_audio_sample_num
-        beatmapset_label_div = [0] + beatmapset_label_div
+        beatmapset_label_div = self.inference.data_iter.dataset.sample_div_pos
         # although all beatmaps in beatmapset share same audio,
         # they may have different cond_data due to different difficulty
         beatmap_label_list = [
@@ -78,7 +74,7 @@ class CGANGenerator(BeatmapGenerator):
             # clear formerly added two dummy hitobjects
             start_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
             beatmap._hit_objects.clear()
-            MultiLabelInterpreter.gen_hitobjects(
+            AssembledLabelOutputInterpreter.gen_hitobjects(
                 beatmap, beatmap_label, start_time, snap_ms, self.snap_divisor
             )
             print(beatmap._hit_objects)

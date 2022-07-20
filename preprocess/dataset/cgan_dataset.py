@@ -13,7 +13,7 @@ from util import beatmap_util, general_util
 from preprocess.dataset import fit_dataset
 
 
-class RNNDataset(fit_dataset.FitDataset):
+class CGANDataset(fit_dataset.FitDataset):
     DEFAULT_SAVE_DIR = r'./resources/cond_data/fit/rnn/'
     """
     A snap may be of label 0-5:
@@ -36,7 +36,6 @@ class RNNDataset(fit_dataset.FitDataset):
                  label_num=3,
                  switch_label=False,
                  density_label=False,
-                 multibeat_label_fmt=0,
                  item_names=fit_dataset.FitDataset.DEFAULT_ITEM_NAMES, logger=None,
                  preprocess_arg=dict(),
                  **kwargs):
@@ -63,7 +62,6 @@ class RNNDataset(fit_dataset.FitDataset):
         self.label_num = label_num
         self.switch_label = switch_label
         self.density_label = density_label
-        self.multibeat_label_fmt = multibeat_label_fmt
         self.eye = np.eye(self.label_num)
         self.preprocess_arg = preprocess_arg
 
@@ -214,23 +212,14 @@ class RNNDataset(fit_dataset.FitDataset):
         first_ho_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
         # one label per snap
         # three classes by default
-        if self.switch_label:
-            get_label_func = dataset_util.hitobjects_to_label_switch
-        elif self.density_label:
-            get_label_func = dataset_util.hitobjects_to_density_v2
-        else:
-            get_label_func = dataset_util.hitobjects_to_label_v2
-        beatmap_label = get_label_func(
+        beatmap_label = dataset_util.hitobjects_to_label_v2(
             beatmap,
             first_ho_time,
             snap_ms,
             total_snaps,
             None,
-            multi_label=(self.label_num != 2),
-            multibeat_label_fmt=self.multibeat_label_fmt,
+            multi_label=(self.label_num != 2)
         )
-        if self.density_label:
-            beatmap_label = beatmap_label + np.random.randn(beatmap_label.shape)
         start_snap = max(first_ho_snap, self.half_audio_snap)
         end_snap = min(
             # snaps_from_start_label
@@ -266,20 +255,6 @@ class RNNDataset(fit_dataset.FitDataset):
             return None, None
         sample_data_list = np.stack(sample_data_list)
         return sample_data_list, np.asarray(beatmap_label)
-
-    def prepare_from_raw(self, audio_path, beatmap_list, save=True):
-        self.items = [[], []]
-        data, label = self.items
-        for beatmap in beatmap_list:
-            audio_data, snap_offset = self.preprocess_audio(audio_path, beatmap)
-            audio_data = audio_data.numpy()
-            sample_data, sample_label = self.prepare_record(
-                audio_data, beatmap, snap_offset
-            )
-            data.append(sample_data)
-            label.append(sample_label)
-        if save:
-            self.save_raw()
 
     def prepare(self, save=True):
         if self.random_seed is not None:

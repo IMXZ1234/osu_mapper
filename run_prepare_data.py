@@ -198,6 +198,38 @@ def prepare_rnnv3_nolabel_dataset():
         coeff_bpm=120,
         label_num=3,
         switch_label=False,
+        # only set label at beginning of each beat
+        multibeat_label_fmt=0,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
+def prepare_rnnv3_nolabel_binary_dataset():
+    ds = rnnv3_nolabel_dataset.RNNDataset(
+        r'./resources/data/fit/rnnv3_nolabel_binary',
+        audio_mel=4,
+        take_first=300,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=2,
+        switch_label=False,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
+def prepare_rnnv3_nolabel_density_dataset():
+    ds = rnnv3_nolabel_dataset.RNNDataset(
+        r'./resources/data/fit/rnnv3_nolabel_density',
+        audio_mel=4,
+        take_first=300,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=2,
+        switch_label=False,
     )
     ds.prepare()
     ds.div_folds(save_first=1)

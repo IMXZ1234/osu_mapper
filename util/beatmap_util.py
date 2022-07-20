@@ -323,6 +323,11 @@ def get_snap_milliseconds(beatmap: slider.Beatmap, snap_divisor=8):
     return 60000 / bpm / snap_divisor
 
 
+def get_snap_divisor_by_snap_ms(beatmap: slider.Beatmap, snap_ms):
+    bpm = beatmap.bpm_min()
+    return round(60000 / bpm / snap_ms)
+
+
 def get_total_snaps(beatmap: slider.Beatmap, snap_divisor=8,
                     include_circle=True,
                     include_slider=True,

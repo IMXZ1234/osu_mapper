@@ -41,6 +41,9 @@ class Train:
 
         if 'train_type' in kwargs:
             self.train_type = kwargs['train_type']
+            if self.train_type == 'gan':
+                self.use_ext_cond_data = train_arg['use_ext_cond_data'] if 'use_ext_cond_data' in train_arg else False
+                print(self.use_ext_cond_data)
             # self.use_random_iter = kwargs['use_random_iter']
         else:
             self.train_type = 'default'
@@ -367,10 +370,16 @@ class Train:
         generator, discriminator = self.model
         # skip training discriminator: only do skip_D[1] batches' training for every skip_D[0] batches
         skip_D = (2, 1)
+        skip_G = (1, 1)
+        G_start_from = 0
+        D_loss_rev_factor = 1
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
+            if batch == 28:
+                print('real_gen_output[0]')
+                print(real_gen_output[0])
 
             batch_size = cond_data.shape[0]
 
@@ -389,41 +398,49 @@ class Train:
             # Generate a batch of images
             # here is (nearly) one-hot sequence, output of gumbel softmax
             gen_output, ext_cond_data = generator(noise, cond_data)
-            ext_cond_data = ext_cond_data.detach()
+            if batch == 28:
+                print('gen_output[0]')
+                print(torch.argmax(gen_output[0], dim=-1))
+            if self.use_ext_cond_data:
+                cond_data_D = ext_cond_data.detach()
+            else:
+                cond_data_D = cond_data
             epoch_gen_output_list.append(recursive_to_cpu(gen_output))
 
             # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, ext_cond_data)
+            validity = discriminator(gen_output, cond_data_D)
             g_loss = loss_G(validity, valid)
             epoch_g_loss_list.append(g_loss.item())
 
             g_loss.backward()
-            optimizer_G.step()
+            if batch >= G_start_from and random.randint(0, skip_G[0]-1) < skip_G[1]:
+                optimizer_G.step()
 
             # ---------------------
             #  Train Discriminator
             # ---------------------
+            optimizer_D.zero_grad()
+
+            # Loss for real images
+            validity_real = discriminator(real_gen_output_as_input, cond_data_D)
+            d_real_loss = loss_D(validity_real, valid)
+
+            # Loss for fake images
+            validity_fake = discriminator(gen_output.detach(), cond_data_D)
+            d_fake_loss = loss_D(validity_fake, fake)
+
+            # Total discriminator loss
+            d_loss = (d_real_loss + d_fake_loss) / 2
+            epoch_d_loss_list.append(d_loss.item())
+
+            d_loss = d_loss * D_loss_rev_factor
+            d_loss.backward()
             if random.randint(0, skip_D[0]-1) < skip_D[1]:
-                optimizer_D.zero_grad()
-
-                # Loss for real images
-                validity_real = discriminator(real_gen_output_as_input, ext_cond_data)
-                d_real_loss = loss_D(validity_real, valid)
-
-                # Loss for fake images
-                validity_fake = discriminator(gen_output.detach(), ext_cond_data)
-                d_fake_loss = loss_D(validity_fake, fake)
-
-                # Total discriminator loss
-                d_loss = (d_real_loss + d_fake_loss) / 2
-                epoch_d_loss_list.append(d_loss.item())
-
-                d_loss.backward()
                 optimizer_D.step()
-                epoch_d_output.append(validity_real)
-                epoch_d_output.append(validity_fake)
-                epoch_d_real.append(valid)
-                epoch_d_real.append(fake)
+            epoch_d_output.append(validity_real)
+            epoch_d_output.append(validity_fake)
+            epoch_d_real.append(valid)
+            epoch_d_real.append(fake)
             epoch_label_list.append(recursive_to_cpu(real_gen_output))
         epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
 
@@ -488,11 +505,14 @@ class Train:
             noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
             # Generate a batch of images
             gen_output, ext_cond_data = generator(noise, cond_data)
-            ext_cond_data = ext_cond_data.detach()
+            if self.use_ext_cond_data:
+                cond_data_D = ext_cond_data.detach()
+            else:
+                cond_data_D = cond_data
             epoch_gen_output_list.append(recursive_to_cpu(gen_output))
 
             # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, ext_cond_data)
+            validity = discriminator(gen_output, cond_data_D)
 
             g_loss = loss_G(validity, valid)
             epoch_g_loss_list.append(g_loss.item())
@@ -500,11 +520,11 @@ class Train:
             #  Train Discriminator
             # ---------------------
             # Loss for real images
-            validity_real = discriminator(real_gen_output_as_input, ext_cond_data)
+            validity_real = discriminator(real_gen_output_as_input, cond_data_D)
             d_real_loss = loss_D(validity_real, valid)
 
             # Loss for fake images
-            validity_fake = discriminator(gen_output.detach(), ext_cond_data)
+            validity_fake = discriminator(gen_output.detach(), cond_data_D)
             d_fake_loss = loss_D(validity_fake, fake)
 
             # Total discriminator loss
@@ -620,7 +640,8 @@ class Train:
 
     def eval_epoch(self, epoch):
         if self.train_type == 'gan':
-            return self.eval_epoch_gan(epoch)
+            return
+            # return self.eval_epoch_gan(epoch)
         epoch_loss_list = []
         epoch_output_list = []
         epoch_label_list = []

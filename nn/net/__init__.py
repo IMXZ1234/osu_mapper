@@ -15,4 +15,8 @@ from . import (
     rnnv2_seg,
     seq2seq,
     cganv1,
+    cganv2,
+    cganv3,
+    cganv4,
+    cganv3_pe,
 )

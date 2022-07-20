@@ -1,5 +1,4 @@
 import random
-import itertools
 
 import numpy as np
 import pickle
@@ -7,21 +6,22 @@ import torch
 from torch.utils import data
 
 
-class SubseqFeeder(torch.utils.data.Dataset):
+class SubseqFromDataFeeder(torch.utils.data.Dataset):
     """
     Simplest feeder yielding (cond_data, label, index).
     Data may be either .pkl or .npy, style determined from path suffix.
     """
 
     def __init__(self,
-                 data_path,
-                 label_path,
-                 subseq_len,
+                 data,
+                 label=None,
+                 subseq_len=96,
                  use_random_iter=True,
                  flatten=False,
                  # subseq_num for each batch
                  random_seed=None,
                  binary=False,
+                 inference=False,
                  **kwargs,
                  ):
         """
@@ -29,8 +29,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
         """
         if random_seed is not None:
             random.seed(random_seed)
-        self.data_path = data_path
-        self.label_path = label_path
+        self.data = data
+        self.inference = inference
+        self.label = label
         self.use_random_iter = use_random_iter
 
         self.subseq_len = subseq_len
@@ -66,7 +67,6 @@ class SubseqFeeder(torch.utils.data.Dataset):
             self.seq_len[i] // self.subseq_len
             for i in range(self.n_seq)
         ]
-        self.sample_div_pos = list(itertools.accumulate([0] + self.n_subseq))
         # print('self.n_subseq')
         # print(self.n_subseq)
 

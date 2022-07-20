@@ -199,3 +199,46 @@ class SwitchInterpreter:
                 )
                 # print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
                 end_time = ho_slider.end_time // timedelta(milliseconds=1)
+
+
+class AssembledLabelOutputInterpreter:
+    @staticmethod
+    def gen_hitobjects(beatmap, labels, start_time, snap_ms, snap_divisor=8):
+        # save some space about the border as circles have radius
+        pos_gen = RandomWalkInRectangle(30, 482, 30, 354)
+        pos_gen.move_to_random_pos()
+        pos_gen.set_walk_dist_range(50, 150)
+
+        ms_per_beat = 60000 / beatmap.bpm_min()
+        end_time = 0
+        pos = 0
+        while pos < len(labels):
+            label = labels[pos]
+            # print('pos, period, label')
+            # print(pos, period, label)
+            time = start_time + pos * snap_ms
+            if time <= end_time:
+                continue
+            if label == 1:
+                # circles, period == 1
+                x, y = pos_gen.next_pos()
+                beatmap_util.add_circle(beatmap, (x, y), time)
+                # print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
+            elif label == 2:
+                start_pos = pos
+                # slider start
+                while pos < len(labels) and labels[pos] == 2:
+                    pos += 1
+                num_beats = max(0.5, (pos-start_pos) // snap_divisor)
+                # if num_beats == 0:
+                #     continue
+                pos_list = [
+                    pos_gen.next_pos()
+                    for _ in range(num_beats)
+                ]
+
+                ho_slider = beatmap_util.add_slider(
+                    beatmap, 'L', pos_list, time, num_beats, ms_per_beat
+                )
+                # print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
+                end_time = ho_slider.end_time // timedelta(milliseconds=1)
