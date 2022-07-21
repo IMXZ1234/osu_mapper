@@ -71,8 +71,8 @@ class CGANGenerator(BeatmapGenerator):
             snap_ms = beatmap_util.get_snap_milliseconds(beatmap, self.snap_divisor)
             print('snap_ms')
             print(snap_ms)
-            # clear formerly added two dummy hitobjects
             start_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
+            # clear formerly added two dummy hitobjects
             beatmap._hit_objects.clear()
             AssembledLabelOutputInterpreter.gen_hitobjects(
                 beatmap, beatmap_label, start_time, snap_ms, self.snap_divisor

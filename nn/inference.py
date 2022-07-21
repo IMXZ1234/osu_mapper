@@ -65,7 +65,7 @@ class Inference:
 
     def run_inference(self):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
         because same model may be used on different datasets.
         """
         if self.data_arg is None:
@@ -83,7 +83,7 @@ class Inference:
 
     def run_inference_sample(self, data):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
         because same model may be used on different datasets.
         """
         data = torch.tensor(data, dtype=torch.float32)
@@ -98,7 +98,7 @@ class Inference:
 
     def run_inference_sample_rnn(self, data, state):
         """
-        Unlike in Train, we initialize dataloader(data_iter) right before passing cond_data through model,
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
         because same model may be used on different datasets.
         """
         # to batch of 1

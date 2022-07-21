@@ -229,13 +229,12 @@ class AssembledLabelOutputInterpreter:
                 # slider start
                 while pos < len(labels) and labels[pos] == 2:
                     pos += 1
-                num_beats = max(0.5, (pos-start_pos) // snap_divisor)
+                num_beats = max(0.5, (pos-start_pos) / snap_divisor)
                 # if num_beats == 0:
                 #     continue
-                pos_list = [
-                    pos_gen.next_pos()
-                    for _ in range(num_beats)
-                ]
+                pos_gen.set_walk_dist_range(140*num_beats, 140*num_beats)
+                pos_list = [pos_gen.next_pos()]
+                pos_gen.set_walk_dist_range(50, 150)
 
                 ho_slider = beatmap_util.add_slider(
                     beatmap, 'L', pos_list, time, num_beats, ms_per_beat
