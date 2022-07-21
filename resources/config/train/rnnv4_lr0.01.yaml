@@ -1,0 +1,56 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate_other
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.rnnv2_feeder.RNNv2Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnnv4/test%d_data.pkl
+    label_path: ./resources/data/fit/rnnv4/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 1
+  train_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnnv4/train%d_data.pkl
+    label_path: ./resources/data/fit/rnnv4/train%d_label.pkl
+    random_seed: 404
+    subseq_len: 1
+grad_alter_fn: util.net_util.grad_clipping
+grad_alter_fn_arg:
+  theta: 1
+loss_arg:
+  loss_type: nn.loss.multi_pred_loss.MultiPredLoss
+  weight:
+  - 1.0
+  - 10.0
+  - 1.0
+model_arg:
+  in_channels: 24722
+  model_type: nn.net.rnnv2_seg.RNNv2Seg
+  num_classes: 3
+  num_layers: 2
+  step_snaps: 48
+optimizer_arg:
+  lr: 0.01
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/rnnv4_lr0.01/0.01/%d
+  model_save_dir: ./resources/result/rnnv4_lr0.01/0.01/%d
+  model_save_step: 32
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 32
+train_arg:
+  epoch: 128
+  eval_step: 1
+train_type: rnn

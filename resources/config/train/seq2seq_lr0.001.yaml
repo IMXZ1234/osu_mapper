@@ -1,0 +1,68 @@
+cal_acc_func: nn.metrics.valid_itv_metrics.cal_acc_func_valid_itv
+cal_cm_func: nn.metrics.valid_itv_metrics.cal_cm_func_valid_itv
+collate_fn: nn.dataset.collate_fn.collate_same_data_len_seq2seq
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.rnnv2_feeder.RNNv2Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/test%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 384
+  train_dataset_arg:
+    batch_size: 1
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/train%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/train%d_label.pkl
+    random_seed: 404
+    subseq_len: 384
+grad_alter_fn: util.net_util.grad_clipping
+grad_alter_fn_arg:
+  theta: 10
+loss_arg:
+  loss_type: nn.loss.valid_itv_loss.ValidIntervalNLLLoss
+  weight:
+  - 1.0
+  - 10.0
+  - 1.0
+model_arg:
+  decoder_args:
+    dropout: 0.5
+    embed_size: 256
+    hidden_size: 512
+    n_layers: 1
+    output_size: 3
+  encoder_args:
+    dropout: 0.5
+    embed_size: 256
+    hidden_size: 512
+    input_size: 514
+    n_layers: 1
+  model_type: nn.net.seq2seq.Seq2Seq
+optimizer_arg:
+  lr: 0.001
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/seq2seq_lr0.001/0.001/%d
+  model_save_dir: ./resources/result/seq2seq_lr0.001/0.001/%d
+  model_save_step: 32
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.valid_itv_pred.ValidIntervalMultiPred
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 2
+test_extra:
+  teacher_forcing_ratio: 0
+train_arg:
+  epoch: 8
+  eval_step: 1
+train_extra:
+  teacher_forcing_ratio: 0.5
+train_type: default

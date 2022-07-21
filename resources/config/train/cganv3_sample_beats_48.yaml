@@ -1,0 +1,73 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 6
+  dataset: nn.dataset.subseq_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/test%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 384
+    use_random_iter: true
+  train_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/train%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/train%d_label.pkl
+    random_seed: 404
+    subseq_len: 384
+    use_random_iter: true
+loss_arg:
+  loss_type:
+  - nn.loss.multi_pred_loss.MultiPredNLLLoss
+  - CrossEntropy
+  params:
+  - weight: null
+  - weight: null
+model_arg:
+  model_type:
+  - nn.net.cganv3.Generator
+  - nn.net.cganv3.Discriminator
+  params:
+  - compressed_channels: 16
+    in_channels: 514
+    noise_in_channels: 3
+    num_classes: 3
+    output_len: 384
+  - compressed_channels: 16
+    in_channels: 514
+    num_classes: 3
+    output_len: 384
+num_classes: 3
+optimizer_arg:
+  optimizer_type:
+  - SGD
+  - SGD
+  params:
+  - lr: 0.1
+  - lr: 0.1
+output_arg:
+  log_dir: ./resources/result/cganv3_sample_beats_48/0.1/%d
+  model_save_dir: ./resources/result/cganv3_sample_beats_48/0.1/%d
+  model_save_step: 16
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+scheduler_arg:
+  params:
+  - gamma: 0.3
+    step_size: 128
+  - gamma: 0.1
+    step_size: 128
+  scheduler_type:
+  - StepLR
+  - StepLR
+train_arg:
+  epoch: 128
+  eval_step: 1
+  use_ext_cond_data: false
+train_type: gan

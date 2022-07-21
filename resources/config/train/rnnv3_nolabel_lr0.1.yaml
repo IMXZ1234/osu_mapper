@@ -1,0 +1,49 @@
+collate_fn: nn.dataset.collate_fn.default_collate_other
+data_arg:
+  batch_size: 16
+  dataset: nn.dataset.rnnv2_feeder.RNNv2Feeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    batch_size: 16
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/test%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 64
+  train_dataset_arg:
+    batch_size: 16
+    binary: false
+    data_path: ./resources/data/fit/rnnv3_nolabel/train%d_data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/train%d_label.pkl
+    random_seed: 404
+    subseq_len: 64
+grad_alter_fn: util.net_util.grad_clipping
+grad_alter_fn_arg:
+  theta: 1
+loss_arg:
+  loss_type: CrossEntropy
+model_arg:
+  in_channels: 514
+  model_type: nn.net.rnnv2.RNNv2
+  num_classes: 4
+  num_layers: 4
+optimizer_arg:
+  lr: 0.1
+  optimizer_type: SGD
+output_arg:
+  log_dir: ./resources/result/rnnv3_nolabel_lr0.1/0.1/%d
+  model_save_dir: ./resources/result/rnnv3_nolabel_lr0.1/0.1/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: null
+rnn: true
+scheduler_arg:
+  gamma: 0.1
+  scheduler_type: StepLR
+  step_size: 8
+train_arg:
+  epoch: 32
+  eval_step: 1
