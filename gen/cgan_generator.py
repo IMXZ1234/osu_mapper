@@ -39,12 +39,12 @@ class CGANGenerator(BeatmapGenerator):
         )
 
         # same audio for all beatmaps in beatmapset
-        self.data_preparer.dataset.prepare_from_raw(audio_file_path, beatmap_list, save=True)
+        self.data_preparer.dataset.prepare_inference(audio_file_path, beatmap_list, save=True)
 
         # run inference and get beatmapset_label for each audio
         print('running inference...')
         # into batch of size 1 to conform to the model input format
-        beatmapset_label = self.inference.run_inference()
+        beatmapset_label = self.inference.run_inference_gan()
         print(beatmapset_label)
         beatmapset_label_div = self.inference.data_iter.dataset.sample_div_pos
         # although all beatmaps in beatmapset share same audio,

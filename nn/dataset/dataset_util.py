@@ -135,7 +135,7 @@ def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms=None, snap_ms=Non
                                        include_holdnote):
         snap_idx = (ho.time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
         if abs(round(snap_idx) - snap_idx) > 0.1:
-            print('snap_idx error to large!')
+            print('snap_idx error too large!')
             print(snap_idx)
         snap_idx = round(snap_idx)
         if snap_idx >= total_snap_num:

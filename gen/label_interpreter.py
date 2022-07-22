@@ -210,19 +210,17 @@ class AssembledLabelOutputInterpreter:
         pos_gen.set_walk_dist_range(50, 150)
 
         ms_per_beat = 60000 / beatmap.bpm_min()
-        end_time = 0
         pos = 0
         while pos < len(labels):
             label = labels[pos]
             # print('pos, period, label')
             # print(pos, period, label)
             time = start_time + pos * snap_ms
-            if time <= end_time:
-                continue
             if label == 1:
                 # circles, period == 1
                 x, y = pos_gen.next_pos()
                 beatmap_util.add_circle(beatmap, (x, y), time)
+                pos += 1
                 # print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
             elif label == 2:
                 start_pos = pos
@@ -232,12 +230,15 @@ class AssembledLabelOutputInterpreter:
                 num_beats = max(0.5, (pos-start_pos) / snap_divisor)
                 # if num_beats == 0:
                 #     continue
-                pos_gen.set_walk_dist_range(140*num_beats, 140*num_beats)
                 pos_list = [pos_gen.next_pos()]
+                pos_gen.set_walk_dist_range(140*num_beats, 140*num_beats)
+                pos_list.append(pos_gen.next_pos())
                 pos_gen.set_walk_dist_range(50, 150)
 
                 ho_slider = beatmap_util.add_slider(
                     beatmap, 'L', pos_list, time, num_beats, ms_per_beat
                 )
-                # print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
+                print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
                 end_time = ho_slider.end_time // timedelta(milliseconds=1)
+            else:
+                pos += 1
