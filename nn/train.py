@@ -34,6 +34,11 @@ class Train:
                  **kwargs):
         self.task_type = task_type
 
+        if 'random_seed' in kwargs:
+            seed = kwargs['random_seed']
+            print('set random seed to %d' % seed)
+            random.seed(seed)
+            torch.random.manual_seed(seed)
         if 'output_device' in kwargs and kwargs['output_device'] is not None:
             self.output_device = kwargs['output_device']
         else:
@@ -414,6 +419,8 @@ class Train:
 
             g_loss.backward()
             if batch >= G_start_from and random.randint(0, skip_G[0]-1) < skip_G[1]:
+                if self.grad_alter_fn is not None:
+                    self.grad_alter_fn(self.model, **self.grad_alter_fn_arg)
                 optimizer_G.step()
 
             # ---------------------

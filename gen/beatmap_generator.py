@@ -26,12 +26,13 @@ class BeatmapGenerator:
         self.inference = inference.Inference(**self.config_dict)
 
     @staticmethod
-    def get_bpm_start_end_time(audio_file_path, audio_info_path=None):
+    def get_bpm_start_end_time(audio_file_path, audio_info_path=None, title=None):
         if audio_info_path is None:
             print('extracting bpm, start_time, end_time...')
             audio_info = gen_util.extract_bpm(audio_file_path)
             audio_info_path = os.path.join(
                 gen_util.DEFAULT_AUDIO_INFO_DIR,
+                title + '.yaml' if title is not None else
                 general_util.change_ext(os.path.basename(audio_file_path), '.yaml')
             )
             audio_info_dict = {

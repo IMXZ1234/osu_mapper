@@ -5,6 +5,7 @@ import numpy as np
 import pickle
 import torch
 from torch.utils import data
+from torch.nn import functional as F
 
 
 class SubseqFeeder(torch.utils.data.Dataset):
@@ -68,10 +69,16 @@ class SubseqFeeder(torch.utils.data.Dataset):
             for i in range(self.n_seq)
         ]
         if self.inference:
-            self.data = [
-                np.concatenate(self.data[i], np.zeros())
-                for i in range(self.n_seq)
-            ]
+            padded_data = []
+            for d in self.data:
+                length, feature_num = d.shape
+                tail = length % self.subseq_len
+                if tail == 0:
+                    padded = d
+                else:
+                    padded = np.pad(d, ((0, self.subseq_len-tail), (0, 0)), mode='reflect')
+                padded_data.append(padded)
+            self.data = padded_data
         # print('self.seq_len')
         # print(self.seq_len)
         self.n_subseq = [

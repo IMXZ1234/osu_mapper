@@ -21,7 +21,11 @@ class CGANGenerator(BeatmapGenerator):
                             osu_out_path_list=None, audio_info_path=None, audio_idx=0, **kwargs):
         # prepare inference cond_data
         print('preparing inference data...')
-        audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path)
+        if meta_list is not None and 'title' in meta_list[0]:
+            title = meta_list[0]['title']
+        else:
+            title = None
+        audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path, title)
         # if multiple beatmaps of different difficulties are to be generated for a single audio,
         # meta should not be None, as `version` must be specified for each beatmap.
         if meta_list is None:

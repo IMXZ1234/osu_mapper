@@ -153,10 +153,11 @@ def label_sample(snap_divisor=8):
 
 
 if __name__ == '__main__':
+    speed_stars_dist()
     # dataset_util.hitobjects_to_label_v2()
     # speed_stars_dist()
-    label_sample(8)
-    label_sample(4)
+    # label_sample(8)
+    # label_sample(4)
     # visualize_osu_audio_hitobjects(
     #     r'C:\Users\asus\AppData\Local\osu!\Songs\112197 Linked Horizon - Jiyuu no Tsubasa (TV Size)\OP2.mp3',
     #     r'C:\Users\asus\AppData\Local\osu!\Songs\112197 Linked Horizon - Jiyuu no Tsubasa (TV Size)\Linked Horizon - Jiyuu no Tsubasa (TV Size) (ritsu-tanaika) [Insane].osu',

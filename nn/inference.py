@@ -1,4 +1,5 @@
 import functools
+import random
 
 import torch
 import numpy as np
@@ -10,6 +11,12 @@ from nn.dataset import collate_fn
 
 class Inference:
     def __init__(self, pred_arg, model_arg, weights_path, data_arg=None, **kwargs):
+
+        if 'random_seed' in kwargs:
+            seed = kwargs['random_seed']
+            print('set random seed to %d' % seed)
+            random.seed(seed)
+            torch.random.manual_seed(seed)
         # since Inference object may be initialized before dataset,
         # we only keep a copy of data_arg, and postpone initialization of dataloader
         self.data_arg = data_arg
@@ -40,7 +47,11 @@ class Inference:
                     self.noise_size = kwargs['noise_size']
         if isinstance(self.output_device, int):
             self.model.cuda(self.output_device)
-        self.model.eval()
+        if 'model_eval_mode' not in kwargs or kwargs['model_eval_mode']:
+            # use eval mode by default
+            self.model.eval()
+        else:
+            print('model use train mode')
 
     def load_data(self,
                   dataset,

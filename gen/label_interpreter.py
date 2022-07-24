@@ -1,6 +1,8 @@
 from datetime import timedelta
 from itertools import chain
 
+import slider
+
 from gen.position_generator import RandomWalkInRectangle
 from util import beatmap_util
 
@@ -203,13 +205,22 @@ class SwitchInterpreter:
 
 class AssembledLabelOutputInterpreter:
     @staticmethod
-    def gen_hitobjects(beatmap, labels, start_time, snap_ms, snap_divisor=8):
+    def gen_hitobjects(beatmap: slider.Beatmap, labels, start_time, snap_ms, snap_divisor=8):
         # save some space about the border as circles have radius
         pos_gen = RandomWalkInRectangle(30, 482, 30, 354)
         pos_gen.move_to_random_pos()
         pos_gen.set_walk_dist_range(50, 150)
 
-        ms_per_beat = 60000 / beatmap.bpm_min()
+        ms_per_beat = beatmap.timing_points[0].ms_per_beat
+        print('ms_per_beat')
+        print(ms_per_beat)
+        print('ms_per_beat / snap_divisor')
+        print(ms_per_beat / snap_divisor)
+        print('snap_ms')
+        print(snap_ms)
+        snap_ms = ms_per_beat / snap_divisor
+        print('snap_ms')
+        print(snap_ms)
         pos = 0
         while pos < len(labels):
             label = labels[pos]

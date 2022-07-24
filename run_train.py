@@ -1506,7 +1506,7 @@ def train_cganv4(setting_name):
         scheduler_arg = {
             'scheduler_type': ['StepLR', 'StepLR'],
             'params': [
-                {'step_size': 128, 'gamma': 0.3},
+                {'step_size': 16, 'gamma': 0.3},
                 {'step_size': 128, 'gamma': 0.1},
             ]
         }
@@ -1543,7 +1543,7 @@ def train_cganv4(setting_name):
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
         output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
                       'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
-                      'model_save_step': 16}
+                      'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False}
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
@@ -1552,7 +1552,10 @@ def train_cganv4(setting_name):
                        'output_device': 0,
                        'train_type': 'gan',
                        'num_classes': num_classes,
+                       'random_seed': random_seed,
                        'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': 'util.net_util.grad_clipping',
+                       'grad_alter_fn_arg': {'theta': 10},
                        'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
                        'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
                        }, f)

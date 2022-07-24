@@ -33,4 +33,6 @@ noise_size:
   - 1
   - 384
   - 3
-weights_path: ./resources/result/cganv4/0.1/1/model_0_epoch_15.pt
+weights_path: ./resources/result/cganv4/0.1/1/model_0_epoch_63.pt
+model_eval_mode: false
+random_seed: 101
