@@ -19,4 +19,5 @@ from . import (
     cganv3,
     cganv4,
     cganv3_pe,
+    seqganv1,
 )
