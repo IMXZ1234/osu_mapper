@@ -1,7 +1,7 @@
 fit_dataset: true
 fit_dataset_arg:
   dataset_type: preprocess.dataset.rnnv3_nolabel_dataset.RNNDataset
-  save_dir: ./resources/data/fit/inference/rnnv3
+  save_dir: ./resources/data/fit/inference/rnnv3_nolabel
   audio_mel: 4
   label_num: 3
   snap_divisor: 8

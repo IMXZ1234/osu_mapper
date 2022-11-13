@@ -191,19 +191,10 @@ def default_collate_inference(sample_list):
     batch = [[], []]
     for sample_data in sample_list:
         # sample_data = [data, label]
-        data, label, index = sample_data
+        data, index = sample_data
         batch[0].append(torch.tensor(data, dtype=torch.float))
-        array_label = np.array(label)
-        if array_label.dtype == int:
-            # classification label
-            tensor_label = torch.tensor(array_label, dtype=torch.long)
-        else:
-            # regression label
-            tensor_label = torch.tensor(array_label, dtype=torch.float)
-        batch[1].append(tensor_label)
-        batch[2].append(index)
+        batch[1].append(index)
     batch[0] = torch.stack(batch[0])
-    batch[1] = torch.stack(batch[1])
     return batch
 
 

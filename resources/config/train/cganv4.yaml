@@ -21,6 +21,9 @@ data_arg:
     random_seed: 404
     subseq_len: 384
     use_random_iter: true
+grad_alter_fn: util.net_util.grad_clipping
+grad_alter_fn_arg:
+  theta: 10
 loss_arg:
   loss_type:
   - CrossEntropy
@@ -53,14 +56,15 @@ optimizer_arg:
 output_arg:
   log_dir: ./resources/result/cganv4/0.1/%d
   model_save_dir: ./resources/result/cganv4/0.1/%d
-  model_save_step: 16
+  model_save_step: 8
 output_device: 0
 pred_arg:
   pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
 scheduler_arg:
   params:
   - gamma: 0.3
-    step_size: 128
+    step_size: 16
   - gamma: 0.1
     step_size: 128
   scheduler_type:

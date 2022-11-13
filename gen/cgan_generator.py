@@ -21,7 +21,11 @@ class CGANGenerator(BeatmapGenerator):
                             osu_out_path_list=None, audio_info_path=None, audio_idx=0, **kwargs):
         # prepare inference cond_data
         print('preparing inference data...')
-        audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path)
+        if meta_list is not None and 'title' in meta_list[0]:
+            title = meta_list[0]['title']
+        else:
+            title = None
+        audio_info = BeatmapGenerator.get_bpm_start_end_time(audio_file_path, audio_info_path, title)
         # if multiple beatmaps of different difficulties are to be generated for a single audio,
         # meta should not be None, as `version` must be specified for each beatmap.
         if meta_list is None:
@@ -39,12 +43,12 @@ class CGANGenerator(BeatmapGenerator):
         )
 
         # same audio for all beatmaps in beatmapset
-        self.data_preparer.dataset.prepare_from_raw(audio_file_path, beatmap_list, save=True)
+        self.data_preparer.dataset.prepare_inference(audio_file_path, beatmap_list, save=True)
 
         # run inference and get beatmapset_label for each audio
         print('running inference...')
         # into batch of size 1 to conform to the model input format
-        beatmapset_label = self.inference.run_inference()
+        beatmapset_label = self.inference.run_inference_gan()
         print(beatmapset_label)
         beatmapset_label_div = self.inference.data_iter.dataset.sample_div_pos
         # although all beatmaps in beatmapset share same audio,

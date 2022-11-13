@@ -1,6 +1,8 @@
 from datetime import timedelta
 from itertools import chain
 
+import slider
+
 from gen.position_generator import RandomWalkInRectangle
 from util import beatmap_util
 
@@ -203,26 +205,33 @@ class SwitchInterpreter:
 
 class AssembledLabelOutputInterpreter:
     @staticmethod
-    def gen_hitobjects(beatmap, labels, start_time, snap_ms, snap_divisor=8):
+    def gen_hitobjects(beatmap: slider.Beatmap, labels, start_time, snap_ms, snap_divisor=8):
         # save some space about the border as circles have radius
         pos_gen = RandomWalkInRectangle(30, 482, 30, 354)
         pos_gen.move_to_random_pos()
         pos_gen.set_walk_dist_range(50, 150)
 
-        ms_per_beat = 60000 / beatmap.bpm_min()
-        end_time = 0
+        ms_per_beat = beatmap.timing_points[0].ms_per_beat
+        print('ms_per_beat')
+        print(ms_per_beat)
+        print('ms_per_beat / snap_divisor')
+        print(ms_per_beat / snap_divisor)
+        print('snap_ms')
+        print(snap_ms)
+        snap_ms = ms_per_beat / snap_divisor
+        print('snap_ms')
+        print(snap_ms)
         pos = 0
         while pos < len(labels):
             label = labels[pos]
             # print('pos, period, label')
             # print(pos, period, label)
             time = start_time + pos * snap_ms
-            if time <= end_time:
-                continue
             if label == 1:
                 # circles, period == 1
                 x, y = pos_gen.next_pos()
                 beatmap_util.add_circle(beatmap, (x, y), time)
+                pos += 1
                 # print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
             elif label == 2:
                 start_pos = pos
@@ -232,12 +241,15 @@ class AssembledLabelOutputInterpreter:
                 num_beats = max(0.5, (pos-start_pos) / snap_divisor)
                 # if num_beats == 0:
                 #     continue
-                pos_gen.set_walk_dist_range(140*num_beats, 140*num_beats)
                 pos_list = [pos_gen.next_pos()]
+                pos_gen.set_walk_dist_range(140*num_beats, 140*num_beats)
+                pos_list.append(pos_gen.next_pos())
                 pos_gen.set_walk_dist_range(50, 150)
 
                 ho_slider = beatmap_util.add_slider(
                     beatmap, 'L', pos_list, time, num_beats, ms_per_beat
                 )
-                # print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
+                print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
                 end_time = ho_slider.end_time // timedelta(milliseconds=1)
+            else:
+                pos += 1

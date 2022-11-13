@@ -1,7 +1,9 @@
 import functools
+import random
 
 import torch
 import numpy as np
+from torch.autograd import Variable
 
 from util.general_util import dynamic_import, recursive_wrap_data, recursive_to_cpu
 from nn.dataset import collate_fn
@@ -9,6 +11,12 @@ from nn.dataset import collate_fn
 
 class Inference:
     def __init__(self, pred_arg, model_arg, weights_path, data_arg=None, **kwargs):
+
+        if 'random_seed' in kwargs:
+            seed = kwargs['random_seed']
+            print('set random seed to %d' % seed)
+            random.seed(seed)
+            torch.random.manual_seed(seed)
         # since Inference object may be initialized before dataset,
         # we only keep a copy of data_arg, and postpone initialization of dataloader
         self.data_arg = data_arg
@@ -17,6 +25,9 @@ class Inference:
         self.model = self.load_model(**model_arg)
         self.weights_path = weights_path
         model_state_dict = torch.load(self.weights_path)
+        # if kwargs['train_type'] == 'gan':
+        #     # only load generator
+        #     model_state_dict = model_state_dict[0]
         self.model.load_state_dict(model_state_dict)
         if 'collate_fn' in kwargs:
             self.collate_fn = dynamic_import(kwargs['collate_fn'])
@@ -30,9 +41,17 @@ class Inference:
             self.output_device = kwargs['output_device']
         else:
             self.output_device = 'cpu'
+        if 'train_type' in kwargs:
+            if kwargs['train_type'] == 'gan':
+                if 'noise_size' in kwargs:
+                    self.noise_size = kwargs['noise_size']
         if isinstance(self.output_device, int):
             self.model.cuda(self.output_device)
-        self.model.eval()
+        if 'model_eval_mode' not in kwargs or kwargs['model_eval_mode']:
+            # use eval mode by default
+            self.model.eval()
+        else:
+            print('model use train mode')
 
     def load_data(self,
                   dataset,
@@ -52,6 +71,8 @@ class Inference:
     def load_pred(self, pred_type, **kwargs):
         if pred_type is None or pred_type == 'argmax':
             pred = functools.partial(torch.argmax, dim=1)
+        elif pred_type == 'no_pred':
+            pred = lambda x: x
         else:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
@@ -75,6 +96,28 @@ class Inference:
         for batch, (data, index) in enumerate(self.data_iter):
             data = recursive_wrap_data(data, self.output_device)
             output = self.model(data)
+            epoch_output_list.append(recursive_to_cpu(output))
+        # print(epoch_output_list)
+        epoch_output_list = self.output_collate_fn(epoch_output_list)
+        label = self.pred(epoch_output_list)
+        return label.numpy()
+
+    def run_inference_gan(self):
+        """
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            if self.noise_size is not None:
+                noise = Variable(torch.randn(self.noise_size).cuda(self.output_device), requires_grad=False)
+                output = self.model(noise, data)[0]
+            else:
+                output = self.model(data)[0]
             epoch_output_list.append(recursive_to_cpu(output))
         # print(epoch_output_list)
         epoch_output_list = self.output_collate_fn(epoch_output_list)

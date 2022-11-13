@@ -78,8 +78,10 @@ class CGANDataset(fit_dataset.FitDataset):
     def preprocess_audio(self, audio_path, beatmap):
         # to 1 channel
         preprocessor = MelPreprocessor(**self.preprocess_arg)
-        path_to = r'./resources/cond_data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
-        path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        # path_to = r'./resources/cond_data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        # path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to = r'./resources/cond_data/temp/%s' % (beatmap.title + 'pkl')
+        path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' %  (beatmap.title + 'pkl')
         print('path_to')
         print(path_to)
         if not os.path.exists(path_to):

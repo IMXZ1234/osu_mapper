@@ -33,6 +33,7 @@ def assemble(circle_label_prob, slider_label_prob, circle_itv=2, slider_itv=4):
         print('nan in circle_label_prob before prob2to3!')
         print(circle_label_prob)
         print(slider_label_prob)
+        input()
     device = circle_label_prob.device
     circle_pred = torch.argmax(circle_label_prob, dim=-1)
     slider_pred = torch.argmax(slider_label_prob, dim=-1)
@@ -42,6 +43,7 @@ def assemble(circle_label_prob, slider_label_prob, circle_itv=2, slider_itv=4):
         print('nan in circle_label_prob after prob2to3!')
         print(circle_label_prob)
         print(slider_label_prob)
+        input()
     total_len = circle_pred.shape[1] * circle_itv
     # print('total_len')
     # print(total_len)
@@ -101,6 +103,7 @@ def assemble(circle_label_prob, slider_label_prob, circle_itv=2, slider_itv=4):
         print('nan in circle_label_prob before assemble!')
         print(circle_label_prob)
         print(slider_label_prob)
+        input()
     # print('after')
     # print(torch.argmax(all_sample_revised[0], dim=-1))
     # print(all_sample_revised[0])
@@ -108,6 +111,7 @@ def assemble(circle_label_prob, slider_label_prob, circle_itv=2, slider_itv=4):
     if torch.any(torch.isnan(gen_output)):
         print('nan in gen_output after assemble!')
         print(gen_output)
+        input()
     return gen_output
 
 
@@ -218,13 +222,14 @@ class Generator(nn.Module):
         self.main_in_channels = noise_in_channels + self.ext_out_channels
 
         self.model = nn.Sequential(
-            *conv_block(self.main_in_channels, self.num_classes * 16, kernel_size=7, normalize=False),
+            *conv_block(self.main_in_channels, self.num_classes * 16, kernel_size=7),
             # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
             # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
             *conv_block(self.num_classes * 16, self.num_classes * 4, kernel_size=3),
             # *conv_block(self.num_classes * 4, self.num_classes * 4, kernel_size=3),
             nn.Flatten(),
             nn.Linear(self.num_classes * 4 * self.output_len, self.num_classes * 4 * self.output_len),
+            nn.Dropout(0.4),
             nn.LeakyReLU(0.2, inplace=True),
         )
         self.circle_classifier = nn.Sequential(
@@ -236,26 +241,52 @@ class Generator(nn.Module):
 
     def forward(self, noise, cond_data):
         # print('in G')
-        # print('cond_data.shape')
-        # print(cond_data.shape)
+        if torch.any(torch.isnan(cond_data)):
+            print('nan in cond_data!')
+            print(cond_data)
+            input()
         # print('noise.shape')
         # print(noise.shape)
         # Concatenate label embedding and image to produce input
         cond_data = self.ext(cond_data)
+        if torch.any(torch.isnan(cond_data)):
+            print('nan in after ext cond_data!')
+            print(cond_data)
+            input()
         noise = noise.transpose(1, 2)
         # print('cond_data.shape')
         # print(cond_data.shape)
         # print('noise.shape')
         # print(noise.shape)
         gen_input = torch.cat((cond_data, noise), dim=1)
+        # print('gen_input')
+        # print(gen_input)
+        if torch.any(torch.isnan(gen_input)):
+            print('nan in gen_input!')
+            print(cond_data)
+            print(gen_input)
+            input()
 
-        gen_input = pos_encode(self.output_len, self.main_in_channels, cond_data.device) + gen_input
+        pe = pos_encode(self.output_len, self.main_in_channels, cond_data.device)
+        if torch.any(torch.isnan(pe)):
+            print('nan in pe!')
+            print(pe)
+            input()
+
+        gen_input = pe + gen_input
 
         # N, num_classes, num_snaps -> N, num_snaps, num_classes
         # gen_output = self.model(gen_input).transpose(1, 2)
         # N * num_classes * num_snaps -> N, num_snaps, num_classes
         # gen_output = self.model(gen_input).reshape([-1, self.output_len, self.num_classes])
         gen_output = self.model(gen_input)
+
+        if torch.any(torch.isnan(gen_output)):
+            print('nan in self.model(gen_input)!')
+            print(gen_input)
+            print(gen_output)
+            input()
+
         circle_label_prob = self.circle_classifier(gen_output).reshape(
             [-1, self.output_len // self.circle_itv, self.num_classes])
         slider_label_prob = self.slider_classifier(gen_output).reshape(
@@ -268,17 +299,20 @@ class Generator(nn.Module):
         if torch.any(torch.isnan(gen_output)):
             print('nan in gen_output before soh!')
             print(gen_output)
+            input()
         # print('soh')
         soh = tools.smooth_one_hot(gen_output, lambda_=0.1, dim=-1)
         if torch.any(torch.isnan(soh)):
             print('nan in soh before to_hard!')
             print(soh)
+            input()
         # print(soh[0])
         # gen_output = torch.nn.functional.gumbel_softmax(gen_output, dim=-1, hard=True)
         gen_output = tools.to_hard(soh, dim=-1)
         if torch.any(torch.isnan(gen_output)):
             print('nan in gen_output after to_hard!')
             print(gen_output)
+            input()
         # N, num_snaps, num_classes
         # print(gen_output.shape)
         # print(gen_output[0])

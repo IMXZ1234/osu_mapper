@@ -80,8 +80,8 @@ class RNNDataset(fit_dataset.FitDataset):
     def preprocess_audio(self, audio_path, beatmap):
         # to 1 channel
         preprocessor = MelPreprocessor(**self.preprocess_arg)
-        path_to = r'./resources/cond_data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
-        path_to_snap_offset = r'./resources/cond_data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to = r'./resources/data/temp/%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
+        path_to_snap_offset = r'./resources/data/temp/snap_offset_%s' % general_util.change_ext(os.path.basename(audio_path), 'pkl')
         print('path_to')
         print(path_to)
         if not os.path.exists(path_to):
@@ -267,17 +267,51 @@ class RNNDataset(fit_dataset.FitDataset):
         sample_data_list = np.stack(sample_data_list)
         return sample_data_list, np.asarray(beatmap_label)
 
-    def prepare_from_raw(self, audio_path, beatmap_list, save=True):
-        self.items = [[], []]
-        data, label = self.items
+    def prepare_record_inference(self, audio_data, beatmap, first_ho_snap):
+        """
+        prepare sample cond_data from records in db
+        sample cond_data will include last true label as feature
+        """
+        # to 1 channel
+        audio_data = np.mean(audio_data, axis=0)
+        # print('crop_start_time %d' % crop_start_time)
+        try:
+            speed_stars = beatmap.speed_stars()
+        except Exception:
+            print('use overall_difficulty as speed_stars in inference')
+            speed_stars = beatmap.overall_difficulty
+        assert isinstance(beatmap, slider.Beatmap)
+        start_snap = max(first_ho_snap, self.half_audio_snap)
+        end_snap = (audio_data.shape[1] - start_snap * self.snap_mel - self.half_audio_mel) // self.snap_mel + start_snap
+        start_mel = start_snap * self.snap_mel - self.half_audio_mel
+        end_mel = end_snap * self.snap_mel + self.half_audio_mel
+        audio_data = audio_data / np.max(audio_data)
+        audio_data = audio_data[:, start_mel:end_mel]
+
+        total_snaps = end_snap - start_snap + 1
+
+        sample_data_list = []
+        for sample_idx in range(total_snaps):
+            start_mel = sample_idx * self.audio_mel
+            feature = self.make_feature(
+                audio_data[:, start_mel:start_mel + self.audio_mel],
+                speed_stars,
+                beatmap.bpm_min(),
+            )
+            sample_data_list.append(feature)
+        sample_data_list = np.stack(sample_data_list)
+        return sample_data_list
+
+    def prepare_inference(self, audio_path, beatmap_list, save=True):
+        self.items = [[]]
         for beatmap in beatmap_list:
             audio_data, snap_offset = self.preprocess_audio(audio_path, beatmap)
-            audio_data = audio_data.numpy()
-            sample_data, sample_label = self.prepare_record(
+            # audio_data, _ = self.trim_audio_data(audio_data, snap_offset)
+            # audio_data = audio_data.numpy()
+            sample_data = self.prepare_record_inference(
                 audio_data, beatmap, snap_offset
             )
-            data.append(sample_data)
-            label.append(sample_label)
+            self.items[0].append(sample_data)
         if save:
             self.save_raw()
 
