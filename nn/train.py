@@ -739,7 +739,7 @@ class TrainSeqGAN(Train):
         # GENERATOR MLE TRAINING
         print('Starting Generator MLE Training...')
         gen_optimizer = optim.Adam(gen.parameters(), lr=1e-2)
-        self.train_generator_MLE(gen, gen_optimizer, None, oracle_samples, MLE_TRAIN_EPOCHS)
+        self.train_generator_MLE()
 
         # torch.save(gen.state_dict(), pretrained_gen_path)
         # gen.load_state_dict(torch.load(pretrained_gen_path))
@@ -747,7 +747,7 @@ class TrainSeqGAN(Train):
         # PRETRAIN DISCRIMINATOR
         print('\nStarting Discriminator Training...')
         dis_optimizer = optim.Adagrad(dis.parameters())
-        self.train_discriminator(dis, dis_optimizer, oracle_samples, gen, oracle_sample, DIS_PRETRAIN_EPOCHS, 3)
+        self.train_discriminator()
 
         # torch.save(dis.state_dict(), pretrained_dis_path)
         # dis.load_state_dict(torch.load(pretrained_dis_path))
@@ -883,11 +883,6 @@ class TrainSeqGAN(Train):
 
                     total_loss += loss.data.item()
                     total_acc += torch.sum((out>0.5)==(target>0.5)).data.item()
-
-                    if (i / BATCH_SIZE) % ceil(ceil(2 * POS_NEG_SAMPLES / float(
-                            BATCH_SIZE)) / 10.) == 0:  # roughly every 10% of an epoch
-                        print('.', end='')
-                        sys.stdout.flush()
 
                 total_loss /= math.ceil(2 * POS_NEG_SAMPLES / float(BATCH_SIZE))
                 total_acc /= float(2 * POS_NEG_SAMPLES)
