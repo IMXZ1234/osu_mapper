@@ -9,7 +9,8 @@ from gen.mlpv2_generator import MLPv2Generator
 from gen.rnnv1_generator_test import RNNv1Generator
 # from gen.rnnv3_generator import RNNGenerator
 # from gen.rnnv4_generator import RNNGenerator
-from gen.cgan_generator import CGANGenerator
+# from gen.cgan_generator import CGANGenerator
+from gen.seqganv1_generator import SeqGANv1Generator
 # from gen.rnnv3_generator_test import RNNGenerator
 
 from util import general_util
@@ -38,7 +39,7 @@ def load_meta(meta_filename, save_dir=DEFAULT_META_DIR):
 
 
 if __name__ == '__main__':
-    generator = CGANGenerator(
+    generator = SeqGANv1Generator(
         r'./resources/config/inference/cganv4.yaml',
         r'./resources/config/prepare_data/inference/rnnv3_nolabel_data.yaml',
     )

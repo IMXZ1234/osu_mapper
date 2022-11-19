@@ -38,12 +38,12 @@ model_arg:
   params:
   - cond_data_feature_dim: 514
     embedding_dim: 256
-    hidden_dim: 256
+    hidden_dim: 512
     vocab_size: 3
   - cond_data_feature_dim: 514
     dropout: 0.2
     embedding_dim: 256
-    hidden_dim: 256
+    hidden_dim: 512
     vocab_size: 3
 num_classes: 3
 optimizer_arg:
@@ -51,11 +51,11 @@ optimizer_arg:
   - Adam
   - Adam
   params:
-  - lr: 0.1
-  - lr: 0.1
+  - lr: 0.01
+  - lr: 0.01
 output_arg:
-  log_dir: ./resources/result/seqganv1/0.1/%d
-  model_save_dir: ./resources/result/seqganv1/0.1/%d
+  log_dir: ./resources/result/seqganv1/0.01/%d
+  model_save_dir: ./resources/result/seqganv1/0.01/%d
   model_save_step: 8
 output_device: 0
 pred_arg:

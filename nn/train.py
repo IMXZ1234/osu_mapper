@@ -3,7 +3,7 @@ import logging
 import math
 import os
 import pickle
-import threading
+import sys
 import copy
 import random
 
@@ -683,22 +683,21 @@ class TrainGANPretrain(TrainGAN):
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
-            print(real_gen_output)
+            # print(real_gen_output)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
 
             optimizer_G.zero_grad()
-            loss = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
+            loss, h_gen = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
             loss.backward()
             optimizer_G.step()
 
             total_loss += loss.data.item()
 
         print('gen.sample(5)')
-        print(gen.sample(cond_data))
+        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
         # each loss in a batch is loss per sample
-        total_loss = total_loss / len(self.train_iter) / batch_size
-
+        total_loss = total_loss / len(self.train_iter.dataset)
         # # sample from generator and compute oracle NLL
         # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
         #                                            start_letter=START_LETTER, gpu=CUDA)
@@ -718,15 +717,18 @@ class TrainGANPretrain(TrainGAN):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
 
-            fake = gen.sample(cond_data)
-            rewards = dis.batchClassify(fake)
+            fake, h_gen = gen.sample(cond_data)
+            rewards, h_dis_fake = dis.batchClassify(cond_data, fake)
 
             optimizer_G.zero_grad()
-            pg_loss = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            pg_loss, h_dis_real = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             pg_loss.backward()
             optimizer_G.step()
+
+        print('gen.sample(5)')
+        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
 
     def train_discriminator(self):
         """
@@ -744,7 +746,7 @@ class TrainGANPretrain(TrainGAN):
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
-            fake = gen.sample(cond_data)
+            fake, h_gen = gen.sample(cond_data)
 
             optimizer_D.zero_grad()
             # fake
@@ -752,7 +754,7 @@ class TrainGANPretrain(TrainGAN):
             loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
             total_acc += torch.sum(out < 0.5).data.item()
             # real
-            out = discriminator.batchClassify(cond_data, real_gen_output)
+            out, h_dis = discriminator.batchClassify(cond_data, real_gen_output)
             loss += loss_D(out, torch.ones(batch_size, device=cond_data.device))
             total_acc += torch.sum(out > 0.5).data.item()
 
@@ -761,8 +763,8 @@ class TrainGANPretrain(TrainGAN):
 
             total_loss += loss.data.item()
 
-        total_loss = total_loss / len(self.train_iter) / batch_size
-        total_acc = total_acc / 2 / len(self.train_iter) / batch_size
+        total_loss = total_loss / len(self.train_iter.dataset)
+        total_acc = total_acc / len(self.train_iter.dataset) / 2
 
         print(' average_loss = %.4f, train_acc = %.4f' % (
             total_loss, total_acc))

@@ -7,4 +7,5 @@ from . import (
     rnnv3_generator,
     rnnv3_generator_test,
     cgan_generator,
+    seqganv1_generator,
 )
