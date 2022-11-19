@@ -132,6 +132,7 @@ class MelPreprocessor(OsuAudioFilePreprocessor):
         self.beat_feature_frames = beat_feature_frames
         self.snap_offset = snap_offset
 
+        # perform n_fft point fft, same number of time domain points are used
         self.n_fft = n_fft
         self.win_length = win_length
         self.hop_length = hop_length

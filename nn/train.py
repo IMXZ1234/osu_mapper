@@ -152,6 +152,8 @@ class Train:
                 model = self.model[model_index]
             if optimizer_type == 'SGD':
                 optimizer = torch.optim.SGD(model.parameters(), **kwargs)
+            elif optimizer_type == 'Adam':
+                optimizer = torch.optim.Adam(model.parameters(), **kwargs)
             else:
                 optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
         return optimizer
@@ -207,6 +209,10 @@ class Train:
         else:
             if loss_type == 'MSE':
                 loss = nn.MSELoss(**kwargs)
+            elif loss_type == 'BCELoss':
+                loss = nn.BCELoss(**kwargs)
+            elif loss_type == 'NLLLoss':
+                loss = nn.NLLLoss(**kwargs)
             elif loss_type == 'CrossEntropy':
                 if 'weight' in kwargs and kwargs['weight'] is not None:
                     kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
@@ -621,275 +627,151 @@ class TrainGAN(Train):
 
     def eval_epoch(self, epoch):
         pass
-        # epoch_g_loss_list = []
-        # epoch_d_loss_list = []
-        # epoch_label_list = []
-        # epoch_gen_output_list = []
-        # epoch_d_output = []
-        # epoch_d_real = []
-        # optimizer_G, optimizer_D = self.optimizer
-        # loss_G, loss_D = self.loss
-        # generator, discriminator = self.model
-        # for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.test_iter)):
-        #     cond_data = recursive_wrap_data(cond_data, self.output_device)
-        #     real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-        #     real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
-        #
-        #     batch_size = cond_data.shape[0]
-        #     # Adversarial ground truths
-        #     valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-        #     fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-        #     # -----------------
-        #     #  Train Generator
-        #     # -----------------
-        #     # Sample noise and cond_data as generator input
-        #     noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
-        #     # Generate a batch of images
-        #     gen_output, ext_cond_data = generator(noise, cond_data)
-        #     if self.use_ext_cond_data:
-        #         cond_data_D = ext_cond_data.detach()
-        #     else:
-        #         cond_data_D = cond_data
-        #     epoch_gen_output_list.append(recursive_to_cpu(gen_output))
-        #
-        #     # Loss measures generator's ability to fool the discriminator
-        #     validity = discriminator(gen_output, cond_data_D)
-        #
-        #     g_loss = loss_G(validity, valid)
-        #     epoch_g_loss_list.append(g_loss.item())
-        #     # ---------------------
-        #     #  Train Discriminator
-        #     # ---------------------
-        #     # Loss for real images
-        #     validity_real = discriminator(real_gen_output_as_input, cond_data_D)
-        #     d_real_loss = loss_D(validity_real, valid)
-        #
-        #     # Loss for fake images
-        #     validity_fake = discriminator(gen_output.detach(), cond_data_D)
-        #     d_fake_loss = loss_D(validity_fake, fake)
-        #
-        #     # Total discriminator loss
-        #     d_loss = (d_real_loss + d_fake_loss) / 2
-        #     epoch_d_loss_list.append(d_loss.item())
-        #
-        #     epoch_label_list.append(recursive_to_cpu(real_gen_output))
-        #
-        #     epoch_d_output.append(validity_real)
-        #     epoch_d_output.append(validity_fake)
-        #     epoch_d_real.append(valid)
-        #     epoch_d_real.append(fake)
-        # epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
-        #
-        # self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
-        # self.writer.add_scalar('mean_eval_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
-        # self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
-        # self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
-        #
-        # self.logger.debug('\tmean eval d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
-        # self.writer.add_scalar('mean_eval_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
-        # self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
-        # self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
-        #
-        # if self.task_type == 'classification':
-        #     epoch_pred_list = self.pred(epoch_gen_output_list)
-        #     # print('epoch_pred_list')
-        #     # print(epoch_pred_list)
-        #     # print('epoch_label_list')
-        #     # print(epoch_label_list)
-        #     epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
-        #     self.train_pred_list.append(epoch_pred_list)
-        #     self.logger.debug('\ttest accuracy: {}'.format(epoch_acc))
-        #     self.writer.add_scalar('test_accuracy', epoch_acc, epoch)
-        #     self.train_accuracy_list.append(epoch_acc)
-        #     self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
-        #     epoch_d_output = torch.cat(epoch_d_output)
-        #     epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
-        #     epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
-        #     self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
-        #     self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
-        #
-        # epoch_properties = dict()
-        # epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
-        #
-        # self.save_epoch_properties(epoch_properties, epoch, False)
 
 
-class TrainSeqGAN(Train):
+class TrainGANPretrain(TrainGAN):
     def run_train(self):
         self.init_train_state()
         control_dict = {'save_model_next_epoch': False}
         with open(self.control_file_path, 'w') as f:
             yaml.dump(control_dict, f)
-        oracle_samples = torch.load(oracle_samples_path).type(torch.LongTensor)
-        print(oracle_samples[0])
-        # a new oracle can be generated by passing oracle_init=True in the generator constructor
-        # samples for the new oracle can be generated using helpers.batchwise_sample()
-
-        gen = generator.Generator(GEN_EMBEDDING_DIM, GEN_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
-        dis = discriminator.Discriminator(DIS_EMBEDDING_DIM, DIS_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
-
-        if CUDA:
-            # oracle = oracle.cuda()
-            gen = gen.cuda()
-            dis = dis.cuda()
-            oracle_samples = oracle_samples.cuda()
-
-        oracle_sample = functools.partial(make_data.sample, device=oracle_samples.device)
 
         # GENERATOR MLE TRAINING
         print('Starting Generator MLE Training...')
-        gen_optimizer = optim.Adam(gen.parameters(), lr=1e-2)
-        self.train_generator_MLE()
+        for epoch in range(self.config_dict['train_arg']['generator_pretrain_epoch']):
+            print('epoch %d : ' % (epoch + 1), end='')
+            self.train_generator_MLE()
 
         # torch.save(gen.state_dict(), pretrained_gen_path)
         # gen.load_state_dict(torch.load(pretrained_gen_path))
 
         # PRETRAIN DISCRIMINATOR
         print('\nStarting Discriminator Training...')
-        dis_optimizer = optim.Adagrad(dis.parameters())
-        self.train_discriminator()
+        for epoch in range(self.config_dict['train_arg']['discriminator_pretrain_epoch']):
+            print('epoch %d : ' % (epoch + 1), end='')
+            self.train_discriminator()
 
         # torch.save(dis.state_dict(), pretrained_dis_path)
         # dis.load_state_dict(torch.load(pretrained_dis_path))
 
         # # ADVERSARIAL TRAINING
-        # print('\nStarting Adversarial Training...')
-        # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
-        #                                            start_letter=START_LETTER, gpu=CUDA)
-        # print('\nInitial Oracle Sample Loss : %.4f' % oracle_loss)
+        print('\nStarting Adversarial Training...')
 
-        for epoch in range(ADV_TRAIN_EPOCHS):
+        for epoch in range(self.epoch):
             print('\n--------\nEPOCH %d\n--------' % (epoch + 1))
             # TRAIN GENERATOR
             print('\nAdversarial Training Generator : ', end='')
-            sys.stdout.flush()
-            self.train_generator_PG(gen, gen_optimizer, None, dis, 1)
-
-            print('gen.sample(5)')
-            print(gen.sample(5))
+            self.train_generator_PG()
 
             # TRAIN DISCRIMINATOR
             print('\nAdversarial Training Discriminator : ')
-            self.train_discriminator(dis, dis_optimizer, oracle_samples, gen, oracle_sample, 1, 3)
-
-        torch.save(gen.state_dict(), trained_gen_path)
-        # Generator MLE pretrain
-        for epoch in range(self.start_epoch, self.epoch):
-            if isinstance(self.model, (list, tuple)):
-                for model in self.model:
-                    model.train()
-            else:
-                self.model.train()
-            self.train_epoch(epoch)
-            if (epoch + 1) % self.eval_step == 0:
-                with torch.no_grad():
-                    if isinstance(self.model, (list, tuple)):
-                        for model in self.model:
-                            model.eval()
-                    else:
-                        self.model.eval()
-                    self.eval_epoch(epoch)
+            self.train_discriminator()
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch)
+
         self.save_model(-1)
-        self.save_properties()
+        # self.save_properties()
 
     def train_generator_MLE(self):
         """
         Max Likelihood Pretraining for the generator
         """
-        for epoch in range(epochs):
-            print('epoch %d : ' % (epoch + 1), end='')
-            sys.stdout.flush()
-            total_loss = 0
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            print(real_gen_output)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
 
-            for i in range(0, POS_NEG_SAMPLES, BATCH_SIZE):
-                inp, target = helpers.prepare_generator_batch(real_data_samples[i:i + BATCH_SIZE], start_letter=START_LETTER,
-                                                              gpu=CUDA)
-                gen_opt.zero_grad()
-                loss = gen.batchNLLLoss(inp, target)
-                loss.backward()
-                gen_opt.step()
+            optimizer_G.zero_grad()
+            loss = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
+            loss.backward()
+            optimizer_G.step()
 
-                total_loss += loss.data.item()
+            total_loss += loss.data.item()
 
-                if (i / BATCH_SIZE) % ceil(
-                                ceil(POS_NEG_SAMPLES / float(BATCH_SIZE)) / 10.) == 0:  # roughly every 10% of an epoch
-                    print('.', end='')
-                    sys.stdout.flush()
+        print('gen.sample(5)')
+        print(gen.sample(cond_data))
+        # each loss in a batch is loss per sample
+        total_loss = total_loss / len(self.train_iter) / batch_size
 
-            print('gen.sample(5)')
-            print(gen.sample(5))
-            # each loss in a batch is loss per sample
-            total_loss = total_loss / ceil(POS_NEG_SAMPLES / float(BATCH_SIZE)) / MAX_SEQ_LEN
+        # # sample from generator and compute oracle NLL
+        # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
+        #                                            start_letter=START_LETTER, gpu=CUDA)
 
-            # # sample from generator and compute oracle NLL
-            # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
-            #                                            start_letter=START_LETTER, gpu=CUDA)
-
-            print(' average_train_NLL = %.4f' % total_loss)
-            # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
+        print(' average_train_NLL = %.4f' % total_loss)
+        # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
 
     def train_generator_PG(self):
         """
         The generator is trained using policy gradients, using the reward from the discriminator.
         Training is done for num_batches batches.
         """
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, dis = self.model
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
 
-        for batch in range(num_batches):
-            s = gen.sample(BATCH_SIZE*2)        # 64 works best
-            inp, target = helpers.prepare_generator_batch(s, start_letter=START_LETTER, gpu=CUDA)
-            rewards = dis.batchClassify(target)
+            fake = gen.sample(cond_data)
+            rewards = dis.batchClassify(fake)
 
-            gen_opt.zero_grad()
-            pg_loss = gen.batchPGLoss(inp, target, rewards)
+            optimizer_G.zero_grad()
+            pg_loss = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             pg_loss.backward()
-            gen_opt.step()
-
-        # # sample from generator and compute oracle NLL
-        # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
-        #                                                start_letter=START_LETTER, gpu=CUDA)
-        #
-        # print(' oracle_sample_NLL = %.4f' % oracle_loss)
+            optimizer_G.step()
 
     def train_discriminator(self):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
         """
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        total_acc = 0
 
-        # generating a small validation set before training (using oracle and generator)
-        pos_val = oracle_sample(100)
-        neg_val = generator.sample(100)
-        val_inp, val_target = helpers.prepare_discriminator_data(pos_val, neg_val, gpu=CUDA)
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
+            fake = gen.sample(cond_data)
 
-        for d_step in range(d_steps):
-            s = helpers.batchwise_sample(generator, POS_NEG_SAMPLES, BATCH_SIZE)
-            dis_inp, dis_target = helpers.prepare_discriminator_data(real_data_samples, s, gpu=CUDA)
-            for epoch in range(epochs):
-                print('d-step %d epoch %d : ' % (d_step + 1, epoch + 1), end='')
-                sys.stdout.flush()
-                total_loss = 0
-                total_acc = 0
+            optimizer_D.zero_grad()
+            # fake
+            out = discriminator.batchClassify(cond_data, fake)
+            loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out < 0.5).data.item()
+            # real
+            out = discriminator.batchClassify(cond_data, real_gen_output)
+            loss += loss_D(out, torch.ones(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out > 0.5).data.item()
 
-                for i in range(0, 2 * POS_NEG_SAMPLES, BATCH_SIZE):
-                    inp, target = dis_inp[i:i + BATCH_SIZE], dis_target[i:i + BATCH_SIZE]
-                    dis_opt.zero_grad()
-                    out = discriminator.batchClassify(inp)
-                    loss_fn = nn.BCELoss()
-                    loss = loss_fn(out, target)
-                    loss.backward()
-                    dis_opt.step()
+            loss.backward()
+            optimizer_D.step()
 
-                    total_loss += loss.data.item()
-                    total_acc += torch.sum((out>0.5)==(target>0.5)).data.item()
+            total_loss += loss.data.item()
 
-                total_loss /= math.ceil(2 * POS_NEG_SAMPLES / float(BATCH_SIZE))
-                total_acc /= float(2 * POS_NEG_SAMPLES)
+        total_loss = total_loss / len(self.train_iter) / batch_size
+        total_acc = total_acc / 2 / len(self.train_iter) / batch_size
 
-                val_pred = discriminator.batchClassify(val_inp)
-                print(' average_loss = %.4f, train_acc = %.4f, val_acc = %.4f' % (
-                    total_loss, total_acc, torch.sum((val_pred>0.5)==(val_target>0.5)).data.item()/200.))
+        print(' average_loss = %.4f, train_acc = %.4f' % (
+            total_loss, total_acc))
+
+    def eval_discriminator(self):
+        # val_pred = discriminator.batchClassify(val_inp)
+        # print(' average_loss = %.4f, train_acc = %.4f, val_acc = %.4f' % (
+        #     total_loss, total_acc, torch.sum((val_pred>0.5)==(val_target>0.5)).data.item()/200.))
+        pass
 
 
 def init_weights(m):
@@ -930,12 +812,12 @@ def train_with_config(config_path, format_config=False, folds=5):
             formatted_config_dict = get_fold_config(config_dict, fold)
         else:
             formatted_config_dict = config_dict
-        if formatted_config_dict['train_type'] == 'seqgan':
-            train = Train(**formatted_config_dict)
+        if formatted_config_dict['train_type'] == 'gan_with_pretrain':
+            train = TrainGANPretrain(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'gan':
-            train = TrainGAN(**formatted_config_dict)
+            train = TrainGAN(formatted_config_dict)
         else:
-            train = TrainSeqGAN(**formatted_config_dict)
+            train = Train(formatted_config_dict)
         train.run_train()
 
 
