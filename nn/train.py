@@ -720,10 +720,10 @@ class TrainGANPretrain(TrainGAN):
             real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
 
             fake, h_gen = gen.sample(cond_data)
-            rewards, h_dis_fake = dis.batchClassify(cond_data, fake)
+            rewards, h_dis = dis.batchClassify(cond_data, fake)
 
             optimizer_G.zero_grad()
-            pg_loss, h_dis_real = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             pg_loss.backward()
             optimizer_G.step()
 
@@ -750,11 +750,11 @@ class TrainGANPretrain(TrainGAN):
 
             optimizer_D.zero_grad()
             # fake
-            out = discriminator.batchClassify(cond_data, fake)
+            out, h_dis_fake = discriminator.batchClassify(cond_data, fake)
             loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
             total_acc += torch.sum(out < 0.5).data.item()
             # real
-            out, h_dis = discriminator.batchClassify(cond_data, real_gen_output)
+            out, h_dis_real = discriminator.batchClassify(cond_data, real_gen_output)
             loss += loss_D(out, torch.ones(batch_size, device=cond_data.device))
             total_acc += torch.sum(out > 0.5).data.item()
 
