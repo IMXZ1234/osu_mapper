@@ -47,22 +47,22 @@ class Generator(nn.Module):
             - samples: num_samples x seq_len (a sampled sequence in each row)
         """
         num_samples, seq_len, feature_dim = cond_data.shape
-        samples = torch.zeros(num_samples, seq_len).type(torch.LongTensor)
+        samples = torch.zeros([num_samples, seq_len], dtype=torch.long, device=cond_data.device)
 
         if h is None:
             h = self.init_hidden(num_samples, cond_data.device)
-        inp = autograd.Variable(torch.LongTensor([start_letter]*num_samples), device=cond_data.device)
+        inp = autograd.Variable(torch.tensor([start_letter]*num_samples, dtype=torch.long, device=cond_data.device))
 
-        for i in range(self.max_seq_len):
+        for i in range(seq_len):
             out, h = self.forward(cond_data[:, i], inp, h)               # out: num_samples x vocab_size
             out = torch.multinomial(torch.exp(out), 1)  # num_samples x 1 (sampling from each row)
             samples[:, i] = out.view(-1).data
 
             inp = out.view(-1)
 
-        return samples
+        return samples, h
 
-    def batchNLLLoss(self, cond_data, inp, target):
+    def batchNLLLoss(self, cond_data, inp, target, h=None):
         """
         Returns the NLL Loss for predicting target sequence.
 
@@ -79,16 +79,17 @@ class Generator(nn.Module):
         inp = inp.permute(1, 0)           # seq_len x batch_size
         target = target.permute(1, 0)     # seq_len x batch_size
         cond_data = cond_data.permute(1, 0, 2)
-        h = self.init_hidden(batch_size)
+        if h is None:
+            h = self.init_hidden(batch_size, device=cond_data.device)
 
         loss = 0
         for i in range(seq_len):
             out, h = self.forward(cond_data[i], inp[i], h)
             loss += loss_fn(out, target[i])
 
-        return loss     # per batch
+        return loss, h
 
-    def batchPGLoss(self, cond_data, inp, target, reward):
+    def batchPGLoss(self, cond_data, inp, target, reward, h=None):
         """
         Returns a pseudo-loss that gives corresponding policy gradients (on calling .backward()).
         Inspired by the example in http://karpathy.github.io/2016/05/31/rl/
@@ -107,7 +108,8 @@ class Generator(nn.Module):
         inp = inp.permute(1, 0)          # seq_len x batch_size
         target = target.permute(1, 0)    # seq_len x batch_size
         cond_data = cond_data.permute(1, 0, 2)
-        h = self.init_hidden(batch_size, device=cond_data.device)
+        if h is None:
+            h = self.init_hidden(batch_size, device=cond_data.device)
 
         loss = 0
         for i in range(seq_len):
@@ -116,7 +118,7 @@ class Generator(nn.Module):
             for j in range(batch_size):
                 loss += -out[j][target.data[i][j]]*reward[j]     # log(P(y_t|Y_1:Y_{t-1})) * Q
 
-        return loss/batch_size
+        return loss/batch_size, h
 
 
 class Discriminator(nn.Module):
@@ -135,21 +137,21 @@ class Discriminator(nn.Module):
     def init_hidden(self, batch_size, device='cpu'):
         return autograd.Variable(torch.zeros(2*2*1, batch_size, self.hidden_dim, device=device))
 
-    def forward(self, cond_data, inp, hidden):
+    def forward(self, cond_data, inp, h):
         cond_data = cond_data.permute(1, 0, 2)
         # input dim                                                # batch_size x seq_len
         emb = self.embeddings(inp)                               # batch_size x seq_len x embedding_dim
         emb = emb.permute(1, 0, 2)                                 # seq_len x batch_size x embedding_dim
-        _, hidden = self.gru(torch.cat([emb, cond_data], dim=2), hidden)                          # 4 x batch_size x hidden_dim
-        hidden = hidden.permute(1, 0, 2).contiguous()              # batch_size x 4 x hidden_dim
-        out = self.gru2hidden(hidden.view(-1, 4*self.hidden_dim))  # batch_size x 4*hidden_dim
+        _, h = self.gru(torch.cat([emb, cond_data], dim=2), h)                          # 4 x batch_size x hidden_dim
+        h = h.permute(1, 0, 2).contiguous()              # batch_size x 4 x hidden_dim
+        out = self.gru2hidden(h.view(-1, 4 * self.hidden_dim))  # batch_size x 4*hidden_dim
         out = torch.tanh(out)
         out = self.dropout_linear(out)
         out = self.hidden2out(out)                                 # batch_size x 1
         out = torch.sigmoid(out)
-        return out
+        return out, h
 
-    def batchClassify(self, cond_data, inp):
+    def batchClassify(self, cond_data, inp, h=None):
         """
         Classifies a batch of sequences.
 
@@ -160,10 +162,10 @@ class Discriminator(nn.Module):
         Returns: out
             - out: batch_size ([0,1] score)
         """
-
-        h = self.init_hidden(inp.size()[0], device=cond_data.device)
-        out = self.forward(cond_data, inp, h)
-        return out.view(-1)
+        if h is None:
+            h = self.init_hidden(inp.size()[0], device=cond_data.device)
+        out, h = self.forward(cond_data, inp, h)
+        return out.view(-1), h
 
     # def batchBCELoss(self, cond_data, inp, target):
     #     """

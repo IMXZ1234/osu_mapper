@@ -1582,9 +1582,9 @@ def train_seqganv1(setting_name='seqganv1'):
         else:
             num_classes = 3
             weight = None
-    epoch = 64
-    generator_pretrain_epoch = 8
-    discriminator_pretrain_epoch = 8
+    epoch = 256
+    generator_pretrain_epoch = 32
+    discriminator_pretrain_epoch = 32
     scheduler_step_size = 64
 
     snap_feature = 514
@@ -1599,8 +1599,9 @@ def train_seqganv1(setting_name='seqganv1'):
     compressed_channels = 16
 
     embedding_dim = 256
+    hidden_dim = 512
 
-    for lr in [0.1]:
+    for lr in [0.01]:
         print('init lr %s' % str(lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -1608,13 +1609,13 @@ def train_seqganv1(setting_name='seqganv1'):
             'params': [
                 {
                     'embedding_dim': embedding_dim,
-                    'hidden_dim': embedding_dim,
+                    'hidden_dim': hidden_dim,
                     'cond_data_feature_dim': snap_feature,
                     'vocab_size': num_classes,
                 },
                 {
                     'embedding_dim': embedding_dim,
-                    'hidden_dim': embedding_dim,
+                    'hidden_dim': hidden_dim,
                     'cond_data_feature_dim': snap_feature,
                     'vocab_size': num_classes,
                     'dropout': 0.2,

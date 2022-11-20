@@ -139,6 +139,25 @@ class Inference:
         print(label)
         return label.numpy()
 
+    def run_inference_model_sample(self):
+        """
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output, h = self.model.sample(data)
+            epoch_output_list.append(recursive_to_cpu(output))
+        output = torch.cat(epoch_output_list)
+        label = output[0]
+        print('label')
+        print(label)
+        return label.numpy()
+
     def run_inference_sample_rnn(self, data, state):
         """
         Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
