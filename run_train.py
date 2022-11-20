@@ -1582,9 +1582,9 @@ def train_seqganv1(setting_name='seqganv1'):
         else:
             num_classes = 3
             weight = None
-    epoch = 64
-    generator_pretrain_epoch = 8
-    discriminator_pretrain_epoch = 8
+    epoch = 256
+    generator_pretrain_epoch = 32
+    discriminator_pretrain_epoch = 32
     scheduler_step_size = 64
 
     snap_feature = 514
