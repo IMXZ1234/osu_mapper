@@ -29,23 +29,22 @@ np.set_printoptions(suppress=True)
 
 class Train:
     def __init__(self,
-                 model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg, train_arg,
+                 config_dict,
                  task_type='classification',
                  **kwargs):
         self.task_type = task_type
+        self.config_dict = config_dict
+        model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg, train_arg = \
+            config_dict['model_arg'], config_dict['optimizer_arg'], config_dict['scheduler_arg'], config_dict['data_arg'], \
+            config_dict['loss_arg'], config_dict['pred_arg'], config_dict['output_arg'], config_dict['train_arg']
 
-        if 'random_seed' in kwargs:
-            seed = kwargs['random_seed']
-            print('set random seed to %d' % seed)
-            random.seed(seed)
-            torch.random.manual_seed(seed)
-        if 'output_device' in kwargs and kwargs['output_device'] is not None:
-            self.output_device = kwargs['output_device']
+        if 'output_device' in config_dict and config_dict['output_device'] is not None:
+            self.output_device = config_dict['output_device']
         else:
             self.output_device = 'cpu'
 
-        if 'train_type' in kwargs:
-            self.train_type = kwargs['train_type']
+        if 'train_type' in config_dict:
+            self.train_type = config_dict['train_type']
             if self.train_type == 'gan':
                 self.use_ext_cond_data = train_arg['use_ext_cond_data'] if 'use_ext_cond_data' in train_arg else False
                 print(self.use_ext_cond_data)
@@ -54,14 +53,14 @@ class Train:
             self.train_type = 'default'
 
         if self.task_type == 'classification':
-            if 'num_classes' in kwargs and kwargs['num_classes'] is not None:
-                self.num_classes = kwargs['num_classes']
-            if 'cal_acc_func' in kwargs and kwargs['cal_acc_func'] is not None:
-                self.cal_epoch_acc = dynamic_import(kwargs['cal_acc_func'])
+            if 'num_classes' in config_dict and config_dict['num_classes'] is not None:
+                self.num_classes = config_dict['num_classes']
+            if 'cal_acc_func' in config_dict and config_dict['cal_acc_func'] is not None:
+                self.cal_epoch_acc = dynamic_import(config_dict['cal_acc_func'])
             else:
                 self.cal_epoch_acc = default_metrices.cal_acc_func
-            if 'cal_cm_func' in kwargs and kwargs['cal_cm_func'] is not None:
-                self.cal_epoch_cm = dynamic_import(kwargs['cal_cm_func'])
+            if 'cal_cm_func' in config_dict and config_dict['cal_cm_func'] is not None:
+                self.cal_epoch_cm = dynamic_import(config_dict['cal_cm_func'])
             else:
                 self.cal_epoch_cm = default_metrices.cal_cm_func
             self.pred = self.load_pred(**pred_arg)
@@ -70,29 +69,29 @@ class Train:
             self.train_accuracy_list = []
             self.eval_accuracy_list = []
 
-        if 'collate_fn' in kwargs and kwargs['collate_fn'] is not None:
-            self.collate_fn = dynamic_import(kwargs['collate_fn'])
+        if 'collate_fn' in config_dict and config_dict['collate_fn'] is not None:
+            self.collate_fn = dynamic_import(config_dict['collate_fn'])
         else:
             self.collate_fn = None
-        if 'output_collate_fn' in kwargs and kwargs['output_collate_fn'] is not None:
-            self.output_collate_fn = dynamic_import(kwargs['output_collate_fn'])
+        if 'output_collate_fn' in config_dict and config_dict['output_collate_fn'] is not None:
+            self.output_collate_fn = dynamic_import(config_dict['output_collate_fn'])
         else:
             self.output_collate_fn = collate_fn.output_collate_fn
-        if 'grad_alter_fn' in kwargs and kwargs['grad_alter_fn'] is not None:
-            self.grad_alter_fn = dynamic_import(kwargs['grad_alter_fn'])
-            self.grad_alter_fn_arg = kwargs['grad_alter_fn_arg']
+        if 'grad_alter_fn' in config_dict and config_dict['grad_alter_fn'] is not None:
+            self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
+            self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
         else:
             self.grad_alter_fn = None
-        if 'train_extra' in kwargs and kwargs['train_extra'] is not None:
-            self.train_extra = kwargs['train_extra']
+        if 'train_extra' in config_dict and config_dict['train_extra'] is not None:
+            self.train_extra = config_dict['train_extra']
         else:
             self.train_extra = dict()
-        if 'test_extra' in kwargs and kwargs['test_extra'] is not None:
-            self.test_extra = kwargs['test_extra']
+        if 'test_extra' in config_dict and config_dict['test_extra'] is not None:
+            self.test_extra = config_dict['test_extra']
         else:
             self.test_extra = dict()
 
-        self.train_state_dir = kwargs['train_state_dir'] if 'train_state_dir' in kwargs else None
+        self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else None
 
         self.start_epoch = 0
         self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
@@ -153,6 +152,8 @@ class Train:
                 model = self.model[model_index]
             if optimizer_type == 'SGD':
                 optimizer = torch.optim.SGD(model.parameters(), **kwargs)
+            elif optimizer_type == 'Adam':
+                optimizer = torch.optim.Adam(model.parameters(), **kwargs)
             else:
                 optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
         return optimizer
@@ -208,6 +209,10 @@ class Train:
         else:
             if loss_type == 'MSE':
                 loss = nn.MSELoss(**kwargs)
+            elif loss_type == 'BCELoss':
+                loss = nn.BCELoss(**kwargs)
+            elif loss_type == 'NLLLoss':
+                loss = nn.NLLLoss(**kwargs)
             elif loss_type == 'CrossEntropy':
                 if 'weight' in kwargs and kwargs['weight'] is not None:
                     kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
@@ -224,24 +229,6 @@ class Train:
         else:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
-
-    def run_train_thread(self, num_epoch, eval_step):
-        class TrainThread(threading.Thread):
-            def __init__(self, obj, num_epoch, eval_step):
-                self.obj = obj
-                self.num_epoch, self.eval_step = num_epoch, eval_step
-                super().__init__()
-
-            def run(self):
-                self.obj.run_train(self.num_epoch, self.eval_step)
-
-        train_thread = TrainThread(self, num_epoch, eval_step)
-        train_thread.start()
-        while True:
-            if input('save_model?') == 'y':
-                self.save_model_flag = True
-            if not train_thread.is_alive():
-                return
 
     def inspect_control(self, epoch):
         try:
@@ -361,223 +348,6 @@ class Train:
             output = self.model(data, **extra)
         l = self.loss(output, label)
         return output, l, label
-
-    def train_epoch_gan(self, epoch):
-        self.logger.info('epoch %d' % epoch)
-        epoch_g_loss_list = []
-        epoch_d_loss_list = []
-        epoch_label_list = []
-        epoch_gen_output_list = []
-        epoch_d_output = []
-        epoch_d_real = []
-        optimizer_G, optimizer_D = self.optimizer
-        loss_G, loss_D = self.loss
-        generator, discriminator = self.model
-        # skip training discriminator: only do skip_D[1] batches' training for every skip_D[0] batches
-        skip_D = (2, 1)
-        skip_G = (1, 1)
-        G_start_from = 0
-        D_loss_rev_factor = 1
-        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
-            cond_data = recursive_wrap_data(cond_data, self.output_device)
-            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
-            if batch == 28:
-                print('real_gen_output[0]')
-                print(real_gen_output[0])
-
-            batch_size = cond_data.shape[0]
-
-            # Adversarial ground truths
-            valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-            fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-
-            # -----------------
-            #  Train Generator
-            # -----------------
-            optimizer_G.zero_grad()
-
-            # Sample noise and cond_data as generator input
-            noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
-
-            # Generate a batch of images
-            # here is (nearly) one-hot sequence, output of gumbel softmax
-            gen_output, ext_cond_data = generator(noise, cond_data)
-            if batch == 28:
-                print('gen_output[0]')
-                print(torch.argmax(gen_output[0], dim=-1))
-            if self.use_ext_cond_data:
-                cond_data_D = ext_cond_data.detach()
-            else:
-                cond_data_D = cond_data
-            epoch_gen_output_list.append(recursive_to_cpu(gen_output))
-
-            # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, cond_data_D)
-            g_loss = loss_G(validity, valid)
-            epoch_g_loss_list.append(g_loss.item())
-
-            g_loss.backward()
-            if batch >= G_start_from and random.randint(0, skip_G[0]-1) < skip_G[1]:
-                if self.grad_alter_fn is not None:
-                    self.grad_alter_fn(self.model, **self.grad_alter_fn_arg)
-                optimizer_G.step()
-
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-            optimizer_D.zero_grad()
-
-            # Loss for real images
-            validity_real = discriminator(real_gen_output_as_input, cond_data_D)
-            d_real_loss = loss_D(validity_real, valid)
-
-            # Loss for fake images
-            validity_fake = discriminator(gen_output.detach(), cond_data_D)
-            d_fake_loss = loss_D(validity_fake, fake)
-
-            # Total discriminator loss
-            d_loss = (d_real_loss + d_fake_loss) / 2
-            epoch_d_loss_list.append(d_loss.item())
-
-            d_loss = d_loss * D_loss_rev_factor
-            d_loss.backward()
-            if random.randint(0, skip_D[0]-1) < skip_D[1]:
-                optimizer_D.step()
-            epoch_d_output.append(validity_real)
-            epoch_d_output.append(validity_fake)
-            epoch_d_real.append(valid)
-            epoch_d_real.append(fake)
-            epoch_label_list.append(recursive_to_cpu(real_gen_output))
-        epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
-
-        self.logger.debug('\tmean train g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
-        self.writer.add_scalar('mean_train_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
-        self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
-        self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
-
-        self.logger.debug('\tmean train d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
-        self.writer.add_scalar('mean_train_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
-        self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
-        self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
-
-        if self.task_type == 'classification':
-            epoch_pred_list = self.pred(epoch_gen_output_list)
-            # print('epoch_pred_list')
-            # print(epoch_pred_list)
-            # print('epoch_label_list')
-            # print(epoch_label_list)
-            epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
-            self.train_pred_list.append(epoch_pred_list)
-            self.logger.debug('\ttrain accuracy: {}'.format(epoch_acc))
-            self.writer.add_scalar('train_accuracy', epoch_acc, epoch)
-            self.train_accuracy_list.append(epoch_acc)
-            self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
-            epoch_d_output = torch.cat(epoch_d_output)
-            epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
-            epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
-            self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
-            self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
-
-        epoch_properties = dict()
-        epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
-
-        self.save_epoch_properties(epoch_properties, epoch, False)
-        for scheduler in self.scheduler:
-            scheduler.step()
-
-    def eval_epoch_gan(self, epoch):
-        epoch_g_loss_list = []
-        epoch_d_loss_list = []
-        epoch_label_list = []
-        epoch_gen_output_list = []
-        epoch_d_output = []
-        epoch_d_real = []
-        optimizer_G, optimizer_D = self.optimizer
-        loss_G, loss_D = self.loss
-        generator, discriminator = self.model
-        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.test_iter)):
-            cond_data = recursive_wrap_data(cond_data, self.output_device)
-            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
-
-            batch_size = cond_data.shape[0]
-            # Adversarial ground truths
-            valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-            fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
-            # -----------------
-            #  Train Generator
-            # -----------------
-            # Sample noise and cond_data as generator input
-            noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
-            # Generate a batch of images
-            gen_output, ext_cond_data = generator(noise, cond_data)
-            if self.use_ext_cond_data:
-                cond_data_D = ext_cond_data.detach()
-            else:
-                cond_data_D = cond_data
-            epoch_gen_output_list.append(recursive_to_cpu(gen_output))
-
-            # Loss measures generator's ability to fool the discriminator
-            validity = discriminator(gen_output, cond_data_D)
-
-            g_loss = loss_G(validity, valid)
-            epoch_g_loss_list.append(g_loss.item())
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-            # Loss for real images
-            validity_real = discriminator(real_gen_output_as_input, cond_data_D)
-            d_real_loss = loss_D(validity_real, valid)
-
-            # Loss for fake images
-            validity_fake = discriminator(gen_output.detach(), cond_data_D)
-            d_fake_loss = loss_D(validity_fake, fake)
-
-            # Total discriminator loss
-            d_loss = (d_real_loss + d_fake_loss) / 2
-            epoch_d_loss_list.append(d_loss.item())
-
-            epoch_label_list.append(recursive_to_cpu(real_gen_output))
-
-            epoch_d_output.append(validity_real)
-            epoch_d_output.append(validity_fake)
-            epoch_d_real.append(valid)
-            epoch_d_real.append(fake)
-        epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
-
-        self.logger.debug('\tmean eval g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
-        self.writer.add_scalar('mean_eval_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
-        self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
-        self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
-
-        self.logger.debug('\tmean eval d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
-        self.writer.add_scalar('mean_eval_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
-        self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
-        self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
-
-        if self.task_type == 'classification':
-            epoch_pred_list = self.pred(epoch_gen_output_list)
-            # print('epoch_pred_list')
-            # print(epoch_pred_list)
-            # print('epoch_label_list')
-            # print(epoch_label_list)
-            epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
-            self.train_pred_list.append(epoch_pred_list)
-            self.logger.debug('\ttest accuracy: {}'.format(epoch_acc))
-            self.writer.add_scalar('test_accuracy', epoch_acc, epoch)
-            self.train_accuracy_list.append(epoch_acc)
-            self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
-            epoch_d_output = torch.cat(epoch_d_output)
-            epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
-            epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
-            self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
-            self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
-
-        epoch_properties = dict()
-        epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
-
-        self.save_epoch_properties(epoch_properties, epoch, False)
 
     def train_epoch(self, epoch):
         if self.train_type == 'gan':
@@ -732,6 +502,278 @@ class Train:
         return start_epoch
 
 
+class TrainGAN(Train):
+    def train_epoch(self, epoch):
+        self.logger.info('epoch %d' % epoch)
+        epoch_g_loss_list = []
+        epoch_d_loss_list = []
+        epoch_label_list = []
+        epoch_gen_output_list = []
+        epoch_d_output = []
+        epoch_d_real = []
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        generator, discriminator = self.model
+        # skip training discriminator: only do skip_D[1] batches' training for every skip_D[0] batches
+        skip_D = (2, 1)
+        skip_G = (1, 1)
+        G_start_from = 0
+        D_loss_rev_factor = 1
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = F.one_hot(real_gen_output, self.num_classes)
+            if batch == 28:
+                print('real_gen_output[0]')
+                print(real_gen_output[0])
+
+            batch_size = cond_data.shape[0]
+
+            # Adversarial ground truths
+            valid = Variable(torch.ones(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
+            fake = Variable(torch.zeros(batch_size, dtype=torch.long).cuda(self.output_device), requires_grad=False)
+
+            # -----------------
+            #  Train Generator
+            # -----------------
+            optimizer_G.zero_grad()
+
+            # Sample noise and cond_data as generator input
+            noise = Variable(torch.randn(real_gen_output_as_input.shape).cuda(self.output_device), requires_grad=False)
+
+            # Generate a batch of images
+            # here is (nearly) one-hot sequence, output of gumbel softmax
+            gen_output, ext_cond_data = generator(noise, cond_data)
+            if batch == 28:
+                print('gen_output[0]')
+                print(torch.argmax(gen_output[0], dim=-1))
+            if self.use_ext_cond_data:
+                cond_data_D = ext_cond_data.detach()
+            else:
+                cond_data_D = cond_data
+            epoch_gen_output_list.append(recursive_to_cpu(gen_output))
+
+            # Loss measures generator's ability to fool the discriminator
+            validity = discriminator(gen_output, cond_data_D)
+            g_loss = loss_G(validity, valid)
+            epoch_g_loss_list.append(g_loss.item())
+
+            g_loss.backward()
+            if batch >= G_start_from and random.randint(0, skip_G[0]-1) < skip_G[1]:
+                optimizer_G.step()
+
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
+            optimizer_D.zero_grad()
+
+            # Loss for real images
+            validity_real = discriminator(real_gen_output_as_input, cond_data_D)
+            d_real_loss = loss_D(validity_real, valid)
+
+            # Loss for fake images
+            validity_fake = discriminator(gen_output.detach(), cond_data_D)
+            d_fake_loss = loss_D(validity_fake, fake)
+
+            # Total discriminator loss
+            d_loss = (d_real_loss + d_fake_loss) / 2
+            epoch_d_loss_list.append(d_loss.item())
+
+            d_loss = d_loss * D_loss_rev_factor
+            d_loss.backward()
+            if random.randint(0, skip_D[0]-1) < skip_D[1]:
+                optimizer_D.step()
+            epoch_d_output.append(validity_real)
+            epoch_d_output.append(validity_fake)
+            epoch_d_real.append(valid)
+            epoch_d_real.append(fake)
+            epoch_label_list.append(recursive_to_cpu(real_gen_output))
+        epoch_gen_output_list = self.output_collate_fn(epoch_gen_output_list)
+
+        self.logger.debug('\tmean train g loss: {}'.format(np.asarray(epoch_g_loss_list).mean()))
+        self.writer.add_scalar('mean_train_g_loss', np.asarray(epoch_g_loss_list).mean(), epoch)
+        self.writer.add_scalar('g_learning_rate', optimizer_G.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_G.state_dict()['param_groups'][0]['lr'])
+
+        self.logger.debug('\tmean train d loss: {}'.format(np.asarray(epoch_d_loss_list).mean()))
+        self.writer.add_scalar('mean_train_d_loss', np.asarray(epoch_d_loss_list).mean(), epoch)
+        self.writer.add_scalar('d_learning_rate', optimizer_D.state_dict()['param_groups'][0]['lr'], epoch)
+        self.learning_rate_list.append(optimizer_D.state_dict()['param_groups'][0]['lr'])
+
+        if self.task_type == 'classification':
+            epoch_pred_list = self.pred(epoch_gen_output_list)
+            # print('epoch_pred_list')
+            # print(epoch_pred_list)
+            # print('epoch_label_list')
+            # print(epoch_label_list)
+            epoch_acc = self.cal_epoch_acc(epoch_pred_list, epoch_label_list, epoch_gen_output_list)
+            self.train_pred_list.append(epoch_pred_list)
+            self.logger.debug('\ttrain accuracy: {}'.format(epoch_acc))
+            self.writer.add_scalar('train_accuracy', epoch_acc, epoch)
+            self.train_accuracy_list.append(epoch_acc)
+            self.logger.debug('\n' + str(self.cal_epoch_cm(epoch_pred_list, epoch_label_list, epoch_gen_output_list)))
+            epoch_d_output = torch.cat(epoch_d_output)
+            epoch_d_pred = torch.argmax(epoch_d_output, dim=1).cpu().numpy()
+            epoch_d_real = torch.cat(epoch_d_real).cpu().numpy()
+            self.logger.debug(len(np.where(epoch_d_pred == epoch_d_real)[0]) / len(epoch_d_pred))
+            self.logger.debug('\n' + str(metrics_util.get_epoch_confusion(epoch_d_pred, epoch_d_real)))
+
+        epoch_properties = dict()
+        epoch_properties['epoch_gen_output_list'] = epoch_gen_output_list
+
+        self.save_epoch_properties(epoch_properties, epoch, False)
+        for scheduler in self.scheduler:
+            scheduler.step()
+
+    def eval_epoch(self, epoch):
+        pass
+
+
+class TrainGANPretrain(TrainGAN):
+    def run_train(self):
+        self.init_train_state()
+        control_dict = {'save_model_next_epoch': False}
+        with open(self.control_file_path, 'w') as f:
+            yaml.dump(control_dict, f)
+
+        # GENERATOR MLE TRAINING
+        print('Starting Generator MLE Training...')
+        for epoch in range(self.config_dict['train_arg']['generator_pretrain_epoch']):
+            print('epoch %d : ' % (epoch + 1), end='')
+            self.train_generator_MLE()
+
+        # torch.save(gen.state_dict(), pretrained_gen_path)
+        # gen.load_state_dict(torch.load(pretrained_gen_path))
+
+        # PRETRAIN DISCRIMINATOR
+        print('\nStarting Discriminator Training...')
+        for epoch in range(self.config_dict['train_arg']['discriminator_pretrain_epoch']):
+            print('epoch %d : ' % (epoch + 1), end='')
+            self.train_discriminator()
+
+        # torch.save(dis.state_dict(), pretrained_dis_path)
+        # dis.load_state_dict(torch.load(pretrained_dis_path))
+
+        # # ADVERSARIAL TRAINING
+        print('\nStarting Adversarial Training...')
+
+        for epoch in range(self.epoch):
+            print('\n--------\nEPOCH %d\n--------' % (epoch + 1))
+            # TRAIN GENERATOR
+            print('\nAdversarial Training Generator : ', end='')
+            self.train_generator_PG()
+
+            # TRAIN DISCRIMINATOR
+            print('\nAdversarial Training Discriminator : ')
+            self.train_discriminator()
+            if (epoch + 1) % self.model_save_step == 0:
+                self.save_model(epoch)
+
+        self.save_model(-1)
+        # self.save_properties()
+
+    def train_generator_MLE(self):
+        """
+        Max Likelihood Pretraining for the generator
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            print(real_gen_output)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
+
+            optimizer_G.zero_grad()
+            loss = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
+            loss.backward()
+            optimizer_G.step()
+
+            total_loss += loss.data.item()
+
+        print('gen.sample(5)')
+        print(gen.sample(cond_data))
+        # each loss in a batch is loss per sample
+        total_loss = total_loss / len(self.train_iter) / batch_size
+
+        # # sample from generator and compute oracle NLL
+        # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
+        #                                            start_letter=START_LETTER, gpu=CUDA)
+
+        print(' average_train_NLL = %.4f' % total_loss)
+        # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
+
+    def train_generator_PG(self):
+        """
+        The generator is trained using policy gradients, using the reward from the discriminator.
+        Training is done for num_batches batches.
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, dis = self.model
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device), real_gen_output[:, :-1]], dim=1)
+
+            fake = gen.sample(cond_data)
+            rewards = dis.batchClassify(fake)
+
+            optimizer_G.zero_grad()
+            pg_loss = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            pg_loss.backward()
+            optimizer_G.step()
+
+    def train_discriminator(self):
+        """
+        Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
+        Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        total_acc = 0
+
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
+            fake = gen.sample(cond_data)
+
+            optimizer_D.zero_grad()
+            # fake
+            out = discriminator.batchClassify(cond_data, fake)
+            loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out < 0.5).data.item()
+            # real
+            out = discriminator.batchClassify(cond_data, real_gen_output)
+            loss += loss_D(out, torch.ones(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out > 0.5).data.item()
+
+            loss.backward()
+            optimizer_D.step()
+
+            total_loss += loss.data.item()
+
+        total_loss = total_loss / len(self.train_iter) / batch_size
+        total_acc = total_acc / 2 / len(self.train_iter) / batch_size
+
+        print(' average_loss = %.4f, train_acc = %.4f' % (
+            total_loss, total_acc))
+
+    def eval_discriminator(self):
+        # val_pred = discriminator.batchClassify(val_inp)
+        # print(' average_loss = %.4f, train_acc = %.4f, val_acc = %.4f' % (
+        #     total_loss, total_acc, torch.sum((val_pred>0.5)==(val_target>0.5)).data.item()/200.))
+        pass
+
+
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.normal_(m.weight, std=0.01)
@@ -770,7 +812,12 @@ def train_with_config(config_path, format_config=False, folds=5):
             formatted_config_dict = get_fold_config(config_dict, fold)
         else:
             formatted_config_dict = config_dict
-        train = Train(**formatted_config_dict)
+        if formatted_config_dict['train_type'] == 'gan_with_pretrain':
+            train = TrainGANPretrain(formatted_config_dict)
+        elif formatted_config_dict['train_type'] == 'gan':
+            train = TrainGAN(formatted_config_dict)
+        else:
+            train = Train(formatted_config_dict)
         train.run_train()
 
 
