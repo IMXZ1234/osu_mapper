@@ -39,10 +39,7 @@ def load_meta(meta_filename, save_dir=DEFAULT_META_DIR):
 
 
 if __name__ == '__main__':
-    generator = SeqGANv1Generator(
-        r'./resources/config/inference/cganv4.yaml',
-        r'./resources/config/prepare_data/inference/rnnv3_nolabel_data.yaml',
-    )
+    generator = SeqGANv1Generator()
 
     # r"C:\CloudMusic\羊腿腿Y.tui - 遠くの子守の唄 - 《无职转生》第一季part.2 OP之一（翻自 大原ゆい子）.mp3"
     audio_file_path = \

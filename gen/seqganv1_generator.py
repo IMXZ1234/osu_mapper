@@ -8,7 +8,7 @@ from util import beatmap_util
 
 class SeqGANv1Generator(BeatmapGenerator):
     def __init__(self,
-                 inference_config_path='./resources/config/inference/rnnv1_lr0.1.yaml',
+                 inference_config_path='./resources/config/inference/seqganv1.yaml',
                  prepare_data_config_path='./resources/config/prepare_data/inference/rnnv3_nolabel_data.yaml'):
         print('using inference_config_path %s' % inference_config_path)
         print('using prepare_data_config_path %s' % prepare_data_config_path)

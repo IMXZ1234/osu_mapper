@@ -7,18 +7,19 @@ import torch.nn.init as init
 
 class Generator(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, cond_data_feature_dim, vocab_size):
+    def __init__(self, embedding_dim, hidden_dim, cond_data_feature_dim, vocab_size, num_layers=1):
         super(Generator, self).__init__()
         self.hidden_dim = hidden_dim
         self.embedding_dim = embedding_dim
         self.vocab_size = vocab_size
+        self.num_layers = num_layers
 
         self.embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.gru = nn.GRU(embedding_dim + cond_data_feature_dim, hidden_dim)
+        self.gru = nn.GRU(embedding_dim + cond_data_feature_dim, hidden_dim, num_layers=num_layers)
         self.gru2out = nn.Linear(hidden_dim, vocab_size)
 
     def init_hidden(self, batch_size=1, device='cpu'):
-        return autograd.Variable(torch.zeros(1, batch_size, self.hidden_dim, device=device))
+        return autograd.Variable(torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device))
 
     def forward(self, cond_data, inp, hidden):
         """
@@ -123,19 +124,21 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, cond_data_feature_dim, vocab_size, dropout=0.2):
+    def __init__(self, embedding_dim, hidden_dim, cond_data_feature_dim, vocab_size, dropout=0.2, num_layers=2):
         super(Discriminator, self).__init__()
         self.hidden_dim = hidden_dim
         self.embedding_dim = embedding_dim
+        self.num_layers = num_layers
 
         self.embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.gru = nn.GRU(embedding_dim + cond_data_feature_dim, hidden_dim, num_layers=2, bidirectional=True, dropout=dropout)
-        self.gru2hidden = nn.Linear(2*2*hidden_dim, hidden_dim)
+        self.gru = nn.GRU(embedding_dim + cond_data_feature_dim, hidden_dim,
+                          num_layers=num_layers, bidirectional=True, dropout=dropout)
+        self.gru2hidden = nn.Linear(2*self.num_layers*hidden_dim, hidden_dim)
         self.dropout_linear = nn.Dropout(p=dropout)
         self.hidden2out = nn.Linear(hidden_dim, 1)
 
     def init_hidden(self, batch_size, device='cpu'):
-        return autograd.Variable(torch.zeros(2*2*1, batch_size, self.hidden_dim, device=device))
+        return autograd.Variable(torch.zeros(2*self.num_layers, batch_size, self.hidden_dim, device=device))
 
     def forward(self, cond_data, inp, h):
         cond_data = cond_data.permute(1, 0, 2)

@@ -2,7 +2,7 @@ cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
 cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
 collate_fn: nn.dataset.collate_fn.default_collate
 data_arg:
-  batch_size: 6
+  batch_size: 16
   dataset: nn.dataset.subseq_feeder.SubseqFeeder
   drop_last: false
   num_workers: 1
@@ -39,6 +39,7 @@ model_arg:
   - cond_data_feature_dim: 514
     embedding_dim: 256
     hidden_dim: 512
+    num_layers: 2
     vocab_size: 3
   - cond_data_feature_dim: 514
     dropout: 0.2
@@ -71,9 +72,9 @@ scheduler_arg:
   - StepLR
   - StepLR
 train_arg:
-  discriminator_pretrain_epoch: 8
-  epoch: 64
+  discriminator_pretrain_epoch: 64
+  epoch: 256
   eval_step: 1
-  generator_pretrain_epoch: 8
+  generator_pretrain_epoch: 64
   use_ext_cond_data: false
 train_type: gan_with_pretrain

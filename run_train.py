@@ -1583,16 +1583,16 @@ def train_seqganv1(setting_name='seqganv1'):
             num_classes = 3
             weight = None
     epoch = 256
-    generator_pretrain_epoch = 32
-    discriminator_pretrain_epoch = 32
-    scheduler_step_size = 64
+    generator_pretrain_epoch = 64
+    discriminator_pretrain_epoch = 64
+    scheduler_step_size = 256
 
     snap_feature = 514
     snap_divisor = 8
     sample_beats = 48
     sample_snaps = sample_beats * snap_divisor
 
-    batch_size = 6
+    batch_size = 16
 
     subseq_len = sample_beats * snap_divisor
 
@@ -1612,6 +1612,7 @@ def train_seqganv1(setting_name='seqganv1'):
                     'hidden_dim': hidden_dim,
                     'cond_data_feature_dim': snap_feature,
                     'vocab_size': num_classes,
+                    'num_layers': 2,
                 },
                 {
                     'embedding_dim': embedding_dim,

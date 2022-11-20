@@ -152,6 +152,7 @@ class Inference:
             data = recursive_wrap_data(data, self.output_device)
             output, h = self.model.sample(data)
             epoch_output_list.append(recursive_to_cpu(output))
+        print(epoch_output_list)
         output = torch.cat(epoch_output_list)
         label = output[0]
         print('label')
