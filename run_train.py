@@ -1680,7 +1680,139 @@ def train_seqganv1(setting_name='seqganv1'):
                        'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
                        'train_arg': train_arg,
                        'output_device': 0,
-                       'train_type': 'gan_with_pretrain',
+                       'train_type': 'rnngan_with_pretrain',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       # 'grad_alter_fn': 'util.net_util.grad_clipping',
+                       'grad_alter_fn': None,
+                       'grad_alter_fn_arg': {'theta': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_seqganv2(setting_name='seqganv2'):
+    """
+    use slider and circle label
+    """
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 64
+    generator_pretrain_epoch = 16
+    discriminator_pretrain_epoch = 16
+    scheduler_step_size = 256
+
+    snap_feature = 514
+    snap_divisor = 8
+    sample_beats = 48
+    sample_snaps = sample_beats * snap_divisor
+
+    batch_size = 16
+
+    subseq_len = sample_beats * snap_divisor
+
+    compressed_channels = 16
+
+    embedding_dim = 128
+    hidden_dim = 512
+
+    for lr in [0.01]:
+        print('init lr %s' % str(lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.seqganv2.Generator', 'nn.net.seqganv2.Discriminator'],
+            'params': [
+                {
+                    'embedding_dim': embedding_dim,
+                    'hidden_dim': hidden_dim,
+                    'cond_data_feature_dim': snap_feature,
+                    'vocab_size': num_classes,
+                    'seq_len': snap_divisor,
+                    'num_layers': 2,
+                },
+                {
+                    'embedding_dim': embedding_dim,
+                    'hidden_dim': hidden_dim,
+                    'cond_data_feature_dim': snap_feature,
+                    'vocab_size': num_classes,
+                    'seq_len': snap_divisor,
+                    'dropout': 0.2,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['Adam', 'Adam'],
+            'params': [
+                {'lr': lr,},
+                {'lr': lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['StepLR', 'StepLR'],
+            'params': [
+                {'step_size': 16, 'gamma': 0.3},
+                {'step_size': 128, 'gamma': 0.1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_feeder.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'data_path': r'./resources/data/fit/rnnv3_nolabel/train%d_data.pkl',
+                         'label_path': r'./resources/data/fit/rnnv3_nolabel/train%d_label.pkl',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'binary': False,
+                         },
+                    'test_dataset_arg':
+                        {'data_path': r'./resources/data/fit/rnnv3_nolabel/test%d_data.pkl',
+                         'label_path': r'./resources/data/fit/rnnv3_nolabel/test%d_label.pkl',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'binary': False,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 1,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'NLLLoss',
+            'BCELoss',
+        ],
+            'params': [
+                {},
+                {},
+            ]
+        }
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+                      'model_save_step': 8}
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'generator_pretrain_epoch': generator_pretrain_epoch,
+                     'discriminator_pretrain_epoch': discriminator_pretrain_epoch,}
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       'train_type': 'rnngan_with_pretrain',
                        'num_classes': num_classes,
                        'random_seed': random_seed,
                        'collate_fn': 'nn.dataset.collate_fn.default_collate',
@@ -1694,7 +1826,7 @@ def train_seqganv1(setting_name='seqganv1'):
 
 
 if __name__ == '__main__':
-    train_seqganv1()
+    train_seqganv2()
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

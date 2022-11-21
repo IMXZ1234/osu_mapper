@@ -629,7 +629,7 @@ class TrainGAN(Train):
         pass
 
 
-class TrainGANPretrain(TrainGAN):
+class TrainRNNGANPretrain(TrainGAN):
     def run_train(self):
         self.init_train_state()
         control_dict = {'save_model_next_epoch': False}
@@ -641,6 +641,7 @@ class TrainGANPretrain(TrainGAN):
         for epoch in range(self.config_dict['train_arg']['generator_pretrain_epoch']):
             print('epoch %d : ' % (epoch + 1), end='')
             self.train_generator_MLE()
+        self.save_model(-16)
 
         # torch.save(gen.state_dict(), pretrained_gen_path)
         # gen.load_state_dict(torch.load(pretrained_gen_path))
@@ -814,8 +815,8 @@ def train_with_config(config_path, format_config=False, folds=5):
             formatted_config_dict = get_fold_config(config_dict, fold)
         else:
             formatted_config_dict = config_dict
-        if formatted_config_dict['train_type'] == 'gan_with_pretrain':
-            train = TrainGANPretrain(formatted_config_dict)
+        if formatted_config_dict['train_type'] == 'rnngan_with_pretrain':
+            train = TrainRNNGANPretrain(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'gan':
             train = TrainGAN(formatted_config_dict)
         else:
