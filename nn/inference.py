@@ -151,13 +151,13 @@ class Inference:
         for batch, (data, index) in enumerate(self.data_iter):
             data = recursive_wrap_data(data, self.output_device)
             output, h = self.model.sample(data)
-            epoch_output_list.append(recursive_to_cpu(output))
+            epoch_output_list.append(output.reshape([-1]))
         print(epoch_output_list)
-        output = torch.cat(epoch_output_list)
-        label = output[0]
-        print('label')
-        print(label)
-        return label.numpy()
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        output = recursive_to_cpu(output)
+        print('output')
+        print(output)
+        return [label.numpy() for label in output]
 
     def run_inference_sample_rnn(self, data, state):
         """

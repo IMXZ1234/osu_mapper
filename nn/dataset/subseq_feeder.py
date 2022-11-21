@@ -86,8 +86,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
             for i in range(self.n_seq)
         ]
         self.sample_div_pos = list(itertools.accumulate([0] + self.n_subseq))
-        # print('self.n_subseq')
-        # print(self.n_subseq)
+        print('self.sample_div_pos')
+        print(self.sample_div_pos)
 
         subseq_data_list = []
         for seq_data, n_subseq in zip(self.data, self.n_subseq):
@@ -121,3 +121,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
             return self.data[index], index
         else:
             return self.data[index], self.label[index], index
+
+    def cat_sample_labels(self, labels):
+        all_sample_labels = []
+        for i in range(len(self.sample_div_pos) - 1):
+            all_sample_labels.append(torch.cat(labels[self.sample_div_pos[i]: self.sample_div_pos[i+1]]))
+        return all_sample_labels

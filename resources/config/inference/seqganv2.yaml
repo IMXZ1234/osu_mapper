@@ -13,21 +13,24 @@ data_arg:
     label_path: ./resources/data/fit/inference/rnnv3_nolabel/label.pkl
     random_seed: 404
     subseq_len: 384
-    use_random_iter: false
     inference: true
+    use_random_iter: false
 model_arg:
-  model_type: nn.net.seqganv1.Generator
+  model_type: nn.net.seqganv2.Generator
   cond_data_feature_dim: 514
-  embedding_dim: 256
+  embedding_dim: 128
   hidden_dim: 512
+  num_layers: 2
+  seq_len: 8
   vocab_size: 3
 num_classes: 3
 output_arg:
-  log_dir: ./resources/result/seqganv1/0.1/%d
-  model_save_dir: ./resources/result/seqganv1/0.1/%d
+  log_dir: ./resources/result/seqganv2/0.01/%d
+  model_save_dir: ./resources/result/seqganv2/0.01/%d
   model_save_step: 8
 output_device: 0
 pred_arg:
   pred_type: nn.pred.multi_pred.MultiPred
 random_seed: 404
-weights_path: ./resources/result/seqganv1/0.01/1/model_0_epoch_-1.pt
+train_type: rnngan_with_pretrain
+weights_path: ./resources/pretrained_models/model_0_epoch_-16.pt

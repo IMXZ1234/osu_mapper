@@ -10,7 +10,8 @@ from gen.rnnv1_generator_test import RNNv1Generator
 # from gen.rnnv3_generator import RNNGenerator
 # from gen.rnnv4_generator import RNNGenerator
 # from gen.cgan_generator import CGANGenerator
-from gen.seqganv1_generator import SeqGANv1Generator
+# from gen.seqganv1_generator import SeqGANv1Generator
+from gen.seqganv2_generator import SeqGANv2Generator
 # from gen.rnnv3_generator_test import RNNGenerator
 
 from util import general_util
@@ -39,7 +40,7 @@ def load_meta(meta_filename, save_dir=DEFAULT_META_DIR):
 
 
 if __name__ == '__main__':
-    generator = SeqGANv1Generator()
+    generator = SeqGANv2Generator()
 
     # r"C:\CloudMusic\羊腿腿Y.tui - 遠くの子守の唄 - 《无职转生》第一季part.2 OP之一（翻自 大原ゆい子）.mp3"
     audio_file_path = \
