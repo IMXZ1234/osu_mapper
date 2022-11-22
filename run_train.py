@@ -1713,8 +1713,8 @@ def train_seqganv2(setting_name='seqganv2'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 16
-    discriminator_pretrain_epoch = 16
+    generator_pretrain_epoch = 2
+    discriminator_pretrain_epoch = 4
     scheduler_step_size = 256
 
     snap_feature = 514
@@ -1826,7 +1826,7 @@ def train_seqganv2(setting_name='seqganv2'):
 
 
 if __name__ == '__main__':
-    train_seqganv2()
+    train_seqganv2(setting_name='seqganv2_test_dis')
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

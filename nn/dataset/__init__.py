@@ -13,5 +13,5 @@ from . import (
     rnn_feeder,
     rnnv2_feeder,
     subseq_feeder,
-    seqganv1_feeder,
+    seqgan_feeder,
 )

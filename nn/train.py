@@ -777,6 +777,105 @@ class TrainRNNGANPretrain(TrainGAN):
         pass
 
 
+class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
+    def train_generator_MLE(self):
+        """
+        Max Likelihood Pretraining for the generator
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            # print(real_gen_output)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
+
+            optimizer_G.zero_grad()
+            loss, h_gen = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
+            loss.backward()
+            optimizer_G.step()
+
+            total_loss += loss.data.item()
+
+        print('gen.sample(5)')
+        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+        # each loss in a batch is loss per sample
+        total_loss = total_loss / len(self.train_iter.dataset)
+        # # sample from generator and compute oracle NLL
+        # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
+        #                                            start_letter=START_LETTER, gpu=CUDA)
+
+        print(' average_train_NLL = %.4f' % total_loss)
+        # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
+
+    def train_generator_PG(self):
+        """
+        The generator is trained using policy gradients, using the reward from the discriminator.
+        Training is done for num_batches batches.
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        # loss_G, loss_D = self.loss
+        gen, dis = self.model
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
+
+            fake, h_gen = gen.sample(cond_data)
+            rewards, h_dis = dis.batchClassify(cond_data, fake)
+
+            optimizer_G.zero_grad()
+            pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            pg_loss.backward()
+            optimizer_G.step()
+
+        print('gen.sample(5)')
+        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+
+    def train_discriminator(self):
+        """
+        Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
+        Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
+        """
+        optimizer_G, optimizer_D = self.optimizer
+        loss_G, loss_D = self.loss
+        gen, discriminator = self.model
+        total_loss = 0
+        total_acc = 0
+
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
+            fake, h_gen = gen.sample(cond_data)
+
+            optimizer_D.zero_grad()
+            # fake
+            out, h_dis_fake = discriminator.batchClassify(cond_data, fake)
+            loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out < 0.5).data.item()
+            # real
+            out, h_dis_real = discriminator.batchClassify(cond_data, real_gen_output)
+            loss += loss_D(out, torch.ones(batch_size, device=cond_data.device))
+            total_acc += torch.sum(out > 0.5).data.item()
+
+            loss.backward()
+            optimizer_D.step()
+
+            total_loss += loss.data.item()
+
+        total_loss = total_loss / len(self.train_iter.dataset)
+        total_acc = total_acc / len(self.train_iter.dataset) / 2
+
+        print(' average_loss = %.4f, train_acc = %.4f' % (
+            total_loss, total_acc))
+
+
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.normal_(m.weight, std=0.01)
@@ -819,6 +918,8 @@ def train_with_config(config_path, format_config=False, folds=5):
             train = TrainRNNGANPretrain(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'gan':
             train = TrainGAN(formatted_config_dict)
+        elif formatted_config_dict['train_type'] == 'rnngan_with_pretrain_inherit':
+            train = TrainRNNGANPretrainInherit(formatted_config_dict)
         else:
             train = Train(formatted_config_dict)
         train.run_train()

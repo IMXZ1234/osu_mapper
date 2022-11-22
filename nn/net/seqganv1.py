@@ -114,7 +114,6 @@ class Generator(nn.Module):
         loss = 0
         for i in range(seq_len):
             out, h = self.forward(cond_data[i], inp[i], h)
-            # TODO: should h be detached from graph (.detach())?
             for j in range(batch_size):
                 loss += -out[j][target.data[i][j]]*reward[j]     # log(P(y_t|Y_1:Y_{t-1})) * Q
 
