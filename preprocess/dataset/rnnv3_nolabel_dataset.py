@@ -14,7 +14,7 @@ from preprocess.dataset import fit_dataset
 
 
 class RNNDataset(fit_dataset.FitDataset):
-    DEFAULT_SAVE_DIR = r'./resources/cond_data/fit/rnn/'
+    DEFAULT_SAVE_DIR = r'./resources/data/fit/rnn/'
     """
     A snap may be of label 0-5:
     We predict label of every snap with features:

@@ -78,15 +78,15 @@ class Generator(nn.Module):
 
         Inputs: inp, target
             - cond_data: batch_size x seq_len x feature_dim
-            - inp: batch_size x seq_len
+            - inp: type_label + pos: batch_size x seq_len x 2(x, y), batch_size x seq_len
             - target: batch_size x seq_len
 
             inp should be target with <s> (start letter) prepended
         """
-
         loss_fn = nn.NLLLoss()
-        batch_size, seq_len = inp.size()
-        inp = inp.permute(1, 0)           # seq_len x batch_size
+        type_label, pos = inp
+        batch_size, seq_len = type_label.size()
+        type_label = type_label.permute(1, 0)           # seq_len x batch_size
         target = target.permute(1, 0)     # seq_len x batch_size
         cond_data = cond_data.permute(1, 0, 2)
         if h is None:
@@ -95,10 +95,41 @@ class Generator(nn.Module):
         loss = 0
         for i in range(seq_len):
             pos = torch.ones([batch_size], dtype=torch.long, device=cond_data.device) * i
-            out, h = self.forward(cond_data[i], inp[i], h, pos)
+            out, h = self.forward(cond_data[i], type_label[i], h, pos)
             loss += loss_fn(out, target[i])
 
         return loss, h
+
+    def batchPGLoss(self, cond_data, inp, target, reward, h=None):
+        """
+        Returns a pseudo-loss that gives corresponding policy gradients (on calling .backward()).
+        Inspired by the example in http://karpathy.github.io/2016/05/31/rl/
+
+        Inputs: inp, target
+            - cond_data: batch_size x seq_len x feature_dim
+            - inp: batch_size x seq_len
+            - target: batch_size x seq_len
+            - reward: batch_size (discriminator reward for each sentence, applied to each token of the corresponding
+                      sentence)
+
+            inp should be target with <s> (start letter) prepended
+        """
+
+        batch_size, seq_len = inp.size()
+        inp = inp.permute(1, 0)          # seq_len x batch_size
+        target = target.permute(1, 0)    # seq_len x batch_size
+        cond_data = cond_data.permute(1, 0, 2)
+        if h is None:
+            h = self.init_hidden(batch_size, device=cond_data.device)
+
+        loss = 0
+        for i in range(seq_len):
+            pos = torch.ones([batch_size], dtype=torch.long, device=cond_data.device) * i
+            out, h = self.forward(cond_data[i], inp[i], h, pos)
+            for j in range(batch_size):
+                loss += -out[j][target.data[i][j]]*reward[j]     # log(P(y_t|Y_1:Y_{t-1})) * Q
+
+        return loss/batch_size, h
 
     def batchPGLoss(self, cond_data, inp, target, reward, h=None):
         """

@@ -415,7 +415,7 @@ def add_slider(beatmap,
                edge_sounds=[0, 0],
                edge_sets=['0:0', '0:0'],
                addition='0:0:0:0:',
-               slider_multiplier=1.4,
+               slider_multiplier=1,
                slider_tick_rate=0.1,
                ):
     """

@@ -63,6 +63,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
         #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
+        print('len(self.data[0])')
+        print(len(self.data[0]))
 
         self.seq_len = [
             self.data[i].shape[0]
