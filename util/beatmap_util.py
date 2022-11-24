@@ -393,8 +393,7 @@ def slider_snap_pos(ho: slider.beatmap.Slider, snap_num):
     """
     include start pos
     """
-    assert snap_num % ho.repeat == 0
-    per_repeat_snap_t = np.linspace(0, 1, snap_num // ho.repeat + 1)
+    per_repeat_snap_t = np.arange(0, 1, snap_num // ho.repeat + 1)
     per_repeat_pos = [ho.curve(t) for t in per_repeat_snap_t]
     all_pos = [ho.position]
     for i in range(ho.repeat):

@@ -222,7 +222,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
     if align_to_snaps is not None:
         if total_snap_num % align_to_snaps != 0:
             total_snap_num = (total_snap_num // align_to_snaps + 1) * align_to_snaps
-    label = np.zeros([len(total_snap_num), 3], dtype=float)
+    label = np.zeros([total_snap_num, 3], dtype=float)
     last_end_pos = None
     last_end_snap_idx = None
     for ho in beatmap_util.hit_objects(beatmap,
@@ -232,6 +232,10 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                                        include_holdnote):
         start_pos = ho.position
         snap_idx = (ho.time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
+        if abs(round(snap_idx) - snap_idx) > 0.1:
+            print('snap_idx error too large!')
+            print(snap_idx)
+        snap_idx = round(snap_idx)
         if last_end_pos is not None:
             # linear interpolate between two object to simulate cursor trajectory during the interval
             for i in range(last_end_snap_idx + 1, snap_idx):
@@ -239,10 +243,6 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                 last_end_pos_array = np.array([last_end_pos.x, last_end_pos.y])
                 snap_pos_diff = (last_end_pos_array - start_pos_array) / (snap_idx - last_end_snap_idx)
                 label[i, 1:] = snap_pos_diff * (i - last_end_snap_idx) + last_end_pos_array
-        if abs(round(snap_idx) - snap_idx) > 0.1:
-            print('snap_idx error too large!')
-            print(snap_idx)
-        snap_idx = round(snap_idx)
         if snap_idx >= total_snap_num:
             print('snap index %d out of bound! total snap num %d' % (snap_idx, total_snap_num))
             snap_idx = total_snap_num - 1
@@ -270,6 +270,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
             pos_list = [start_pos for _ in range(snap_idx, end_snap_idx + 1)]
         if not multi_label:
             label_value = CIRCLE_LABEL
+        assert len(pos_list) == end_snap_idx - snap_idx + 1
         # if abs(round(end_snap_idx) - end_snap_idx) > 0.2:
         #     print('end_snap_idx error to large!')
         #     print(end_snap_idx)
@@ -279,12 +280,12 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
         # print(end_snap_idx)
         if multibeat_label_fmt == 0:
             for i in range(snap_idx, end_snap_idx + 1):
-                pos = pos_list[i]
+                pos = pos_list[i - snap_idx]
                 label[i] = np.array([label_value, pos.x, pos.y])
         else:
             # only set label at beginning of beats
             for i in range(snap_idx, end_snap_idx + 1, ho_base_itv[label_value]):
-                pos = pos_list[i]
+                pos = pos_list[i - snap_idx]
                 label[i] = np.array([label_value, pos.x, pos.y])
         last_end_pos = pos_list[-1]
         last_end_snap_idx = snap_idx

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from vis import vis_model
 
 import torch
@@ -42,7 +44,32 @@ def view_model():
 
 
 if __name__ == '__main__':
-    view_model()
+    beatmap = slider.Beatmap.from_path(
+        r'D:\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
+    )
+    aligned_ms = beatmap_util.get_first_hit_object_time_milliseconds(
+        beatmap,
+        True,
+        True,
+        True,
+        True,
+    )
+    ho = beatmap.hit_objects()[0]
+    snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+    time, end_time = ho.time / timedelta(milliseconds=1), ho.end_time / timedelta(milliseconds=1)
+    snap_idx = round((time - aligned_ms) / snap_ms)
+    end_snap_idx = round((end_time - aligned_ms) / snap_ms)
+    print(end_time - time)
+    print(ho.length)
+    print(ho.repeat)
+    print(beatmap.slider_multiplier)
+    print(snap_ms)
+    print(snap_idx)
+    print(end_snap_idx)
+    print(ho)
+    print(ho.curve)
+    print(beatmap_util.slider_snap_pos(ho, end_snap_idx - snap_idx))
+    # view_model()
     # with open(
     #         r'C:\Users\asus\coding\python\osu_mapper\resources\result\cganv3_pe_sample_beats_48\0.1\1\trainepoch_gen_output_list_epoch24.pkl',
     #         'rb'
