@@ -13,7 +13,7 @@ from util import beatmap_util, general_util
 from preprocess.dataset import fit_dataset
 
 
-class RNNDataset(fit_dataset.FitDataset):
+class LabelPosDataset(fit_dataset.FitDataset):
     DEFAULT_SAVE_DIR = r'./resources/data/fit/rnn/'
     """
     A snap may be of label 0-5:
@@ -107,94 +107,6 @@ class RNNDataset(fit_dataset.FitDataset):
         audio_data, warmup_audio_data = audio_data[:, start_mel:end_mel], audio_data[:, :start_mel]
         return audio_data, warmup_audio_data
 
-    class RNNSampleDataGenerator:
-        def __init__(self, dataset, audio_path, beatmap):
-            self.dataset = dataset
-            audio_data, snap_offset = dataset.preprocess_audio(audio_path, beatmap)
-            self.audio_data, self.warmup_audio_data = dataset.trim_audio_data(audio_data, snap_offset)
-            self.beatmap = beatmap
-            self.sample_num = self.audio_data.shape[1] // self.dataset.audio_mel
-            self.warmup_sample_num = self.warmup_audio_data.shape[1] // self.dataset.audio_mel
-            self.status = [0, self.sample_num, self.audio_data]
-            self.warmup_status = [0, self.warmup_sample_num, self.warmup_audio_data]
-
-        def __len__(self):
-            return self.sample_num
-
-        def warmup_len(self):
-            return self.warmup_sample_num
-
-        def get_next_sample_feature(self, last_label, warmup=False):
-            if warmup:
-                status = self.warmup_status
-            else:
-                status = self.status
-            if status[0] >= status[1]:
-                return None
-            start_mel = status[0] * self.dataset.audio_mel
-            feature = self.dataset.make_feature(
-                status[2][:, start_mel:start_mel+self.dataset.audio_mel],
-                self.beatmap.speed_stars(),
-                self.beatmap.bpm_min(),
-            ).reshape([1, -1])
-            # print('feature.shape')
-            # print(feature.shape)
-            status[0] = status[0] + 1
-            # print(feature)
-            return feature
-
-    def get_sample_data_generator(self, audio_path, beatmap):
-        return self.RNNSampleDataGenerator(self, audio_path, beatmap)
-
-    def get_db_sample_data_generator(self, db_path, audio_dir):
-        return self.RNNDBSampleDataGenerator(self, db_path, audio_dir)
-
-    class RNNDBSampleDataGenerator(RNNSampleDataGenerator):
-        def __init__(self, dataset, db_path, audio_dir):
-            self.dataset = dataset
-            self.db = db.OsuDB(db_path)
-
-            record = self.db.get_record(0, 'FILTERED')
-            first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
-            beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
-            audio_path = os.path.join(audio_dir, record[db.OsuDB.AUDIOFILENAME_POS])
-            with open(audio_path, 'rb') as f:
-                audio_data = pickle.load(f)
-            audio_data = audio_data.numpy()
-
-            self.audio_data, self.audio_label = dataset.prepare_record(audio_data, beatmap, first_ho_snap)
-            # skip the last feature which is last label(true label)
-            # self.audio_data = self.audio_data[:, :-(self.dataset.label_num+2)]
-            self.warmup_audio_data = None
-            self.beatmap = beatmap
-            self.sample_num = self.audio_data.shape[0]
-            self.warmup_sample_num = 0
-            self.status = [0, self.sample_num, self.audio_data]
-            self.warmup_status = [0, self.warmup_sample_num, self.warmup_audio_data]
-
-        def get_audio_label(self):
-            return self.audio_label
-
-        def get_next_sample_feature(self, last_label, warmup=False):
-            if warmup:
-                status = self.warmup_status
-            else:
-                status = self.status
-            if status[0] >= status[1]:
-                return None
-            # feature = self.dataset.make_feature(
-            #     status[2][status[0]],
-            #     last_label,
-            #     self.beatmap.speed_stars(),
-            #     self.beatmap.bpm_min(),
-            # ).reshape([1, -1])
-            feature = status[2][status[0]].reshape([1, -1])
-            # print('feature.shape')
-            # print(feature.shape)
-            status[0] = status[0] + 1
-            # print(feature)
-            return feature
-
     def prepare_record(self, audio_data, beatmap, first_ho_snap):
         """
         prepare sample cond_data from records in db
@@ -213,13 +125,7 @@ class RNNDataset(fit_dataset.FitDataset):
         first_ho_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
         # one label per snap
         # three classes by default
-        if self.switch_label:
-            get_label_func = dataset_util.hitobjects_to_label_switch
-        elif self.density_label:
-            get_label_func = dataset_util.hitobjects_to_density_v2
-        else:
-            get_label_func = dataset_util.hitobjects_to_label_v2
-        beatmap_label = get_label_func(
+        beatmap_label = dataset_util.hitobjects_to_label_with_pos(
             beatmap,
             first_ho_time,
             snap_ms,
@@ -228,8 +134,6 @@ class RNNDataset(fit_dataset.FitDataset):
             multi_label=(self.label_num != 2),
             multibeat_label_fmt=self.multibeat_label_fmt,
         )
-        if self.density_label:
-            beatmap_label = beatmap_label + np.random.randn(beatmap_label.shape)
         start_snap = max(first_ho_snap, self.half_audio_snap)
         end_snap = min(
             # snaps_from_start_label

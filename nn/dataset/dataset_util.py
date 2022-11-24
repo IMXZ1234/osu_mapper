@@ -2,6 +2,7 @@ from datetime import timedelta
 import numpy as np
 
 import slider
+from slider import Position
 
 from util import beatmap_util
 
@@ -172,6 +173,121 @@ def hitobjects_to_label_v2(beatmap: slider.Beatmap, aligned_ms=None, snap_ms=Non
             # only set label at beginning of beats
             for i in range(snap_idx, end_snap_idx + 1, ho_base_itv[label_value]):
                 label[i] = label_value
+    return label
+
+
+def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_ms=None, total_snap_num=None,
+                           align_to_snaps=None, multi_label=False, multibeat_label_fmt=0,
+                           include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):
+    """
+    if multi_label:
+    0: no hit object
+    1: circle
+    2: slider
+    3: spinner
+    4: hold note
+
+    if not multi_label:
+    0: no hit object
+    1: has hit object
+    """
+    if snap_ms is None:
+        # if not specified, we calculate using original snap_divisor
+        snap_ms = beatmap_util.get_snap_milliseconds(beatmap, beatmap.beat_divisor)
+    snap_divisor = beatmap_util.get_snap_divisor_by_snap_ms(beatmap, snap_ms)
+    ho_base_itv = [
+        0,
+        1,
+        snap_divisor,  # sliders will always last for more than one beat, and covers at least 2 beats
+        snap_divisor,  # spinners will always last for more than one beat, and covers at least 2 beats
+        snap_divisor,  # holdnotes will always last for more than one beat, and covers at least 2 beats
+    ]
+    if aligned_ms is None:
+        aligned_ms = beatmap_util.get_first_hit_object_time_milliseconds(
+            beatmap,
+            include_circle,
+            include_slider,
+            include_spinner,
+            include_holdnote
+        )
+    if total_snap_num is None:
+        total_snap_num = round((beatmap_util.get_last_hit_object_time_milliseconds(
+            beatmap,
+            include_circle,
+            include_slider,
+            include_spinner,
+            include_holdnote
+        ) - aligned_ms) / snap_ms) + 1
+    # print(audio_start_time_offset)
+    if align_to_snaps is not None:
+        if total_snap_num % align_to_snaps != 0:
+            total_snap_num = (total_snap_num // align_to_snaps + 1) * align_to_snaps
+    label = np.zeros([len(total_snap_num), 3], dtype=float)
+    last_end_pos = None
+    last_end_snap_idx = None
+    for ho in beatmap_util.hit_objects(beatmap,
+                                       include_circle,
+                                       include_slider,
+                                       include_spinner,
+                                       include_holdnote):
+        start_pos = ho.position
+        snap_idx = (ho.time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
+        if last_end_pos is not None:
+            # linear interpolate between two object to simulate cursor trajectory during the interval
+            for i in range(last_end_snap_idx + 1, snap_idx):
+                start_pos_array = np.array([start_pos.x, start_pos.y])
+                last_end_pos_array = np.array([last_end_pos.x, last_end_pos.y])
+                snap_pos_diff = (last_end_pos_array - start_pos_array) / (snap_idx - last_end_snap_idx)
+                label[i, 1:] = snap_pos_diff * (i - last_end_snap_idx) + last_end_pos_array
+        if abs(round(snap_idx) - snap_idx) > 0.1:
+            print('snap_idx error too large!')
+            print(snap_idx)
+        snap_idx = round(snap_idx)
+        if snap_idx >= total_snap_num:
+            print('snap index %d out of bound! total snap num %d' % (snap_idx, total_snap_num))
+            snap_idx = total_snap_num - 1
+        if isinstance(ho, slider.beatmap.Circle):
+            label[snap_idx] = np.array([CIRCLE_LABEL, start_pos.x, start_pos.y])
+            last_end_pos = ho.position
+            last_end_snap_idx = snap_idx
+            continue
+        end_snap_idx = (ho.end_time / timedelta(milliseconds=1) - aligned_ms) / snap_ms
+        if end_snap_idx >= total_snap_num:
+            print('end snap index %d out of bound! total snap num %d' % (end_snap_idx, total_snap_num))
+            end_snap_idx = total_snap_num - 1
+
+        end_snap_idx = round(end_snap_idx)
+
+        if isinstance(ho, slider.beatmap.Slider):
+            label_value = SLIDER_LABEL
+            pos_list = beatmap_util.slider_snap_pos(ho, end_snap_idx - snap_idx)
+        elif isinstance(ho, slider.beatmap.Spinner):
+            label_value = SPINNER_LABEL
+            pos_list = [start_pos for _ in range(snap_idx, end_snap_idx + 1)]
+        else:
+            # HoldNote
+            label_value = HOLDNOTE_LABEL
+            pos_list = [start_pos for _ in range(snap_idx, end_snap_idx + 1)]
+        if not multi_label:
+            label_value = CIRCLE_LABEL
+        # if abs(round(end_snap_idx) - end_snap_idx) > 0.2:
+        #     print('end_snap_idx error to large!')
+        #     print(end_snap_idx)
+        # print('before round end_snap_idx')
+        # print(end_snap_idx)
+        # print('end_snap_idx')
+        # print(end_snap_idx)
+        if multibeat_label_fmt == 0:
+            for i in range(snap_idx, end_snap_idx + 1):
+                pos = pos_list[i]
+                label[i] = np.array([label_value, pos.x, pos.y])
+        else:
+            # only set label at beginning of beats
+            for i in range(snap_idx, end_snap_idx + 1, ho_base_itv[label_value]):
+                pos = pos_list[i]
+                label[i] = np.array([label_value, pos.x, pos.y])
+        last_end_pos = pos_list[-1]
+        last_end_snap_idx = snap_idx
     return label
 
 

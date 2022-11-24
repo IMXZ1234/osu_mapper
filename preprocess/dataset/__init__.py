@@ -8,4 +8,5 @@ from . import (
     rnnv3_nolabel_dataset,
     rnnv4_dataset,
     mlp_nolabel_dataset,
+    label_pos_dataset,
 )

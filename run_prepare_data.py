@@ -4,7 +4,7 @@ import pickle
 import yaml
 
 from preprocess.dataset import mlp_dataset, rnn_dataset, rnn_nolabel_dataset, mlp_nolabel_dataset, rnnv2_dataset, \
-    rnnv3_dataset, rnnv3_nolabel_dataset, rnnv4_dataset
+    rnnv3_dataset, rnnv3_nolabel_dataset, rnnv4_dataset, label_pos_dataset
 from preprocess.prepare_data import (
     DEFAULT_TRAIN_AUDIO_DIR,
     DEFAULT_TRAIN_DB_PATH,
@@ -278,6 +278,21 @@ def prepare_mlp_nolabel_dataset():
 def prepare_rnnv4_dataset():
     ds = rnnv4_dataset.RNNDataset(
         r'./resources/data/fit/rnnv4',
+        step_snaps=6*8,
+        switch_label=False,
+        take_first=100,
+        random_seed=404,
+        coeff_speed_stars=2.5,
+        coeff_bpm=120,
+        label_num=3,
+    )
+    ds.prepare()
+    ds.div_folds(save_first=1)
+
+
+def prepare_label_pos_dataset():
+    ds = label_pos_dataset.LabelPosDataset(
+        r'./resources/data/fit/label_pos',
         step_snaps=6*8,
         switch_label=False,
         take_first=100,

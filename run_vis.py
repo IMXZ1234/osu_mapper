@@ -8,14 +8,7 @@ from nn.dataset import dataset_util
 from util import beatmap_util
 
 
-if __name__ == '__main__':
-    # with open(
-    #         r'C:\Users\asus\coding\python\osu_mapper\resources\result\cganv3_pe_sample_beats_48\0.1\1\trainepoch_gen_output_list_epoch24.pkl',
-    #         'rb'
-    # ) as f:
-    #     gen_out = pickle.load(f)
-    # print(torch.argmax(gen_out[12], dim=1))
-    # print(len(gen_out[0]))
+def view_osu():
     osu_path = r"C:\Users\asus\AppData\Local\osu!\Songs\1013342 Sasaki Sayaka - Sakura, Reincarnation\Sasaki Sayaka - Sakura, Reincarnation (Riana) [Mimari's Hard].osu"
     beatmap = slider.Beatmap.from_path(osu_path)
     print(beatmap.beat_divisor)
@@ -29,6 +22,34 @@ if __name__ == '__main__':
             print(ho.time)
             print(ho.end_time)
             print(ho.position)
+
+
+def view_model():
+    model_path = r'D:\osu_mapper\resources\result\seqganv2\0.01\1\model_0_epoch_-1.pt'
+    model = torch.load(model_path, map_location='cpu')
+    gru_ih_l0 = model['gru.weight_ih_l0']
+    print(gru_ih_l0.shape)
+    # 128 + 128 + 514
+    print(gru_ih_l0)
+    embed, pos_embed, feature = gru_ih_l0[:, :128], gru_ih_l0[:, 128:256], gru_ih_l0[:, 256:]
+    for item in [embed, pos_embed, feature]:
+        print(torch.norm(item))
+        print(torch.sum(torch.abs(item)) / torch.numel(item))
+
+    # for k, v in model.items():
+    #     print(k)
+    #     print(v.shape)
+
+
+if __name__ == '__main__':
+    view_model()
+    # with open(
+    #         r'C:\Users\asus\coding\python\osu_mapper\resources\result\cganv3_pe_sample_beats_48\0.1\1\trainepoch_gen_output_list_epoch24.pkl',
+    #         'rb'
+    # ) as f:
+    #     gen_out = pickle.load(f)
+    # print(torch.argmax(gen_out[12], dim=1))
+    # print(len(gen_out[0]))
             # break
 #     with open(
 # r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\rnnv3_nolabel\train1_label.pkl',

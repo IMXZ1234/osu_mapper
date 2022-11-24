@@ -5,6 +5,7 @@ from datetime import timedelta
 import slider
 from zipfile import ZipFile
 import itertools
+import numpy as np
 
 from util import general_util
 
@@ -386,6 +387,22 @@ def check_essential_fields(beatmap: slider.Beatmap, fields=ESSENTIAL_FIELDS):
             print('essential field %s is None!' % field)
             return False
     return True
+
+
+def slider_snap_pos(ho: slider.beatmap.Slider, snap_num):
+    """
+    include start pos
+    """
+    assert snap_num % ho.repeat == 0
+    per_repeat_snap_t = np.linspace(0, 1, snap_num // ho.repeat + 1)
+    per_repeat_pos = [ho.curve(t) for t in per_repeat_snap_t]
+    all_pos = [ho.position]
+    for i in range(ho.repeat):
+        if i % 2 == 0:
+            all_pos.extend(per_repeat_pos[1:])
+        else:
+            all_pos.extend(reversed(per_repeat_pos[:-1]))
+    return all_pos
 
 
 def add_circle(beatmap, pos, time, hitsound=0, addition='0:0:0:0:'):
