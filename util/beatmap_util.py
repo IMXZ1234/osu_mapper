@@ -393,14 +393,16 @@ def slider_snap_pos(ho: slider.beatmap.Slider, snap_num):
     """
     include start pos
     """
-    per_repeat_snap_t = np.arange(0, 1, snap_num // ho.repeat + 1)
-    per_repeat_pos = [ho.curve(t) for t in per_repeat_snap_t]
-    all_pos = [ho.position]
-    for i in range(ho.repeat):
-        if i % 2 == 0:
-            all_pos.extend(per_repeat_pos[1:])
-        else:
-            all_pos.extend(reversed(per_repeat_pos[:-1]))
+    total_length = ho.length * ho.repeat
+    snap_accumulate_length = np.arange(0, total_length, total_length / snap_num)
+    snap_accumulate_length = np.append(snap_accumulate_length, total_length)
+    all_pos = []
+    for i, cur_length in enumerate(snap_accumulate_length):
+        direction, remain = cur_length // ho.length, (cur_length % ho.length) / ho.length
+        # direction = 0: forward, 1: backward
+        if direction % 2 == 1:
+            remain = 1 - remain
+        all_pos.append(ho.curve(remain))
     return all_pos
 
 

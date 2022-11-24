@@ -268,9 +268,11 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
             # HoldNote
             label_value = HOLDNOTE_LABEL
             pos_list = [start_pos for _ in range(snap_idx, end_snap_idx + 1)]
+        if len(pos_list) != end_snap_idx - snap_idx + 1:
+            print('pos list len check failed')
+            return None
         if not multi_label:
             label_value = CIRCLE_LABEL
-        assert len(pos_list) == end_snap_idx - snap_idx + 1
         # if abs(round(end_snap_idx) - end_snap_idx) > 0.2:
         #     print('end_snap_idx error to large!')
         #     print(end_snap_idx)
@@ -289,6 +291,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                 label[i] = np.array([label_value, pos.x, pos.y])
         last_end_pos = pos_list[-1]
         last_end_snap_idx = snap_idx
+    label[:, 1:] = label[:, 1:] / np.array([640, 480])
     return label
 
 

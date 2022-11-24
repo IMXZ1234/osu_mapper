@@ -45,7 +45,7 @@ def view_model():
 
 if __name__ == '__main__':
     beatmap = slider.Beatmap.from_path(
-        r'D:\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
+        r'C:\Users\asus\coding\python\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
     )
     aligned_ms = beatmap_util.get_first_hit_object_time_milliseconds(
         beatmap,

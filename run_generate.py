@@ -44,7 +44,8 @@ if __name__ == '__main__':
 
     # r"C:\CloudMusic\羊腿腿Y.tui - 遠くの子守の唄 - 《无职转生》第一季part.2 OP之一（翻自 大原ゆい子）.mp3"
     audio_file_path = \
-        r'C:\CloudMusic\森山良子 - 今日の日はさようなら.mp3'
+        r'C:\CloudMusic\FictionJunction - 暁の車.mp3'
+        # r'C:\CloudMusic\森山良子 - 今日の日はさようなら.mp3'
         # r'C:\CloudMusic\忍 - 聖夜をめぐるまほう.mp3'
         # r'C:\Users\asus\AppData\Local\osu!\Songs\1013342 Sasaki Sayaka - Sakura, Reincarnation\audio.mp3'
         # r'C:\Users\asus\AppData\Local\osu!\Songs\1013342 Sasaki Sayaka - Sakura, Reincarnation\audio.mp3'
@@ -54,15 +55,54 @@ if __name__ == '__main__':
         # r'C:\Users\asus\coding\python\osu_mapper\resources\cond_data\bgm\asdf.mp3'
 
     audio_info_path = \
-        r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\森山良子 - 今日の日はさようなら.yaml'
+        None
+        # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\FictionJunction - 暁の車.yaml'
+        # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\森山良子 - 今日の日はさようなら.yaml'
         # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\忍 - 聖夜をめぐるまほう.yaml'
         # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\Sakura, Reincarnation.yaml'
-        # None
         # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\H ZETT M(Center),紅い流星(Left),まらしぃ - 君の知らない物语.yaml'
         # r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\audio.yaml'
     # None
     # r'./resources/gen/audio_info\01.遠くの子守の唄.yaml'
 
+    meta_list = [
+        {
+            'audio_filename': os.path.basename(audio_file_path),  # indispensable
+            'artist_unicode': 'FictionJunction',
+            'artist': 'FictionJunction',  # indispensable
+            'title_unicode': '暁の車',
+            'title': 'akatsuki no kuruma',  # indispensable
+            'version': 'Medium',  # indispensable
+            'creator': 'IMXZ123',
+            'circle_size': 3,
+            'approach_rate': 8,
+            'slider_tick_rate': 2,
+        },
+        {
+            'audio_filename': os.path.basename(audio_file_path),  # indispensable
+            'artist_unicode': 'FictionJunction',
+            'artist': 'FictionJunction',  # indispensable
+            'title_unicode': '暁の車',
+            'title': 'akatsuki no kuruma',  # indispensable
+            'version': 'Hard',  # indispensable
+            'creator': 'IMXZ123',
+            'circle_size': 3,
+            'approach_rate': 8,
+            'slider_tick_rate': 2,
+        },
+        {
+            'audio_filename': os.path.basename(audio_file_path),  # indispensable
+            'artist_unicode': 'FictionJunction',
+            'artist': 'FictionJunction',  # indispensable
+            'title_unicode': '暁の車',
+            'title': 'akatsuki no kuruma',  # indispensable
+            'version': 'Insane',  # indispensable
+            'creator': 'IMXZ123',
+            'circle_size': 3,
+            'approach_rate': 8,
+            'slider_tick_rate': 2,
+        },
+    ]
     # meta_list = [
     #     {
     #         'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -91,44 +131,44 @@ if __name__ == '__main__':
     #         'slider_tick_rate': 2,
     #     }
     # ]
-    meta_list = [
-        {
-            'audio_filename': os.path.basename(audio_file_path),  # indispensable
-            'artist_unicode': '森川良子',
-            'artist': 'Hiromi Sato',  # indispensable
-            'title_unicode': '今日の日はさようなら',
-            'title': 'Jiyuu no Hane',  # indispensable
-            'version': 'Medium',  # indispensable
-            'creator': 'IMXZ123',
-            'circle_size': 3,
-            'approach_rate': 8,
-            'slider_tick_rate': 2,
-        },
-        {
-            'audio_filename': os.path.basename(audio_file_path),  # indispensable
-            'artist_unicode': '森川良子',
-            'artist': 'Hiromi Sato',  # indispensable
-            'title_unicode': '今日の日はさようなら',
-            'title': 'Jiyuu no Hane',  # indispensable
-            'version': 'Hard',  # indispensable
-            'creator': 'IMXZ123',
-            'circle_size': 3,
-            'approach_rate': 8,
-            'slider_tick_rate': 2,
-        },
-        {
-            'audio_filename': os.path.basename(audio_file_path),  # indispensable
-            'artist_unicode': '森川良子',
-            'artist': 'Hiromi Sato',  # indispensable
-            'title_unicode': '今日の日はさようなら',
-            'title': 'Jiyuu no Hane',  # indispensable
-            'version': 'Insane',  # indispensable
-            'creator': 'IMXZ123',
-            'circle_size': 3,
-            'approach_rate': 8,
-            'slider_tick_rate': 2,
-        },
-    ]
+    # meta_list = [
+    #     {
+    #         'audio_filename': os.path.basename(audio_file_path),  # indispensable
+    #         'artist_unicode': '森川良子',
+    #         'artist': 'Hiromi Sato',  # indispensable
+    #         'title_unicode': '今日の日はさようなら',
+    #         'title': 'Jiyuu no Hane',  # indispensable
+    #         'version': 'Medium',  # indispensable
+    #         'creator': 'IMXZ123',
+    #         'circle_size': 3,
+    #         'approach_rate': 8,
+    #         'slider_tick_rate': 2,
+    #     },
+    #     {
+    #         'audio_filename': os.path.basename(audio_file_path),  # indispensable
+    #         'artist_unicode': '森川良子',
+    #         'artist': 'Hiromi Sato',  # indispensable
+    #         'title_unicode': '今日の日はさようなら',
+    #         'title': 'Jiyuu no Hane',  # indispensable
+    #         'version': 'Hard',  # indispensable
+    #         'creator': 'IMXZ123',
+    #         'circle_size': 3,
+    #         'approach_rate': 8,
+    #         'slider_tick_rate': 2,
+    #     },
+    #     {
+    #         'audio_filename': os.path.basename(audio_file_path),  # indispensable
+    #         'artist_unicode': '森川良子',
+    #         'artist': 'Hiromi Sato',  # indispensable
+    #         'title_unicode': '今日の日はさようなら',
+    #         'title': 'Jiyuu no Hane',  # indispensable
+    #         'version': 'Insane',  # indispensable
+    #         'creator': 'IMXZ123',
+    #         'circle_size': 3,
+    #         'approach_rate': 8,
+    #         'slider_tick_rate': 2,
+    #     },
+    # ]
     # meta_list = [
     #     {
     #         'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -209,5 +249,5 @@ if __name__ == '__main__':
     # ]
     for meta in meta_list:
         save_meta(meta)
-    generator.generate_beatmapsets([audio_file_path], [[1.75, 2.5, 3.]], [meta_list], [None],
+    generator.generate_beatmapsets([audio_file_path], [[2.5, 3., 3.5]], [meta_list], [None],
                                    audio_info_path_list=[audio_info_path])

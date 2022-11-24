@@ -134,6 +134,8 @@ class LabelPosDataset(fit_dataset.FitDataset):
             multi_label=(self.label_num != 2),
             multibeat_label_fmt=self.multibeat_label_fmt,
         )
+        if beatmap_label is None:
+            return None, None
         start_snap = max(first_ho_snap, self.half_audio_snap)
         end_snap = min(
             # snaps_from_start_label
@@ -254,7 +256,10 @@ class LabelPosDataset(fit_dataset.FitDataset):
                 audio_data, beatmap, first_ho_snap
             )
             if sample_data is None:
+                print('failed %d' % id_)
                 continue
+            else:
+                print('success %d' % id_)
             data.append(sample_data)
             label.append(sample_label)
 
@@ -267,6 +272,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
         print([seq_data.shape for seq_data in data])
         print('label.shape')
         print([seq_label.shape for seq_label in label])
+        print(label[0])
         # self.items[0] = np.stack(cond_data)
         # self.items[0] = np.stack(label)
         if save:
