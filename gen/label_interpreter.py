@@ -5,6 +5,7 @@ import slider
 
 from gen.position_generator import RandomWalkInRectangle
 from util import beatmap_util
+import random
 
 
 class BiLabelInterpreter:
@@ -205,7 +206,7 @@ class SwitchInterpreter:
 
 class AssembledLabelOutputInterpreter:
     @staticmethod
-    def gen_hitobjects(beatmap: slider.Beatmap, labels, start_time, snap_ms, snap_divisor=8):
+    def gen_hitobjects(beatmap: slider.Beatmap, labels, start_time, snap_ms, snap_divisor=8, stack_circle_prob=0.3):
         # save some space about the border as circles have radius
         pos_gen = RandomWalkInRectangle(30, 482, 30, 354)
         pos_gen.move_to_random_pos()
@@ -231,7 +232,26 @@ class AssembledLabelOutputInterpreter:
                 # circles, period == 1
                 x, y = pos_gen.next_pos()
                 beatmap_util.add_circle(beatmap, (x, y), time)
-                pos += 1
+                look_forward_pos = pos + 2
+                trailing_circle_num = 0
+                step_dist = random.choice([5, 10, 15, 20])
+                while labels[look_forward_pos] == 1:
+                    trailing_circle_num += 1
+                    look_forward_pos += 2
+                stack = False
+                if 1 <= trailing_circle_num <= 3:
+                    if random.uniform(0, 1) < stack_circle_prob:
+                        stack = True
+                elif trailing_circle_num > 3:
+                    stack = True
+                if stack:
+                    pos_gen.set_walk_dist_range(step_dist, step_dist)
+                for _ in range(trailing_circle_num):
+                    time += snap_ms * 2
+                    x, y = pos_gen.next_pos()
+                    beatmap_util.add_circle(beatmap, (x, y), time)
+                pos_gen.set_walk_dist_range(50, 150)
+                pos = look_forward_pos
                 # print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
             elif label == 2:
                 start_pos = pos
