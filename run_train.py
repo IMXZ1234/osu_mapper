@@ -1977,8 +1977,8 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 4
-    discriminator_pretrain_epoch = 8
+    generator_pretrain_epoch = 8
+    discriminator_pretrain_epoch = 16
     scheduler_step_size = 256
 
     snap_feature = 514
@@ -2091,7 +2091,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
 
 
 if __name__ == '__main__':
-    train_seqganv3()
+    train_seqganv3_dis_deep()
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

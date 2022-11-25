@@ -36,7 +36,7 @@ class Generator(nn.Module):
     def init_hidden(self, batch_size=1, device='cpu'):
         return autograd.Variable(torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device))
 
-    def forward(self, cond_data, inp, ho_pos, hidden, pos):
+    def forward(self, cond_data, type_label, ho_pos, hidden, pos):
         """
         Embeds input and applies GRU one token at a time (seq_len = 1)
         cond_data: N, feature_dim=514
@@ -47,7 +47,7 @@ class Generator(nn.Module):
         """
         batch_size, cond_data_feature_dim = cond_data.shape
         # input dim                                             # batch_size
-        emb = self.embeddings(inp)                              # batch_size x embedding_dim
+        emb = self.embeddings(type_label)                              # batch_size x embedding_dim
         emb = emb.view(1, batch_size, self.embedding_dim)               # 1 x batch_size x embedding_dim
 
         pos_emb = self.pos_embeddings(pos % self.seq_len)                              # batch_size x embedding_dim
@@ -65,7 +65,7 @@ class Generator(nn.Module):
         ho_pos_out = torch.sigmoid(out_pos)
         return (type_label_out, ho_pos_out), hidden
 
-    def sample(self, cond_data, h=None, start_letter=0, start_ho_pos=(0, 0)):
+    def sample(self, cond_data, h=None, start_letter=0, start_ho_pos=(0.5, 0.5)):
         """
         Samples the network and returns num_samples samples of length max_seq_len.
 
@@ -130,10 +130,10 @@ class Generator(nn.Module):
             type_loss += loss_fn_type(type_label_out, type_label_target[i])
             pos_loss += loss_fn_pos(ho_pos_out, ho_pos_target[i]) * coeff
 
-        print('type_loss')
-        print(type_loss)
-        print('pos_loss')
-        print(pos_loss)
+        # print('type_loss')
+        # print(type_loss)
+        # print('pos_loss')
+        # print(pos_loss)
         return type_loss + pos_loss, h
 
     def batchPGLoss(self, cond_data, inp, target, reward, h=None):
@@ -206,12 +206,12 @@ class Discriminator(nn.Module):
 
         emb = self.embeddings(type_label)                               # seq_len x batch_size x embedding_dim
         pos_emb = self.pos_embeddings(pos)                               # seq_len x batch_size x embedding_dim
-        ho_pos_emb = self.ho_pos_embeddings(ho_pos.reshape([-1, 2])).reshape([total_len, batch_size, -1])                               # seq_len x batch_size x embedding_dim
+        ho_pos_emb = self.ho_pos_embeddings(ho_pos.reshape([-1, 2])).reshape([total_len, batch_size, -1])  # seq_len x batch_size x embedding_dim
 
-        _, h = self.gru(torch.cat([emb, pos_emb, ho_pos_emb, cond_data], dim=2), h)                          # 4 x batch_size x hidden_dim
-        h = h.permute(1, 0, 2).contiguous()              # batch_size x 4 x hidden_dim
+        _, h = self.gru(torch.cat([emb, pos_emb, ho_pos_emb, cond_data], dim=2), h)  # 4 x batch_size x hidden_dim
+        h = h.permute(1, 0, 2).contiguous()  # batch_size x 4 x hidden_dim
 
-        out = self.gru2hidden(h.view(-1, 4 * self.hidden_dim))  # batch_size x 4*hidden_dim
+        out = self.gru2hidden(h.view(-1, 2*self.num_layers*self.hidden_dim))  # batch_size x 4*hidden_dim
         out = torch.tanh(out)
         out = self.dropout_linear(out)
         out = self.hidden2out(out)                                 # batch_size x 1

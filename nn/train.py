@@ -806,6 +806,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
         print(label[0].cpu().detach().numpy().tolist())
+        print(pos[0].cpu().detach().numpy().tolist()[:15])
         # each loss in a batch is loss per sample
         total_loss = total_loss / len(self.train_iter.dataset)
         # # sample from generator and compute oracle NLL
@@ -832,6 +833,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
                 [torch.tensor([[[1, 0.5, 0.5]] for _ in range(batch_size)], device=cond_data.device, dtype=torch.float),
                  real_gen_output[:, :-1]], dim=1
             )
+            # print(real_gen_output)
             optimizer_G.zero_grad()
 
             fake, h_gen = gen.sample(cond_data)
@@ -852,6 +854,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
         print(label[0].cpu().detach().numpy().tolist())
+        print(pos[0].cpu().detach().numpy().tolist()[:15])
 
     def train_discriminator(self):
         """

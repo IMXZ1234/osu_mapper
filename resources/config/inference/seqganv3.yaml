@@ -33,3 +33,4 @@ pred_arg:
   pred_type: nn.pred.multi_pred.MultiPred
 random_seed: 404
 train_type: seqgan_adv_loss
+weights_path: ./resources/pretrained_models/seqganv3_epoch_-16.pt

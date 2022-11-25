@@ -1,6 +1,6 @@
 fit_dataset: true
 fit_dataset_arg:
-  dataset_type: preprocess.dataset.label_pos_dataset.RNNDataset
+  dataset_type: preprocess.dataset.label_pos_dataset.LabelPosDataset
   save_dir: ./resources/data/fit/inference/label_pos
   audio_mel: 4
   label_num: 3
