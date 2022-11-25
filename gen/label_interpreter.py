@@ -273,3 +273,41 @@ class AssembledLabelOutputInterpreter:
                 end_time = ho_slider.end_time // timedelta(milliseconds=1)
             else:
                 pos += 1
+
+
+class LabelWithPosInterpreter:
+    @staticmethod
+    def gen_hitobjects(beatmap: slider.Beatmap, labels, start_time, snap_ms, snap_divisor=8):
+        ms_per_beat = beatmap.timing_points[0].ms_per_beat
+        snap_ms = ms_per_beat / snap_divisor
+        pos = 0
+        while pos < len(labels):
+            label_with_pos = labels[pos]
+            label, x, y = int(label_with_pos[0]), label_with_pos[1], label_with_pos[2]
+            time = start_time + pos * snap_ms
+            if label == 1:
+                # circles, period == 1
+                beatmap_util.add_circle(beatmap, (x, y), time)
+                print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
+            elif label == 2:
+                pos_list = [[x, y]]
+                start_pos = pos
+                # slider start
+                while pos < len(labels):
+                    label_with_pos = labels[pos]
+                    label, x, y = int(label_with_pos[0]), label_with_pos[1], label_with_pos[2]
+                    if label == 2:
+                        pos_list.append([x, y])
+                        pos += 1
+                if pos - start_pos < 5:
+                    # bad slider
+                    beatmap_util.add_circle(beatmap, (x, y), time)
+                    continue
+                num_beats = max(0.5, (pos-start_pos) / snap_divisor)
+
+                ho_slider = beatmap_util.add_slider(
+                    beatmap, 'L', pos_list, time, num_beats, ms_per_beat
+                )
+                print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
+            else:
+                pos += 1

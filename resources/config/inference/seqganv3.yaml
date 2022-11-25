@@ -9,14 +9,14 @@ data_arg:
   shuffle: false
   test_dataset_arg:
     binary: false
-    data_path: ./resources/data/fit/inference/rnnv3_nolabel/data.pkl
-    label_path: ./resources/data/fit/inference/rnnv3_nolabel/label.pkl
+    data_path: ./resources/data/fit/inference/label_pos/data.pkl
+    label_path: ./resources/data/fit/inference/label_pos/label.pkl
     random_seed: 404
     subseq_len: 384
     inference: true
     use_random_iter: false
 model_arg:
-  model_type: nn.net.seqganv2.Generator
+  model_type: nn.net.seqganv3.Generator
   cond_data_feature_dim: 514
   embedding_dim: 128
   hidden_dim: 512
@@ -25,12 +25,11 @@ model_arg:
   vocab_size: 3
 num_classes: 3
 output_arg:
-  log_dir: ./resources/result/seqganv2/0.01/%d
-  model_save_dir: ./resources/result/seqganv2/0.01/%d
+  log_dir: ./resources/result/seqganv3/0.01/%d
+  model_save_dir: ./resources/result/seqganv3/0.01/%d
   model_save_step: 8
 output_device: 0
 pred_arg:
   pred_type: nn.pred.multi_pred.MultiPred
 random_seed: 404
-train_type: rnngan_with_pretrain
-weights_path: ./resources/result/seqganv3/0.01/1/model_0_epoch_7.pt
+train_type: seqgan_adv_loss

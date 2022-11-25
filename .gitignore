@@ -6,3 +6,4 @@ __pycache__/
 /scrape/account.py
 /resources/test/
 /resources/train_state/
+/resources/scrape/

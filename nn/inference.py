@@ -159,6 +159,28 @@ class Inference:
         print(output)
         return [label.numpy() for label in output]
 
+    def run_inference_seqganv3(self):
+        """
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output, h = self.model.sample(data)
+            type_label, ho_pos = output
+            output = torch.cat([type_label.float().unsqueeze(dim=2), ho_pos], dim=2)
+            epoch_output_list.append(output.reshape([-1, 3]))
+        print(epoch_output_list)
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        output = recursive_to_cpu(output)
+        print('output')
+        print(output)
+        return [label.numpy() for label in output]
+
     def run_inference_sample_rnn(self, data, state):
         """
         Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,

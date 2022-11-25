@@ -22,7 +22,16 @@ class Generator(nn.Module):
         self.ho_pos_embeddings = nn.Linear(2, embedding_dim)
         # action embedding + pos embedding + cond_data
         self.gru = nn.GRU(embedding_dim*3 + cond_data_feature_dim, hidden_dim, num_layers=num_layers)
-        self.gru2out = nn.Linear(hidden_dim, vocab_size + 2)
+        self.gru2out_label = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, vocab_size)
+        )
+        self.gru2out_pos = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, 2)
+        )
 
     def init_hidden(self, batch_size=1, device='cpu'):
         return autograd.Variable(torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device))
@@ -49,9 +58,11 @@ class Generator(nn.Module):
 
         cond_data = cond_data.view(1, batch_size, cond_data_feature_dim)
         out, hidden = self.gru(torch.cat([emb, pos_emb, ho_pos_emb, cond_data], dim=2), hidden)                     # 1 x batch_size x hidden_dim (out)
-        out = self.gru2out(out.view(-1, self.hidden_dim))       # batch_size x vocab_size
-        type_label_out = F.log_softmax(out[:self.vocab_size], dim=1)
-        ho_pos_out = torch.sigmoid(out[self.vocab_size:])
+        out = out.view(-1, self.hidden_dim)
+        out_label = self.gru2out_label(out)       # batch_size x vocab_size
+        type_label_out = F.log_softmax(out_label, dim=1)
+        out_pos = self.gru2out_pos(out)       # batch_size x 2
+        ho_pos_out = torch.sigmoid(out_pos)
         return (type_label_out, ho_pos_out), hidden
 
     def sample(self, cond_data, h=None, start_letter=0, start_ho_pos=(0, 0)):
@@ -64,7 +75,7 @@ class Generator(nn.Module):
             - samples: num_samples x seq_len (a sampled sequence in each row)
         """
         num_samples, seq_len, feature_dim = cond_data.shape
-        type_label_samples = torch.zeros([num_samples, seq_len, 1], dtype=torch.long, device=cond_data.device)
+        type_label_samples = torch.zeros([num_samples, seq_len], dtype=torch.long, device=cond_data.device)
         ho_pos_samples = []
 
         if h is None:
@@ -77,14 +88,14 @@ class Generator(nn.Module):
             # num_samples x 2, num_samples x 2
             (type_label_out, ho_pos_out), hidden = self.forward(cond_data[:, i], type_label, ho_pos, h, pos)               # out: num_samples x vocab_size
             type_label_out = torch.multinomial(torch.exp(type_label_out), 1)  # num_samples x 1 (sampling from each row)
-            type_label_samples[:, i] = type_label_out.data
+            type_label_samples[:, i] = type_label_out.squeeze(dim=1).data
             ho_pos_samples.append(ho_pos_out)
 
             type_label = type_label_out.view(-1)
             ho_pos = ho_pos_out
         # -> num_samples x seq_len x 2
         ho_pos_samples = torch.stack(ho_pos_samples, dim=1)
-        return (ho_pos_samples, type_label_samples), h
+        return (type_label_samples, ho_pos_samples), h
 
     def batchNLLLoss(self, cond_data, inp, target, h=None):
         """
@@ -99,6 +110,7 @@ class Generator(nn.Module):
         """
         loss_fn_type = nn.NLLLoss()
         loss_fn_pos = nn.MSELoss()
+        coeff = 1
 
         inp = inp.permute(1, 0, 2)
         type_label, ho_pos = inp[:, :, 0].long(), inp[:, :, 1:]
@@ -111,14 +123,18 @@ class Generator(nn.Module):
         if h is None:
             h = self.init_hidden(batch_size, device=cond_data.device)
 
-        loss = 0
+        type_loss, pos_loss = 0, 0
         for i in range(seq_len):
             pos = torch.ones([batch_size], dtype=torch.long, device=cond_data.device) * i
             (type_label_out, ho_pos_out), h = self.forward(cond_data[i], type_label[i], ho_pos[i], h, pos)
-            loss += loss_fn_type(type_label_out.reshape(-1), type_label_target[i])
-            loss += loss_fn_pos(ho_pos_out, ho_pos_target[i])
+            type_loss += loss_fn_type(type_label_out, type_label_target[i])
+            pos_loss += loss_fn_pos(ho_pos_out, ho_pos_target[i]) * coeff
 
-        return loss, h
+        print('type_loss')
+        print(type_loss)
+        print('pos_loss')
+        print(pos_loss)
+        return type_loss + pos_loss, h
 
     def batchPGLoss(self, cond_data, inp, target, reward, h=None):
         """
@@ -149,7 +165,6 @@ class Generator(nn.Module):
         for i in range(seq_len):
             pos = torch.ones([batch_size], dtype=torch.long, device=cond_data.device) * i
             (type_label_out, ho_pos_out), h = self.forward(cond_data[i], type_label[i], ho_pos[i], h, pos)
-            type_label_out = type_label_out.reshape(-1)
             for j in range(batch_size):
                 pg_loss += -type_label_out[j][type_label_target.data[i][j]]*reward[j]     # log(P(y_t|Y_1:Y_{t-1})) * Q
 
@@ -170,7 +185,7 @@ class Discriminator(nn.Module):
         self.ho_pos_embeddings = nn.Linear(2, embedding_dim)
         self.gru = nn.GRU(embedding_dim*3 + cond_data_feature_dim, hidden_dim,
                           num_layers=num_layers, bidirectional=True, dropout=dropout)
-        self.gru2hidden = nn.Linear(3*self.num_layers*hidden_dim, hidden_dim)
+        self.gru2hidden = nn.Linear(2*self.num_layers*hidden_dim, hidden_dim)
         self.dropout_linear = nn.Dropout(p=dropout)
         self.hidden2out = nn.Linear(hidden_dim, 1)
 
@@ -179,19 +194,23 @@ class Discriminator(nn.Module):
 
     def forward(self, cond_data, inp, h):
         """
-        inp: batch_size x seq_len x 3
+        inp: batch_size x seq_len x 3 / [type_label, ho_pos]: batch_size x seq_len, batch_size x seq_len x 2
         """
-        inp = inp.permute(1, 0, 2)
-        type_label, ho_pos = inp[:, :, 0].long(), inp[:, :, 1:]
+        type_label, ho_pos = inp
+        type_label = type_label.permute(1, 0)
+        ho_pos = ho_pos.permute(1, 0, 2)
         total_len, batch_size = type_label.shape
         cond_data = cond_data.permute(1, 0, 2)
         # 1 x total_len -> batch_size, total_len
-        pos = (torch.arange(total_len, device=cond_data.device, dtype=torch.long) % self.seq_len).reshape([1, total_len]).expand_as(type_label)
-        emb = self.embeddings(inp)                               # seq_len x batch_size x embedding_dim
+        pos = (torch.arange(total_len, device=cond_data.device, dtype=torch.long) % self.seq_len).reshape([total_len, 1]).expand_as(type_label)
+
+        emb = self.embeddings(type_label)                               # seq_len x batch_size x embedding_dim
         pos_emb = self.pos_embeddings(pos)                               # seq_len x batch_size x embedding_dim
-        ho_pos_emb = self.pos_embeddings(ho_pos.reshape([-1, 2])).reshape([total_len, batch_size, -1])                               # seq_len x batch_size x embedding_dim
+        ho_pos_emb = self.ho_pos_embeddings(ho_pos.reshape([-1, 2])).reshape([total_len, batch_size, -1])                               # seq_len x batch_size x embedding_dim
+
         _, h = self.gru(torch.cat([emb, pos_emb, ho_pos_emb, cond_data], dim=2), h)                          # 4 x batch_size x hidden_dim
         h = h.permute(1, 0, 2).contiguous()              # batch_size x 4 x hidden_dim
+
         out = self.gru2hidden(h.view(-1, 4 * self.hidden_dim))  # batch_size x 4*hidden_dim
         out = torch.tanh(out)
         out = self.dropout_linear(out)
@@ -210,8 +229,10 @@ class Discriminator(nn.Module):
         Returns: out
             - out: batch_size ([0,1] score)
         """
+        if not isinstance(inp, (list, tuple)):
+            inp = (inp[:, :, 0].long(), inp[:, :, 1:])
         if h is None:
-            h = self.init_hidden(inp.size()[0], device=cond_data.device)
+            h = self.init_hidden(inp[0].shape[0], device=cond_data.device)
         out, h = self.forward(cond_data, inp, h)
         return out.view(-1), h
 

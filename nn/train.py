@@ -207,13 +207,13 @@ class Train:
                 for i, lt in enumerate(loss_type)
             ]
         else:
-            if loss_type == 'MSE':
+            if loss_type == 'MSELoss':
                 loss = nn.MSELoss(**kwargs)
             elif loss_type == 'BCELoss':
                 loss = nn.BCELoss(**kwargs)
             elif loss_type == 'NLLLoss':
                 loss = nn.NLLLoss(**kwargs)
-            elif loss_type == 'CrossEntropy':
+            elif loss_type == 'CrossEntropyLoss':
                 if 'weight' in kwargs and kwargs['weight'] is not None:
                     kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
                 loss = nn.CrossEntropyLoss(**kwargs)
@@ -791,7 +791,10 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             # print(real_gen_output)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = torch.cat([torch.tensor([[1, 0.5, 0.5] * batch_size], device=cond_data.device, dtype=torch.float), real_gen_output[:, :-1]], dim=1)
+            real_gen_output_as_input = torch.cat(
+                [torch.tensor([[[1, 0.5, 0.5]] for _ in range(batch_size)], device=cond_data.device, dtype=torch.float),
+                 real_gen_output[:, :-1]], dim=1
+            )
 
             optimizer_G.zero_grad()
             loss, h_gen = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
@@ -801,14 +804,15 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             total_loss += loss.data.item()
 
         print('gen.sample(5)')
-        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+        label, pos = gen.sample(cond_data)[0]
+        print(label[0].cpu().detach().numpy().tolist())
         # each loss in a batch is loss per sample
         total_loss = total_loss / len(self.train_iter.dataset)
         # # sample from generator and compute oracle NLL
         # oracle_loss = helpers.batchwise_oracle_nll(gen, oracle, POS_NEG_SAMPLES, BATCH_SIZE, MAX_SEQ_LEN,
         #                                            start_letter=START_LETTER, gpu=CUDA)
 
-        print(' average_train_NLL = %.4f' % total_loss)
+        print(' average_train_loss = %.4f' % total_loss)
         # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
 
     def train_generator_PG(self):
@@ -819,25 +823,35 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         optimizer_G, optimizer_D = self.optimizer
         loss_G, loss_D = self.loss
         gen, dis = self.model
+        epoch_pg_loss, epoch_adv_loss = 0, 0
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
+            real_gen_output_as_input = torch.cat(
+                [torch.tensor([[[1, 0.5, 0.5]] for _ in range(batch_size)], device=cond_data.device, dtype=torch.float),
+                 real_gen_output[:, :-1]], dim=1
+            )
+            optimizer_G.zero_grad()
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
-            valid = Variable(torch.ones(batch_size, dtype=torch.long, device=cond_data.device), requires_grad=False)
+            valid = Variable(torch.ones(batch_size, dtype=torch.float, device=cond_data.device), requires_grad=False)
             adv_loss = loss_G(rewards, valid)
+            epoch_adv_loss += adv_loss.item()
 
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            epoch_pg_loss += pg_loss.item()
 
-            optimizer_G.zero_grad()
             (pg_loss + adv_loss).backward()
             optimizer_G.step()
 
+        print('pg_loss %.3f' % (epoch_pg_loss / len(self.train_iter)))
+        print('adv_loss %.3f' % (epoch_adv_loss / len(self.train_iter)))
+
         print('gen.sample(5)')
-        print(gen.sample(cond_data)[0][0][:1].cpu().detach().numpy().tolist())
+        label, pos = gen.sample(cond_data)[0]
+        print(label[0].cpu().detach().numpy().tolist())
 
     def train_discriminator(self):
         """
@@ -855,10 +869,11 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
-            fake, h_gen = gen.sample(cond_data)
-            fake[0] = fake[0].detach()
-
             optimizer_D.zero_grad()
+
+            fake, h_gen = gen.sample(cond_data)
+            fake = [fake[0], fake[1].detach()]
+
             # fake
             out, h_dis_fake = discriminator.batchClassify(cond_data, fake)
             loss = loss_D(out, torch.zeros(batch_size, device=cond_data.device))
