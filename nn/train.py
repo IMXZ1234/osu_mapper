@@ -777,7 +777,7 @@ class TrainRNNGANPretrain(TrainGAN):
         pass
 
 
-class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
+class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
     def train_generator_MLE(self):
         """
         Max Likelihood Pretraining for the generator
@@ -791,7 +791,7 @@ class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             # print(real_gen_output)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
-            real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
+            real_gen_output_as_input = torch.cat([torch.tensor([[1, 0.5, 0.5] * batch_size], device=cond_data.device, dtype=torch.float), real_gen_output[:, :-1]], dim=1)
 
             optimizer_G.zero_grad()
             loss, h_gen = gen.batchNLLLoss(cond_data, real_gen_output_as_input, real_gen_output)
@@ -817,7 +817,7 @@ class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
         Training is done for num_batches batches.
         """
         optimizer_G, optimizer_D = self.optimizer
-        # loss_G, loss_D = self.loss
+        loss_G, loss_D = self.loss
         gen, dis = self.model
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
@@ -827,14 +827,17 @@ class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
+            valid = Variable(torch.ones(batch_size, dtype=torch.long, device=cond_data.device), requires_grad=False)
+            adv_loss = loss_G(rewards, valid)
+
+            pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
 
             optimizer_G.zero_grad()
-            pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
-            pg_loss.backward()
+            (pg_loss + adv_loss).backward()
             optimizer_G.step()
 
         print('gen.sample(5)')
-        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+        print(gen.sample(cond_data)[0][0][:1].cpu().detach().numpy().tolist())
 
     def train_discriminator(self):
         """
@@ -853,6 +856,7 @@ class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
             fake, h_gen = gen.sample(cond_data)
+            fake[0] = fake[0].detach()
 
             optimizer_D.zero_grad()
             # fake
@@ -874,6 +878,16 @@ class TrainRNNGANPretrainInherit(TrainRNNGANPretrain):
 
         print(' average_loss = %.4f, train_acc = %.4f' % (
             total_loss, total_acc))
+
+
+def recursive_detach(items):
+    if isinstance(items, torch.Tensor):
+        return items.detach()
+    elif isinstance(items, list):
+        for i, item in enumerate(items):
+            items[i] = recursive_detach(item)
+    else:
+        return items
 
 
 def init_weights(m):
@@ -918,8 +932,10 @@ def train_with_config(config_path, format_config=False, folds=5):
             train = TrainRNNGANPretrain(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'gan':
             train = TrainGAN(formatted_config_dict)
-        elif formatted_config_dict['train_type'] == 'rnngan_with_pretrain_inherit':
-            train = TrainRNNGANPretrainInherit(formatted_config_dict)
+        # elif formatted_config_dict['train_type'] == 'rnngan_with_pretrain_inherit':
+        #     train = TrainRNNGANPretrainInherit(formatted_config_dict)
+        elif formatted_config_dict['train_type'] == 'seqgan_adv_loss':
+            train = TrainSeqGANAdvLoss(formatted_config_dict)
         else:
             train = Train(formatted_config_dict)
         train.run_train()
