@@ -1977,11 +1977,11 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 3
-    discriminator_pretrain_epoch = 2
+    generator_pretrain_epoch = 0
+    discriminator_pretrain_epoch = 0
     scheduler_step_size = 256
 
-    adv_generator_epoch = 3
+    adv_generator_epoch = 1
     adv_discriminator_epoch = 1
 
     snap_feature = 514
@@ -1998,7 +1998,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.1, 0.01)]:
+    for gen_lr_mle, gen_lr, dis_lr in [(0.1, 0.1, 0.1)]:
         print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -2065,7 +2065,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                     'drop_last': False}
         loss_arg = {'loss_type': [
             # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
-            'MSELoss',
+            'BCELoss',
             'BCELoss',
         ],
             'params': [

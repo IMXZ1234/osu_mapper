@@ -855,18 +855,25 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
-            valid = Variable(torch.ones(batch_size, dtype=torch.float, device=cond_data.device), requires_grad=False)
-            adv_loss = loss_G(rewards, valid)
+            print('rewards')
+            print(rewards)
+            adv_loss = loss_G(rewards, torch.ones(batch_size, device=cond_data.device))
+            print('adv_loss')
+            print(adv_loss)
             if 'adv_loss_multiplier' in self.config_dict['train_arg']:
                 adv_loss_multiplier = self.config_dict['train_arg']['adv_loss_multiplier']
                 if adv_loss_multiplier is not None:
                     adv_loss *= adv_loss_multiplier
             epoch_adv_loss += adv_loss.item()
+            print('adv_loss')
+            print(adv_loss)
 
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             epoch_pg_loss += pg_loss.item()
 
             (pg_loss + adv_loss).backward()
+            print('gen.gru2out_pos[0].weight.grad')
+            print(gen.gru2out_pos[0].weight.grad)
             optimizer_G.step()
 
         sys.stdout.flush()
