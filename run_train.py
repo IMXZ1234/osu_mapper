@@ -1977,9 +1977,12 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 8
-    discriminator_pretrain_epoch = 16
+    generator_pretrain_epoch = 3
+    discriminator_pretrain_epoch = 1
     scheduler_step_size = 256
+
+    adv_generator_epoch = 3
+    adv_discriminator_epoch = 1
 
     snap_feature = 514
     snap_divisor = 8
@@ -1995,8 +1998,8 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for lr in [0.01]:
-        print('init lr %s' % str(lr))
+    for gen_lr, dis_lr in [(0.001, 0.001)]:
+        print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
             'model_type': ['nn.net.seqganv3.Generator', 'nn.net.seqganv3.Discriminator'],
@@ -2021,10 +2024,10 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             ]
         }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {
-            'optimizer_type': ['Adam', 'Adam'],
+            'optimizer_type': ['SGD', 'SGD'],
             'params': [
-                {'lr': lr,},
-                {'lr': lr,},
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
             ]
         }
         scheduler_arg = {
@@ -2066,12 +2069,16 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             ]
         }
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
-        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
-                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(gen_lr) + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/' + str(gen_lr) + '/%d',
                       'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
                      'generator_pretrain_epoch': generator_pretrain_epoch,
-                     'discriminator_pretrain_epoch': discriminator_pretrain_epoch,}
+                     'discriminator_pretrain_epoch': discriminator_pretrain_epoch,
+                     'adv_generator_epoch': adv_generator_epoch,
+                     'adv_discriminator_epoch': adv_discriminator_epoch,
+                     'adv_loss_multiplier': 100.,
+                     }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
                        'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,

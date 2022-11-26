@@ -662,11 +662,13 @@ class TrainRNNGANPretrain(TrainGAN):
             print('\n--------\nEPOCH %d\n--------' % (epoch + 1))
             # TRAIN GENERATOR
             print('\nAdversarial Training Generator : ', end='')
-            self.train_generator_PG()
+            for i in range(self.config_dict['train_arg']['adv_generator_epoch']):
+                self.train_generator_PG()
 
             # TRAIN DISCRIMINATOR
             print('\nAdversarial Training Discriminator : ')
-            self.train_discriminator()
+            for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
+                self.train_discriminator()
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch)
 
@@ -835,11 +837,16 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             )
             # print(real_gen_output)
             optimizer_G.zero_grad()
+            optimizer_D.zero_grad()
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
             valid = Variable(torch.ones(batch_size, dtype=torch.float, device=cond_data.device), requires_grad=False)
             adv_loss = loss_G(rewards, valid)
+            if 'adv_loss_multiplier' in self.config_dict['train_arg']:
+                adv_loss_multiplier = self.config_dict['train_arg']['adv_loss_multiplier']
+                if adv_loss_multiplier is not None:
+                    adv_loss *= adv_loss_multiplier
             epoch_adv_loss += adv_loss.item()
 
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)

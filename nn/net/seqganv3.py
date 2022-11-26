@@ -128,7 +128,8 @@ class Generator(nn.Module):
             pos = torch.ones([batch_size], dtype=torch.long, device=cond_data.device) * i
             (type_label_out, ho_pos_out), h = self.forward(cond_data[i], type_label[i], ho_pos[i], h, pos)
             type_loss += loss_fn_type(type_label_out, type_label_target[i])
-            pos_loss += loss_fn_pos(ho_pos_out, ho_pos_target[i]) * coeff
+            # do not predict pos during pretrain as pos greatly differs in beatmaps even for the same audio
+            # pos_loss += loss_fn_pos(ho_pos_out, ho_pos_target[i]) * coeff
 
         # print('type_loss')
         # print(type_loss)
