@@ -141,9 +141,14 @@ class Train:
 
     def load_optimizer(self, optimizer_type, model_index=None, **kwargs):
         if isinstance(optimizer_type, (list, tuple)):
+            if 'models_index' in kwargs:
+                models_index = kwargs['models_index']
+            else:
+                assert len(optimizer_type) == len(self.model)
+                models_index = list(range(len(self.model)))
             optimizer = [
                 self.load_optimizer(ot, i, **kwargs['params'][i])
-                for i, ot in enumerate(optimizer_type)
+                for i, ot in zip(models_index, optimizer_type)
             ]
         else:
             if model_index is None:
@@ -683,6 +688,7 @@ class TrainRNNGANPretrain(TrainGAN):
         # loss_G, loss_D = self.loss
         gen, discriminator = self.model
         total_loss = 0
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -697,6 +703,7 @@ class TrainRNNGANPretrain(TrainGAN):
 
             total_loss += loss.data.item()
 
+        sys.stdout.flush()
         print('gen.sample(5)')
         print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
         # each loss in a batch is loss per sample
@@ -716,6 +723,7 @@ class TrainRNNGANPretrain(TrainGAN):
         optimizer_G, optimizer_D = self.optimizer
         # loss_G, loss_D = self.loss
         gen, dis = self.model
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -730,6 +738,7 @@ class TrainRNNGANPretrain(TrainGAN):
             pg_loss.backward()
             optimizer_G.step()
 
+        sys.stdout.flush()
         print('gen.sample(5)')
         print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
 
@@ -744,6 +753,7 @@ class TrainRNNGANPretrain(TrainGAN):
         total_loss = 0
         total_acc = 0
 
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -769,6 +779,7 @@ class TrainRNNGANPretrain(TrainGAN):
         total_loss = total_loss / len(self.train_iter.dataset)
         total_acc = total_acc / len(self.train_iter.dataset) / 2
 
+        sys.stdout.flush()
         print(' average_loss = %.4f, train_acc = %.4f' % (
             total_loss, total_acc))
 
@@ -784,10 +795,11 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         """
         Max Likelihood Pretraining for the generator
         """
-        optimizer_G, optimizer_D = self.optimizer
+        optimizer_G = self.optimizer[0]
         # loss_G, loss_D = self.loss
-        gen, discriminator = self.model
+        gen = self.model[0]
         total_loss = 0
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -805,6 +817,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
             total_loss += loss.data.item()
 
+        sys.stdout.flush()
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
         print(label[0].cpu().detach().numpy().tolist())
@@ -823,10 +836,11 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         The generator is trained using policy gradients, using the reward from the discriminator.
         Training is done for num_batches batches.
         """
-        optimizer_G, optimizer_D = self.optimizer
-        loss_G, loss_D = self.loss
+        optimizer_G, optimizer_D = self.optimizer[1], self.optimizer[2]
+        loss_G = self.loss[0]
         gen, dis = self.model
         epoch_pg_loss, epoch_adv_loss = 0, 0
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -855,6 +869,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             (pg_loss + adv_loss).backward()
             optimizer_G.step()
 
+        sys.stdout.flush()
         print('pg_loss %.3f' % (epoch_pg_loss / len(self.train_iter)))
         print('adv_loss %.3f' % (epoch_adv_loss / len(self.train_iter)))
 
@@ -868,12 +883,13 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
         """
-        optimizer_G, optimizer_D = self.optimizer
-        loss_G, loss_D = self.loss
+        optimizer_D = self.optimizer[2]
+        loss_D = self.loss[1]
         gen, discriminator = self.model
         total_loss = 0
         total_acc = 0
 
+        sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
             cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -901,6 +917,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         total_loss = total_loss / len(self.train_iter.dataset)
         total_acc = total_acc / len(self.train_iter.dataset) / 2
 
+        sys.stdout.flush()
         print(' average_loss = %.4f, train_acc = %.4f' % (
             total_loss, total_acc))
 

@@ -66,11 +66,14 @@ class SeqGANFeeder(torch.utils.data.IterableDataset):
 
         self.n_seq = len(self.data)
         self.feature_dim = self.data[0].shape[1]
+        self.label_dim = self.label[0].shape[1]
 
     def init(self):
         self.next_idx = self.batch_size
-        self.cur_pos = [0] * self.batch_size
-        self.cur_idx = list(range(self.batch_size))
+        self.cur_pos = 0
+        self.cur_idx = list(range(min(self.batch_size, len(self.data))))
+        self.batch_n_subseq = []
+        self.cur_n_batch_subseq = 0
 
     def __getitem__(self, index) -> T_co:
         return None
@@ -82,32 +85,47 @@ class SeqGANFeeder(torch.utils.data.IterableDataset):
 
         will yield a batch!
         """
-        data, label, clear_state = [], [], []
-        for i, (sample_cur_pos, sample_cur_idx) in enumerate(zip(self.cur_pos, self.cur_idx)):
-            if sample_cur_pos == 0:
-                clear_state.append(True)
+        # other: (clear_state(boolean), valid_len(list of int with length of batch_size))
+        data, label, valid_len = [], [], []
+        clear_state = True
+        for i, sample_cur_idx in enumerate(self.cur_idx):
+            if len(self.data) >= self.cur_pos + self.subseq_len:
+                sample_valid_len = self.subseq_len
+                clear_state = False
             else:
-                clear_state.append(False)
-            if sample_cur_idx < len(self.data):
-                sample_data = self.data[sample_cur_idx][sample_cur_pos:sample_cur_pos + self.subseq_len]
-            else:
-                sample_data = [0.] * self.feature_dim
-            data.append(torch.tensor(sample_data, dtype=torch.float))
+                sample_valid_len = max(0, len(self.data) - self.cur_pos)
+
+            sample_data = np.zeros([self.subseq_len, self.feature_dim])
+            sample_data[:sample_valid_len] = self.data[sample_cur_idx][self.cur_pos:self.cur_pos + sample_valid_len]
 
             if not self.inference:
-                if sample_cur_idx < len(self.data):
-                    sample_label = self.label[sample_cur_idx][sample_cur_pos:sample_cur_pos + self.subseq_len]
-                else:
-                    sample_label = [0] * self.feature_dim
-                label.append(torch.tensor(sample_label, dtype=torch.long))
+                sample_label = np.zeros([self.subseq_len, self.label_dim])
+                sample_label[:sample_valid_len] = self.label[sample_cur_idx][self.cur_pos:self.cur_pos + sample_valid_len]
 
-            self.cur_pos[i] += self.subseq_len
-            if sample_cur_pos >= self.data[sample_cur_idx].shape[1]:
-                self.cur_pos[i] = 0
-                self.cur_idx[i] = self.next_idx
-                self.next_idx += 1
+                label.append(torch.tensor(sample_label, dtype=torch.float))
+
+            valid_len.append(sample_valid_len)
+            data.append(torch.tensor(sample_data, dtype=torch.float))
 
         if not self.inference:
-            yield [data, label, clear_state]
+            yield [data, label, [clear_state, valid_len]]
         else:
-            yield [data, clear_state]
+            yield [data, [clear_state, valid_len]]
+
+        self.cur_pos += self.subseq_len
+        self.cur_n_batch_subseq += 1
+        if clear_state:
+            if self.next_idx > len(self.data):
+                raise StopIteration
+            self.cur_pos = 0
+            self.cur_idx = list(range(self.next_idx, min(self.next_idx + self.batch_size, len(self.data))))
+            self.next_idx += self.batch_size
+            self.batch_n_subseq.append(self.cur_n_batch_subseq)
+            self.cur_n_batch_subseq = 0
+
+    def cat_sample_labels(self, labels):
+        all_sample_labels = []
+        sample_div_pos = np.cumsum(self.batch_n_subseq)
+        for i in range(len(sample_div_pos) - 1):
+            all_sample_labels.append(torch.cat(labels[sample_div_pos[i]: sample_div_pos[i+1]])[])
+        return all_sample_labels

@@ -1978,7 +1978,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             weight = None
     epoch = 64
     generator_pretrain_epoch = 3
-    discriminator_pretrain_epoch = 1
+    discriminator_pretrain_epoch = 2
     scheduler_step_size = 256
 
     adv_generator_epoch = 3
@@ -1986,7 +1986,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
 
     snap_feature = 514
     snap_divisor = 8
-    sample_beats = 48
+    sample_beats = 12
     sample_snaps = sample_beats * snap_divisor
 
     batch_size = 16
@@ -1998,7 +1998,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for gen_lr, dis_lr in [(0.001, 0.001)]:
+    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.1, 0.01)]:
         print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -2024,15 +2024,20 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             ]
         }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {
-            'optimizer_type': ['SGD', 'SGD'],
+            'optimizer_type': ['Adam', 'Adam', 'Adam'],
             'params': [
+                {'lr': gen_lr_mle,},
                 {'lr': gen_lr,},
                 {'lr': dis_lr,},
+            ],
+            'models_index': [
+                0, 0, 1
             ]
         }
         scheduler_arg = {
-            'scheduler_type': ['StepLR', 'StepLR'],
+            'scheduler_type': ['StepLR', 'StepLR', 'StepLR'],
             'params': [
+                {'step_size': 16, 'gamma': 0.3},
                 {'step_size': 16, 'gamma': 0.3},
                 {'step_size': 128, 'gamma': 0.1},
             ]
@@ -2077,7 +2082,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                      'discriminator_pretrain_epoch': discriminator_pretrain_epoch,
                      'adv_generator_epoch': adv_generator_epoch,
                      'adv_discriminator_epoch': adv_discriminator_epoch,
-                     'adv_loss_multiplier': 100.,
+                     'adv_loss_multiplier': 1.,
                      }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
