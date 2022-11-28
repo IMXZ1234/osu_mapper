@@ -851,9 +851,12 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         gen, dis = self.model
         epoch_pg_loss, epoch_adv_loss = 0, 0
         epoch_dis_acc = 0
+        total_sample_num = 0
+
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
+            total_sample_num += batch_size
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             real_gen_output_as_input = torch.cat(
@@ -893,7 +896,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         sys.stdout.flush()
         print('pg_loss %.3f' % (epoch_pg_loss / len(self.train_iter)))
         print('adv_loss %.3f' % (epoch_adv_loss / len(self.train_iter)))
-        epoch_dis_acc = epoch_dis_acc / len(self.train_iter.dataset)
+        epoch_dis_acc = epoch_dis_acc / total_sample_num
         print('epoch_dis_acc %.3f' % epoch_dis_acc)
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
@@ -912,10 +915,14 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         gen, discriminator = self.model
         total_loss = 0
         total_acc = 0
+        total_sample_num = 0
 
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            if random.random() < 0.5:
+                continue
             batch_size = cond_data.shape[0]
+            total_sample_num += batch_size
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
@@ -938,8 +945,8 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
             total_loss += loss.data.item()
 
-        avg_loss = total_loss / len(self.train_iter.dataset)
-        avg_acc = total_acc / len(self.train_iter.dataset) / 2
+        avg_loss = total_loss / total_sample_num
+        avg_acc = total_acc / total_sample_num / 2
 
         sys.stdout.flush()
         print(' average_loss = %.4f, train_acc = %.4f' % (
