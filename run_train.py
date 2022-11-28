@@ -1977,8 +1977,8 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 0
-    discriminator_pretrain_epoch = 0
+    generator_pretrain_epoch = 4
+    discriminator_pretrain_epoch = 1
     scheduler_step_size = 256
 
     adv_generator_epoch = 1
@@ -1998,7 +1998,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for gen_lr_mle, gen_lr, dis_lr in [(0.1, 0.1, 0.1)]:
+    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.1, 0.01)]:
         print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -2019,7 +2019,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                     'vocab_size': num_classes,
                     'seq_len': snap_divisor,
                     'dropout': 0.2,
-                    'num_layers': 3,
+                    'num_layers': 2,
                 },
             ]
         }  # , 'num_block': [1, 1, 1, 1]
@@ -2065,7 +2065,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                     'drop_last': False}
         loss_arg = {'loss_type': [
             # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
-            'BCELoss',
+            'MSELoss',
             'BCELoss',
         ],
             'params': [
@@ -2083,6 +2083,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                      'adv_generator_epoch': adv_generator_epoch,
                      'adv_discriminator_epoch': adv_discriminator_epoch,
                      'adv_loss_multiplier': 1.,
+                     'adaptive_adv_train': True,
                      }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
@@ -2094,8 +2095,8 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                        'random_seed': random_seed,
                        'collate_fn': 'nn.dataset.collate_fn.default_collate',
                        # 'grad_alter_fn': 'util.net_util.grad_clipping',
-                       'grad_alter_fn': None,
-                       'grad_alter_fn_arg': {'theta': 10},
+                       'grad_alter_fn': 'value',
+                       'grad_alter_fn_arg': {'clip_value': 10},
                        'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
                        'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
                        }, f)

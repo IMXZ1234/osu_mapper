@@ -62,8 +62,8 @@ class Generator(nn.Module):
         out_label = self.gru2out_label(out)       # batch_size x vocab_size
         type_label_out = F.log_softmax(out_label, dim=1)
         out_pos = self.gru2out_pos(out)       # batch_size x 2
-        # ho_pos_out = torch.sigmoid(out_pos)
-        ho_pos_out = out_pos
+        ho_pos_out = torch.sigmoid(out_pos)
+        # ho_pos_out = out_pos
         return (type_label_out, ho_pos_out), hidden
 
     def sample(self, cond_data, h=None, start_letter=0, start_ho_pos=(0.5, 0.5)):

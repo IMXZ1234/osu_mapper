@@ -78,8 +78,11 @@ class Train:
         else:
             self.output_collate_fn = collate_fn.output_collate_fn
         if 'grad_alter_fn' in config_dict and config_dict['grad_alter_fn'] is not None:
-            self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
-            self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
+            if config_dict['grad_alter_fn'] == 'value':
+                self.grad_alter_fn = functools.partial(nn.utils.clip_grad_value_, **config_dict['grad_alter_fn_arg'])
+            else:
+                self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
+                self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
         else:
             self.grad_alter_fn = None
         if 'train_extra' in config_dict and config_dict['train_extra'] is not None:
@@ -665,17 +668,23 @@ class TrainRNNGANPretrain(TrainGAN):
 
         for epoch in range(self.epoch):
             print('\n--------\nEPOCH %d\n--------' % (epoch + 1))
-            # TRAIN GENERATOR
-            print('\nAdversarial Training Generator : ', end='')
-            for i in range(self.config_dict['train_arg']['adv_generator_epoch']):
-                self.train_generator_PG()
+            if self.config_dict['train_arg']['adaptive_adv_train']:
+                while self.train_generator_PG() > 0.6:
+                    pass
+                while self.train_discriminator() < 0.6:
+                    pass
+            else:
+                # TRAIN GENERATOR
+                print('\nAdversarial Training Generator : ', end='')
+                for i in range(self.config_dict['train_arg']['adv_generator_epoch']):
+                    self.train_generator_PG()
 
-            # TRAIN DISCRIMINATOR
-            print('\nAdversarial Training Discriminator : ')
-            for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
-                self.train_discriminator()
-            if (epoch + 1) % self.model_save_step == 0:
-                self.save_model(epoch)
+                # TRAIN DISCRIMINATOR
+                print('\nAdversarial Training Discriminator : ')
+                for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
+                    self.train_discriminator()
+                if (epoch + 1) % self.model_save_step == 0:
+                    self.save_model(epoch)
 
         self.save_model(-1)
         # self.save_properties()
@@ -830,6 +839,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
         print(' average_train_loss = %.4f' % total_loss)
         # print(' average_train_NLL = %.4f, oracle_sample_NLL = %.4f' % (total_loss, oracle_loss))
+        return total_loss
 
     def train_generator_PG(self):
         """
@@ -840,6 +850,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         loss_G = self.loss[0]
         gen, dis = self.model
         epoch_pg_loss, epoch_adv_loss = 0, 0
+        epoch_dis_acc = 0
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
@@ -855,35 +866,41 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
-            print('rewards')
-            print(rewards)
+            epoch_dis_acc += torch.sum(rewards < 0.5).data.item()
+            # print('rewards')
+            # print(rewards)
             adv_loss = loss_G(rewards, torch.ones(batch_size, device=cond_data.device))
-            print('adv_loss')
-            print(adv_loss)
+            # print('adv_loss')
+            # print(adv_loss)
             if 'adv_loss_multiplier' in self.config_dict['train_arg']:
                 adv_loss_multiplier = self.config_dict['train_arg']['adv_loss_multiplier']
                 if adv_loss_multiplier is not None:
                     adv_loss *= adv_loss_multiplier
             epoch_adv_loss += adv_loss.item()
-            print('adv_loss')
-            print(adv_loss)
+            # print('adv_loss')
+            # print(adv_loss)
 
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             epoch_pg_loss += pg_loss.item()
 
             (pg_loss + adv_loss).backward()
-            print('gen.gru2out_pos[0].weight.grad')
-            print(gen.gru2out_pos[0].weight.grad)
+            # if self.grad_alter_fn is not None:
+            #     self.grad_alter_fn(gen.parameters())
+            # print('gen.gru2out_pos[0].weight.grad')
+            # print(gen.gru2out_pos[0].weight.grad)
             optimizer_G.step()
 
         sys.stdout.flush()
         print('pg_loss %.3f' % (epoch_pg_loss / len(self.train_iter)))
         print('adv_loss %.3f' % (epoch_adv_loss / len(self.train_iter)))
-
+        epoch_dis_acc = epoch_dis_acc / len(self.train_iter.dataset)
+        print('epoch_dis_acc %.3f' % epoch_dis_acc)
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
         print(label[0].cpu().detach().numpy().tolist())
         print(pos[0].cpu().detach().numpy().tolist()[:15])
+
+        return epoch_dis_acc
 
     def train_discriminator(self):
         """
@@ -921,13 +938,14 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
             total_loss += loss.data.item()
 
-        total_loss = total_loss / len(self.train_iter.dataset)
-        total_acc = total_acc / len(self.train_iter.dataset) / 2
+        avg_loss = total_loss / len(self.train_iter.dataset)
+        avg_acc = total_acc / len(self.train_iter.dataset) / 2
 
         sys.stdout.flush()
         print(' average_loss = %.4f, train_acc = %.4f' % (
-            total_loss, total_acc))
+            avg_loss, avg_acc))
 
+        return avg_acc
 
 def recursive_detach(items):
     if isinstance(items, torch.Tensor):
