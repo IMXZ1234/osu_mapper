@@ -46,14 +46,25 @@ def view_dataset():
     ) as f:
         label_list = pickle.load(f)
     print(len(label_list))
-    total_over_1 = 0
-    max_x = 0
-    max_y = 0
+
     for label in label_list:
-        max_x = max(max_x, np.max(label[:, 1]))
-        max_y = max(max_y, np.max(label[:, 2]))
-    print(max_x)
-    print(max_y)
+        pos_less_0 = np.where(label < 0)
+        print(label[pos_less_0])
+    # total_over_1 = 0
+    # max_x = 0
+    # max_y = 0
+    # for label in label_list:
+    #     max_x = max(max_x, np.max(label[:, 1]))
+    #     max_y = max(max_y, np.max(label[:, 2]))
+    # print(max_x)
+    # print(max_y)
+    # min_x = 1
+    # min_y = 1
+    # for label in label_list:
+    #     min_x = min(min_x, np.min(label[:, 1]))
+    #     min_y = min(min_y, np.min(label[:, 2]))
+    # print(min_x)
+    # print(min_y)
         # if (label[:, 1:] == 1.).any():
         #     where_1 = np.where(label[:, 1:] == 1.)
         #     print(where_1)
@@ -63,4 +74,19 @@ def view_dataset():
 
 
 if __name__ == '__main__':
-    view_dataset()
+    beatmap = slider.Beatmap.from_path(
+        r'C:\Users\asus\coding\python\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
+    )
+    snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+    for ho in beatmap.hit_objects():
+        if isinstance(ho, slider.beatmap.Slider):
+            length = int((ho.end_time - ho.time) / timedelta(milliseconds=1) / snap_ms)
+            if length <= 4:
+                print(ho)
+                print(length)
+            pos = beatmap_util.slider_snap_pos(ho, length)
+            pos_at_ticks = ho.tick_points
+            for p in pos:
+                if p.x < 0 or p.y < 0:
+                    print(pos)
+                    print(pos_at_ticks)

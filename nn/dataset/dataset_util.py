@@ -284,6 +284,8 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
             for i in range(snap_idx, end_snap_idx + 1):
                 pos = pos_list[i - snap_idx]
                 label[i] = np.array([label_value, pos.x, pos.y])
+                # if pos.x < 0 or pos.y < 0:
+                #     print(type(pos))
         else:
             # only set label at beginning of beats
             for i in range(snap_idx, end_snap_idx + 1, ho_base_itv[label_value]):
@@ -291,7 +293,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                 label[i] = np.array([label_value, pos.x, pos.y])
         last_end_pos = pos_list[-1]
         last_end_snap_idx = snap_idx
-    label[:, 1:] = label[:, 1:] / np.array([1024, 768])
+    label[:, 1:] = label[:, 1:] / np.array([640, 480])
     return label
 
 
