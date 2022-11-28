@@ -291,7 +291,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                 label[i] = np.array([label_value, pos.x, pos.y])
         last_end_pos = pos_list[-1]
         last_end_snap_idx = snap_idx
-    label[:, 1:] = label[:, 1:] / np.array([640, 480])
+    label[:, 1:] = label[:, 1:] / np.array([1024, 768])
     return label
 
 

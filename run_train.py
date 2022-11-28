@@ -1998,7 +1998,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.1, 0.01)]:
+    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.01, 0.01)]:
         print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
