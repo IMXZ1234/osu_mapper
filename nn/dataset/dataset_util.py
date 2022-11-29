@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 import numpy as np
 
@@ -291,7 +292,27 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
                 label[i] = np.array([label_value, pos.x, pos.y])
         last_end_pos = pos_list[-1]
         last_end_snap_idx = snap_idx
-    label[:, 1:] = label[:, 1:] / np.array([640, 480])
+    # only hit_objects within x:[-180, 691], y:[-82, 407] are visible, for beatmaps generated using osu! beatmap editor
+    # thus we assume at any time cursor will not get out of this rectangle
+    # label[:, 1:] = (label[:, 1:] + [180, 82]) / np.array([691 + 180, 407 + 82])
+    # if (label[:, 1:] > 1.1).any():
+    #     print('> 1')
+    # if (label[:, 1:] < -0.1).any():
+    #     print('< 0')
+    min_x, min_y = np.min(label[:, 1:], axis=0)
+    max_x, max_y = np.max(label[:, 1:], axis=0)
+    # print((min_x, max_x))
+    # print((min_y, max_y))
+    if min_x == max_x:
+        print(beatmap.title)
+        print(beatmap.hit_objects())
+        print(len(beatmap.hit_objects()))
+        print(label)
+        print(label.shape)
+        beatmap.write_path(
+            os.path.join(r'')
+        )
+
     return label
 
 
