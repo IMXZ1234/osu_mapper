@@ -919,7 +919,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
 
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
-            if random.random() < 0.5:
+            if random.random() < 0.1:
                 continue
             batch_size = cond_data.shape[0]
             total_sample_num += batch_size

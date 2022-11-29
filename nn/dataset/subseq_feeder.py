@@ -12,6 +12,7 @@ def normalize_label(label):
     # bounds in osu! beatmap editor
     label[:, 1] = (label[:, 1] + 180) / (691 + 180)
     label[:, 2] = (label[:, 2] + 82) / (407 + 82)
+    return label
 
 
 class SubseqFeeder(torch.utils.data.Dataset):
