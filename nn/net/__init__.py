@@ -19,6 +19,7 @@ from . import (
     cganv3,
     cganv4,
     cganv3_pe,
+    cgan_gumbel,
     seqganv1,
     seqganv2,
     seqganv3,
