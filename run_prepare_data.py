@@ -295,7 +295,7 @@ def prepare_label_pos_dataset():
         r'./resources/data/fit/label_pos',
         step_snaps=6*8,
         switch_label=False,
-        take_first=100,
+        take_first=300,
         random_seed=404,
         coeff_speed_stars=2.5,
         coeff_bpm=120,

@@ -118,3 +118,8 @@ class SnapDivisorFilter(OsuTrainDataFilter):
             print()
             return False
         return True
+
+
+class ModeFilter(OsuTrainDataFilter):
+    def filter(self, beatmap: slider.Beatmap, audio_file_path):
+        return beatmap.mode == 0

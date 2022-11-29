@@ -242,7 +242,7 @@ def hitobjects_to_label_with_pos(beatmap: slider.Beatmap, aligned_ms=None, snap_
             for i in range(last_end_snap_idx + 1, snap_idx):
                 start_pos_array = np.array([start_pos.x, start_pos.y])
                 last_end_pos_array = np.array([last_end_pos.x, last_end_pos.y])
-                snap_pos_diff = (last_end_pos_array - start_pos_array) / (snap_idx - last_end_snap_idx)
+                snap_pos_diff = (start_pos_array - last_end_pos_array) / (snap_idx - last_end_snap_idx)
                 label[i, 1:] = snap_pos_diff * (i - last_end_snap_idx) + last_end_pos_array
         if snap_idx >= total_snap_num:
             print('snap index %d out of bound! total snap num %d' % (snap_idx, total_snap_num))

@@ -7,7 +7,7 @@ import numpy as np
 import slider
 
 from nn.dataset import dataset_util
-from preprocess import db, prepare_data
+from preprocess import db, prepare_data, filter
 from preprocess.preprocessor import MelPreprocessor
 from util import beatmap_util, general_util
 from preprocess.dataset import fit_dataset
@@ -221,6 +221,79 @@ class LabelPosDataset(fit_dataset.FitDataset):
             self.save_raw()
 
     def prepare(self, save=True):
+        if self.random_seed is not None:
+            random.seed(self.random_seed)
+        # table_name = 'FILTERED'
+        table_name = 'MAIN'
+        ids = self.db.all_ids(table_name)
+        # cond_data, label
+        self.items = [[], []]
+        data, label = self.items
+        if self.take_first is not None:
+            ids = ids[:self.take_first]
+        print('ids')
+        print(ids)
+        cache = {0: None}
+        sample_filter = filter.OsuTrainDataFilterGroup(
+            [
+                filter.ModeFilter(),
+                filter.SnapDivisorFilter(),
+                filter.SnapInNicheFilter(),
+                filter.SingleUninheritedTimingPointFilter(),
+                filter.SingleBMPFilter(),
+                filter.BeatmapsetSingleAudioFilter(),
+                filter.HitObjectFilter(),
+            ]
+        )
+        for id_ in ids:
+            record = self.db.get_record(id_, table_name)
+            first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
+            beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
+            audio_path = os.path.join(self.audio_dir, record[db.OsuDB.AUDIOFILENAME_POS])
+            if not sample_filter.filter(beatmap, audio_path):
+                print('skipping %d, title %s' % (id_, beatmap.title))
+                continue
+            # print('audio_path')
+            # print(audio_path)
+            if audio_path in cache:
+                self.logger.debug('using cached %s' % audio_path)
+                # print('using cached %s' % audio_path)
+                audio_data = cache[audio_path]
+            else:
+                self.logger.debug('loaded %s' % audio_path)
+                # print('loaded %s' % audio_path)
+                with open(audio_path, 'rb') as f:
+                    audio_data = pickle.load(f)
+                cache[audio_path] = audio_data
+                del cache[list(cache.keys())[0]]
+            audio_data = audio_data.numpy()
+            sample_data, sample_label = self.prepare_record(
+                audio_data, beatmap, first_ho_snap
+            )
+            if sample_data is None:
+                print('failed %d' % id_)
+                continue
+            else:
+                print('success %d' % id_)
+            data.append(sample_data)
+            label.append(sample_label)
+
+        # max_value = np.max([np.max(seq_data[0]) for seq_data in cond_data])
+        # for idx in range(len(cond_data)):
+        #     cond_data[idx][0][:-label_num] = cond_data[idx][0][:-label_num] / max_value
+        print([np.max(seq_data) for seq_data in data])
+        print([np.min(seq_data) for seq_data in data])
+        print('cond_data.shape')
+        print([seq_data.shape for seq_data in data])
+        print('label.shape')
+        print([seq_label.shape for seq_label in label])
+        print(label[0])
+        # self.items[0] = np.stack(cond_data)
+        # self.items[0] = np.stack(label)
+        if save:
+            self.save_raw()
+
+    def prepare_from_songs_dir(self, save=True):
         if self.random_seed is not None:
             random.seed(self.random_seed)
         table_name = 'FILTERED'

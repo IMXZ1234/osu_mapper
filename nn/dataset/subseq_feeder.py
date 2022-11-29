@@ -8,6 +8,12 @@ from torch.utils import data
 from torch.nn import functional as F
 
 
+def normalize_label(label):
+    # bounds in osu! beatmap editor
+    label[:, 1] = (label[:, 1] + 180) / (691 + 180)
+    label[:, 2] = (label[:, 2] + 82) / (407 + 82)
+
+
 class SubseqFeeder(torch.utils.data.Dataset):
     """
     Simplest feeder yielding (data, label, index).
@@ -63,8 +69,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
-        print('len(self.data[0])')
-        print(len(self.data[0]))
+        # print('len(self.data[0])')
+        # print(len(self.data[0]))
+        # print(np.max([np.max(label[:, 1:], axis=0) for label in self.label], axis=0))
+        # print(np.min([np.min(label[:, 1:], axis=0) for label in self.label], axis=0))
 
         self.seq_len = [
             self.data[i].shape[0]
@@ -100,6 +108,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.data = subseq_data_list
 
         if not self.inference:
+            self.label = [normalize_label(label) for label in self.label]
             subseq_label_list = []
             for seq_label, n_subseq in zip(self.label, self.n_subseq):
                 for j in range(n_subseq):

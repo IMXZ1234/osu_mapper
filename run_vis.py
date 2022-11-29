@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from vis import vis_model
@@ -8,6 +9,8 @@ import numpy as np
 import slider
 from nn.dataset import dataset_util
 from util import beatmap_util
+from preprocess import db, filter
+np.set_printoptions(threshold=np.inf)
 
 
 def view_osu():
@@ -72,21 +75,71 @@ def view_dataset():
         #     print(label[where_1])
             # print(label)
 
-
-if __name__ == '__main__':
+def view_beatmap():
     beatmap = slider.Beatmap.from_path(
-        r'C:\Users\asus\coding\python\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
+        # r'C:\Users\asus\coding\python\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
+        # r'C:\Users\asus\AppData\Local\osu!\Songs\1774219 EPICA - Wings of Freedom\EPICA - Wings of Freedom (Luscent) [Alis Libertatis].osu'
+        r'C:\Users\asus\AppData\Local\osu!\Songs\beatmap-638052960603827278-audio\zato - jiyuu (IMXZ123) [Insane].osu'
     )
     snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+    tp_list = beatmap.timing_points
+    tp_list = [tp for tp in tp_list if tp.parent is not None]
+    # next_tp_idx = 0
+    # next_tp = tp_list[0]
+    # current_sv = -100
+    # print(next_tp.ms_per_beat)
     for ho in beatmap.hit_objects():
         if isinstance(ho, slider.beatmap.Slider):
+            # if ho.time > next_tp.offset:
+            #     next_tp_idx += 1
+            #     current_sv = next_tp.ms_per_beat
             length = int((ho.end_time - ho.time) / timedelta(milliseconds=1) / snap_ms)
-            if length <= 4:
-                print(ho)
-                print(length)
+            # # if length <= 4:
+            # #     print(ho)
+            # #     print(length)
             pos = beatmap_util.slider_snap_pos(ho, length)
             pos_at_ticks = ho.tick_points
             for p in pos:
                 if p.x < 0 or p.y < 0:
                     print(pos)
                     print(pos_at_ticks)
+
+if __name__ == '__main__':
+    table_name = 'MAIN'
+    train_db = db.OsuDB(
+        r'./resources/data/osu_train_mel.db'
+    )
+    ids = train_db.all_ids(table_name)
+    # cond_data, label
+    items = [[], []]
+    data, label = items
+    print('ids')
+    print(ids)
+    cache = {0: None}
+    sample_filter = filter.OsuTrainDataFilterGroup(
+        [
+            filter.ModeFilter(),
+            filter.SnapDivisorFilter(),
+            filter.SnapInNicheFilter(),
+            filter.SingleUninheritedTimingPointFilter(),
+            filter.SingleBMPFilter(),
+            filter.BeatmapsetSingleAudioFilter(),
+            filter.HitObjectFilter(),
+        ]
+    )
+    for id_ in ids:
+        record = train_db.get_record(id_, table_name)
+        first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
+        beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
+        audio_path = os.path.join(r'', record[db.OsuDB.AUDIOFILENAME_POS])
+        if not sample_filter.filter(beatmap, audio_path):
+            continue
+        snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+        label = dataset_util.hitobjects_to_label_with_pos(beatmap, snap_ms=snap_ms)
+        if label is not None:
+            x, y = label[:, 1], label[:, 2]
+            pos = np.where(x < 0)
+            print(pos)
+            # print(label[pos])
+            print(label)
+            input()
