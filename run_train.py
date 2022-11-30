@@ -1713,13 +1713,16 @@ def train_seqganv2(setting_name='seqganv2'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 2
-    discriminator_pretrain_epoch = 4
+    generator_pretrain_epoch = 4
+    discriminator_pretrain_epoch = 1
     scheduler_step_size = 256
+
+    adv_generator_epoch = 1
+    adv_discriminator_epoch = 1
 
     snap_feature = 514
     snap_divisor = 8
-    sample_beats = 48
+    sample_beats = 12
     sample_snaps = sample_beats * snap_divisor
 
     batch_size = 16
@@ -1731,8 +1734,8 @@ def train_seqganv2(setting_name='seqganv2'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for lr in [0.01]:
-        print('init lr %s' % str(lr))
+    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.01, 0.001)]:
+        print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
             'model_type': ['nn.net.seqganv2.Generator', 'nn.net.seqganv2.Discriminator'],
@@ -1756,31 +1759,28 @@ def train_seqganv2(setting_name='seqganv2'):
             ]
         }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {
-            'optimizer_type': ['Adam', 'Adam'],
+            'optimizer_type': ['Adam', 'Adam', 'Adam'],
             'params': [
-                {'lr': lr,},
-                {'lr': lr,},
+                {'lr': gen_lr_mle,},
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ],
+            'models_index': [
+                0, 0, 1
             ]
         }
         scheduler_arg = {
-            'scheduler_type': ['StepLR', 'StepLR'],
+            'scheduler_type': ['StepLR', 'StepLR', 'StepLR'],
             'params': [
+                {'step_size': 16, 'gamma': 0.3},
                 {'step_size': 16, 'gamma': 0.3},
                 {'step_size': 128, 'gamma': 0.1},
             ]
         }
-        data_arg = {'dataset': 'nn.dataset.subseq_feeder.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.seqganv2_feeder.SeqGANv2Feeder',
                     'train_dataset_arg':
-                        {'data_path': r'./resources/data/fit/rnnv3_nolabel/train%d_data.pkl',
-                         'label_path': r'./resources/data/fit/rnnv3_nolabel/train%d_label.pkl',
-                         'subseq_len': subseq_len,
-                         'random_seed': random_seed,
-                         'use_random_iter': True,
-                         'binary': False,
-                         },
-                    'test_dataset_arg':
-                        {'data_path': r'./resources/data/fit/rnnv3_nolabel/test%d_data.pkl',
-                         'label_path': r'./resources/data/fit/rnnv3_nolabel/test%d_label.pkl',
+                        {'data_path': r'./resources/data/fit/rnnv3_nolabel/data.pkl',
+                         'label_path': r'./resources/data/fit/rnnv3_nolabel/label.pkl',
                          'subseq_len': subseq_len,
                          'random_seed': random_seed,
                          'use_random_iter': True,
@@ -1801,12 +1801,16 @@ def train_seqganv2(setting_name='seqganv2'):
             ]
         }
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
-        output_arg = {'log_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
-                      'model_save_dir': './resources/result/' + setting_name + '/' + str(lr) + '/%d',
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
                      'generator_pretrain_epoch': generator_pretrain_epoch,
-                     'discriminator_pretrain_epoch': discriminator_pretrain_epoch,}
+                     'discriminator_pretrain_epoch': discriminator_pretrain_epoch,
+                     'adv_generator_epoch': adv_generator_epoch,
+                     'adv_discriminator_epoch': adv_discriminator_epoch,
+                     'adaptive_adv_train': True,
+                     }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
                        'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
@@ -2104,7 +2108,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
 
 
 if __name__ == '__main__':
-    train_seqganv3_dis_deep()
+    train_seqganv2()
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

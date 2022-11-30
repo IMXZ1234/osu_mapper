@@ -186,7 +186,7 @@ class Train:
     def load_data(self,
                   dataset,
                   train_dataset_arg,
-                  test_dataset_arg,
+                  test_dataset_arg=None,
                   batch_size=8,
                   shuffle=True,
                   num_workers=1,
@@ -199,13 +199,16 @@ class Train:
             collate_fn=self.collate_fn,
             num_workers=num_workers,
             drop_last=drop_last)
-        test_iter = torch.utils.data.DataLoader(
-            dataset=dynamic_import(dataset)(**test_dataset_arg),
-            batch_size=batch_size,
-            shuffle=False,
-            collate_fn=self.collate_fn,
-            num_workers=num_workers,
-            drop_last=False)
+        if test_dataset_arg is not None:
+            test_iter = torch.utils.data.DataLoader(
+                dataset=dynamic_import(dataset)(**test_dataset_arg),
+                batch_size=batch_size,
+                shuffle=False,
+                collate_fn=self.collate_fn,
+                num_workers=num_workers,
+                drop_last=False)
+        else:
+            test_iter = None
         return train_iter, test_iter
 
     def load_loss(self, loss_type, **kwargs):
@@ -693,9 +696,9 @@ class TrainRNNGANPretrain(TrainGAN):
         """
         Max Likelihood Pretraining for the generator
         """
-        optimizer_G, optimizer_D = self.optimizer
+        optimizer_G = self.optimizer[0]
         # loss_G, loss_D = self.loss
-        gen, discriminator = self.model
+        gen = self.model[0]
         total_loss = 0
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
@@ -729,42 +732,55 @@ class TrainRNNGANPretrain(TrainGAN):
         The generator is trained using policy gradients, using the reward from the discriminator.
         Training is done for num_batches batches.
         """
-        optimizer_G, optimizer_D = self.optimizer
+        optimizer_G, optimizer_D = self.optimizer[1], self.optimizer[2]
         # loss_G, loss_D = self.loss
         gen, dis = self.model
+        epoch_dis_acc = 0
+        total_sample_num = 0
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
             batch_size = cond_data.shape[0]
+            total_sample_num += batch_size
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1], device=cond_data.device, dtype=torch.long), real_gen_output[:, :-1]], dim=1)
 
             fake, h_gen = gen.sample(cond_data)
             rewards, h_dis = dis.batchClassify(cond_data, fake)
+            epoch_dis_acc += torch.sum(rewards < 0.5).data.item()
 
             optimizer_G.zero_grad()
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
             pg_loss.backward()
             optimizer_G.step()
 
+        epoch_dis_acc = epoch_dis_acc / total_sample_num
+        print('epoch_dis_acc %.3f' % epoch_dis_acc)
+
         sys.stdout.flush()
         print('gen.sample(5)')
         print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+
+        return epoch_dis_acc
 
     def train_discriminator(self):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
         """
-        optimizer_G, optimizer_D = self.optimizer
-        loss_G, loss_D = self.loss
+        optimizer_D = self.optimizer[2]
+        loss_D = self.loss[1]
         gen, discriminator = self.model
         total_loss = 0
         total_acc = 0
+        total_sample_num = 0
 
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            if random.random() < 0.5:
+                continue
             batch_size = cond_data.shape[0]
+            total_sample_num += batch_size
             cond_data = recursive_wrap_data(cond_data, self.output_device)
             real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
             # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
@@ -785,18 +801,14 @@ class TrainRNNGANPretrain(TrainGAN):
 
             total_loss += loss.data.item()
 
-        total_loss = total_loss / len(self.train_iter.dataset)
-        total_acc = total_acc / len(self.train_iter.dataset) / 2
+        avg_loss = total_loss / total_sample_num
+        avg_acc = total_acc / total_sample_num / 2
 
         sys.stdout.flush()
         print(' average_loss = %.4f, train_acc = %.4f' % (
-            total_loss, total_acc))
+            avg_loss, avg_acc))
 
-    def eval_discriminator(self):
-        # val_pred = discriminator.batchClassify(val_inp)
-        # print(' average_loss = %.4f, train_acc = %.4f, val_acc = %.4f' % (
-        #     total_loss, total_acc, torch.sum((val_pred>0.5)==(val_target>0.5)).data.item()/200.))
-        pass
+        return avg_acc
 
 
 class TrainSeqGANAdvLoss(TrainRNNGANPretrain):

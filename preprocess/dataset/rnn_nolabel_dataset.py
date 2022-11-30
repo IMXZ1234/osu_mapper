@@ -7,7 +7,7 @@ import numpy as np
 import slider
 
 from nn.dataset import dataset_util
-from preprocess import db, prepare_data
+from preprocess import db, prepare_data, filter
 from preprocess.preprocessor import MelPreprocessor
 from util import beatmap_util, general_util
 from preprocess.dataset import fit_dataset
@@ -105,7 +105,7 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
     def prepare(self, save=True):
         if self.random_seed is not None:
             random.seed(self.random_seed)
-        table_name = 'FILTERED'
+        table_name = 'MAIN'
         ids = self.db.all_ids(table_name)
         # cond_data, label
         self.items = [[], []]
@@ -114,10 +114,25 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             ids = ids[:self.take_first]
         print('ids')
         print(ids)
+        sample_filter = filter.OsuTrainDataFilterGroup(
+            [
+                filter.ModeFilter(),
+                filter.SnapDivisorFilter(),
+                filter.SnapInNicheFilter(),
+                filter.SingleUninheritedTimingPointFilter(),
+                filter.SingleBMPFilter(),
+                filter.BeatmapsetSingleAudioFilter(),
+                filter.HitObjectFilter(),
+            ]
+        )
         cache = {0: None}
         for id_ in ids:
             record = self.db.get_record(id_, table_name)
             audio_path = os.path.join(self.audio_dir, record[db.OsuDB.AUDIOFILENAME_POS])
+            beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
+            if not sample_filter.filter(beatmap, audio_path):
+                print('skipping %d, title %s' % (id_, beatmap.title))
+                continue
             # print('audio_path')
             # print(audio_path)
             if audio_path in cache:
@@ -136,8 +151,6 @@ class RNNNoLabelDataset(fit_dataset.FitDataset):
             audio_data = np.mean(audio_data, axis=0)
             snap_offset = record[db.OsuDB.EXTRA_START_POS + 1]
             # print('crop_start_time %d' % crop_start_time)
-            beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
-            assert isinstance(beatmap, slider.Beatmap)
             snap_ms = beatmap_util.get_snap_milliseconds(beatmap)
             total_snaps = beatmap_util.get_total_snaps(beatmap, self.snap_divisor)
             first_ho_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)

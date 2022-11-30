@@ -3,23 +3,16 @@ cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
 collate_fn: nn.dataset.collate_fn.default_collate
 data_arg:
   batch_size: 16
-  dataset: nn.dataset.subseq_feeder.SubseqFeeder
+  dataset: nn.dataset.seqganv2_feeder.SeqGANv2Feeder
   drop_last: false
   num_workers: 1
   shuffle: false
-  test_dataset_arg:
-    binary: false
-    data_path: ./resources/data/fit/rnnv3_nolabel/test%d_data.pkl
-    label_path: ./resources/data/fit/rnnv3_nolabel/test%d_label.pkl
-    random_seed: 404
-    subseq_len: 384
-    use_random_iter: true
   train_dataset_arg:
     binary: false
-    data_path: ./resources/data/fit/rnnv3_nolabel/train%d_data.pkl
-    label_path: ./resources/data/fit/rnnv3_nolabel/train%d_label.pkl
+    data_path: ./resources/data/fit/rnnv3_nolabel/data.pkl
+    label_path: ./resources/data/fit/rnnv3_nolabel/label.pkl
     random_seed: 404
-    subseq_len: 384
+    subseq_len: 96
     use_random_iter: true
 grad_alter_fn: null
 grad_alter_fn_arg:
@@ -50,15 +43,21 @@ model_arg:
     vocab_size: 3
 num_classes: 3
 optimizer_arg:
+  models_index:
+  - 0
+  - 0
+  - 1
   optimizer_type:
+  - Adam
   - Adam
   - Adam
   params:
   - lr: 0.01
   - lr: 0.01
+  - lr: 0.001
 output_arg:
-  log_dir: ./resources/result/seqganv2/0.01/%d
-  model_save_dir: ./resources/result/seqganv2/0.01/%d
+  log_dir: ./resources/result/seqganv2/%d
+  model_save_dir: ./resources/result/seqganv2/%d
   model_save_step: 8
 output_device: 0
 pred_arg:
@@ -68,15 +67,21 @@ scheduler_arg:
   params:
   - gamma: 0.3
     step_size: 16
+  - gamma: 0.3
+    step_size: 16
   - gamma: 0.1
     step_size: 128
   scheduler_type:
   - StepLR
   - StepLR
+  - StepLR
 train_arg:
-  discriminator_pretrain_epoch: 16
+  adaptive_adv_train: true
+  adv_discriminator_epoch: 1
+  adv_generator_epoch: 1
+  discriminator_pretrain_epoch: 1
   epoch: 64
   eval_step: 1
-  generator_pretrain_epoch: 16
+  generator_pretrain_epoch: 4
   use_ext_cond_data: false
 train_type: rnngan_with_pretrain
