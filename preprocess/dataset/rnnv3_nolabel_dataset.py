@@ -7,7 +7,7 @@ import numpy as np
 import slider
 
 from nn.dataset import dataset_util
-from preprocess import db, prepare_data
+from preprocess import db, prepare_data, filter
 from preprocess.preprocessor import MelPreprocessor
 from util import beatmap_util, general_util
 from preprocess.dataset import fit_dataset
@@ -324,6 +324,17 @@ class RNNDataset(fit_dataset.FitDataset):
         data, label = self.items
         if self.take_first is not None:
             ids = ids[:self.take_first]
+        sample_filter = filter.OsuTrainDataFilterGroup(
+            [
+                filter.ModeFilter(),
+                filter.SnapDivisorFilter(),
+                filter.SnapInNicheFilter(),
+                filter.SingleUninheritedTimingPointFilter(),
+                filter.SingleBMPFilter(),
+                filter.BeatmapsetSingleAudioFilter(),
+                filter.HitObjectFilter(),
+            ]
+        )
         print('ids')
         print(ids)
         cache = {0: None}
@@ -332,6 +343,9 @@ class RNNDataset(fit_dataset.FitDataset):
             first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
             beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
             audio_path = os.path.join(self.audio_dir, record[db.OsuDB.AUDIOFILENAME_POS])
+            if not sample_filter.filter(beatmap, audio_path):
+                print('skipping %d, title %s' % (id_, beatmap.title))
+                continue
             # print('audio_path')
             # print(audio_path)
             if audio_path in cache:

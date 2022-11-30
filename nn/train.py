@@ -260,13 +260,16 @@ class Train:
         except:
             self.logger.error('fail to react to control!')
 
-    def save_model(self, epoch=-1):
+    def save_model(self, epoch=-1, model_index=None):
         if not isinstance(self.model, (list, tuple)):
             models = [self.model]
         else:
             models = self.model
+        if model_index is None:
+            model_index = list(range(len(models)))
         pt_filename = 'model_%d_epoch_{}.pt'.format(epoch)
-        for index, model in enumerate(models):
+        for index in model_index:
+            model = models[index]
             torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
         print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
 
@@ -686,8 +689,8 @@ class TrainRNNGANPretrain(TrainGAN):
                 print('\nAdversarial Training Discriminator : ')
                 for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
                     self.train_discriminator()
-                if (epoch + 1) % self.model_save_step == 0:
-                    self.save_model(epoch)
+                # if (epoch + 1) % self.model_save_step == 0:
+            self.save_model(epoch, (0, ))
 
         self.save_model(-1)
         # self.save_properties()
@@ -736,6 +739,7 @@ class TrainRNNGANPretrain(TrainGAN):
         # loss_G, loss_D = self.loss
         gen, dis = self.model
         epoch_dis_acc = 0
+        epoch_pg_loss = 0
         total_sample_num = 0
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
@@ -751,6 +755,7 @@ class TrainRNNGANPretrain(TrainGAN):
 
             optimizer_G.zero_grad()
             pg_loss, h_gen_PG = gen.batchPGLoss(cond_data, real_gen_output_as_input, real_gen_output, rewards)
+            epoch_pg_loss += pg_loss.item()
             pg_loss.backward()
             optimizer_G.step()
 
@@ -759,7 +764,7 @@ class TrainRNNGANPretrain(TrainGAN):
 
         sys.stdout.flush()
         print('gen.sample(5)')
-        print(gen.sample(cond_data)[0][:1].cpu().detach().numpy().tolist())
+        print(gen.sample(cond_data)[0].cpu().detach().numpy().tolist())
 
         return epoch_dis_acc
 
@@ -777,7 +782,7 @@ class TrainRNNGANPretrain(TrainGAN):
 
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
-            if random.random() < 0.5:
+            if random.random() < 0.1:
                 continue
             batch_size = cond_data.shape[0]
             total_sample_num += batch_size
@@ -800,6 +805,9 @@ class TrainRNNGANPretrain(TrainGAN):
             optimizer_D.step()
 
             total_loss += loss.data.item()
+
+        print(fake[0].cpu().detach().numpy().tolist())
+        print(real_gen_output[0].cpu().detach().numpy().tolist())
 
         avg_loss = total_loss / total_sample_num
         avg_acc = total_acc / total_sample_num / 2
@@ -965,6 +973,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             avg_loss, avg_acc))
 
         return avg_acc
+
 
 def recursive_detach(items):
     if isinstance(items, torch.Tensor):

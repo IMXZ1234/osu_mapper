@@ -39,6 +39,7 @@ model_arg:
     dropout: 0.2
     embedding_dim: 128
     hidden_dim: 512
+    num_layers: 3
     seq_len: 8
     vocab_size: 3
 num_classes: 3
@@ -53,7 +54,7 @@ optimizer_arg:
   - Adam
   params:
   - lr: 0.01
-  - lr: 0.01
+  - lr: 0.0001
   - lr: 0.001
 output_arg:
   log_dir: ./resources/result/seqganv2/%d
@@ -82,6 +83,6 @@ train_arg:
   discriminator_pretrain_epoch: 1
   epoch: 64
   eval_step: 1
-  generator_pretrain_epoch: 4
+  generator_pretrain_epoch: 1
   use_ext_cond_data: false
 train_type: rnngan_with_pretrain

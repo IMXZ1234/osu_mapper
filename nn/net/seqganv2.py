@@ -164,7 +164,7 @@ class Discriminator(nn.Module):
         pos_emb = pos_emb.permute(1, 0, 2)                                 # seq_len x batch_size x embedding_dim
         _, h = self.gru(torch.cat([emb, pos_emb, cond_data], dim=2), h)                          # 4 x batch_size x hidden_dim
         h = h.permute(1, 0, 2).contiguous()              # batch_size x 4 x hidden_dim
-        out = self.gru2hidden(h.view(-1, 4 * self.hidden_dim))  # batch_size x 4*hidden_dim
+        out = self.gru2hidden(h.view(-1, 2 * self.num_layers * self.hidden_dim))  # batch_size x 4*hidden_dim
         out = torch.tanh(out)
         out = self.dropout_linear(out)
         out = self.hidden2out(out)                                 # batch_size x 1

@@ -192,7 +192,7 @@ def prepare_rnnv3_nolabel_dataset():
     ds = rnnv3_nolabel_dataset.RNNDataset(
         r'./resources/data/fit/rnnv3_nolabel',
         audio_mel=4,
-        take_first=300,
+        take_first=500,
         random_seed=404,
         coeff_speed_stars=2.5,
         coeff_bpm=120,
@@ -202,7 +202,7 @@ def prepare_rnnv3_nolabel_dataset():
         multibeat_label_fmt=0,
     )
     ds.prepare()
-    ds.div_folds(save_first=1)
+    # ds.div_folds(save_first=1)
 
 
 def prepare_rnnv3_nolabel_binary_dataset():
@@ -239,7 +239,7 @@ def prepare_rnn_nolabel_dataset():
     ds = rnn_nolabel_dataset.RNNNoLabelDataset(
         r'./resources/data/fit/rnn_nolabel',
         audio_mel=4,
-        take_first=100,
+        take_first=500,
         random_seed=404,
         coeff_speed_stars=2.5,
         coeff_bpm=120,
@@ -306,7 +306,7 @@ def prepare_label_pos_dataset():
 
 
 if __name__ == '__main__':
-    prepare_label_pos_dataset()
+    prepare_rnnv3_nolabel_dataset()
     # prepare_mel_train_data()
     # prepare_rnn_dataset()
     # cond_data = rnn_dataset.RNNDataset(

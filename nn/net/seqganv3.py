@@ -34,7 +34,7 @@ class Generator(nn.Module):
         )
 
     def init_hidden(self, batch_size=1, device='cpu'):
-        return autograd.Variable(torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device))
+        return autograd.Variable(torch.randn(self.num_layers, batch_size, self.hidden_dim, device=device))
 
     def forward(self, cond_data, type_label, ho_pos, hidden, pos):
         """
@@ -192,7 +192,7 @@ class Discriminator(nn.Module):
         self.hidden2out = nn.Linear(hidden_dim, 1)
 
     def init_hidden(self, batch_size, device='cpu'):
-        return autograd.Variable(torch.zeros(2*self.num_layers, batch_size, self.hidden_dim, device=device))
+        return autograd.Variable(torch.randn(2*self.num_layers, batch_size, self.hidden_dim, device=device))
 
     def forward(self, cond_data, inp, h):
         """

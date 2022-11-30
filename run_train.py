@@ -1713,7 +1713,7 @@ def train_seqganv2(setting_name='seqganv2'):
             num_classes = 3
             weight = None
     epoch = 64
-    generator_pretrain_epoch = 4
+    generator_pretrain_epoch = 1
     discriminator_pretrain_epoch = 1
     scheduler_step_size = 256
 
@@ -1734,7 +1734,7 @@ def train_seqganv2(setting_name='seqganv2'):
     embedding_dim = 128
     hidden_dim = 512
 
-    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.01, 0.001)]:
+    for gen_lr_mle, gen_lr, dis_lr in [(0.01, 0.0001, 0.001)]:
         print('init gen_lr %s, dis_lr %s' % (str(gen_lr), str(dis_lr)))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -1755,6 +1755,7 @@ def train_seqganv2(setting_name='seqganv2'):
                     'vocab_size': num_classes,
                     'seq_len': snap_divisor,
                     'dropout': 0.2,
+                    'num_layers': 3,
                 },
             ]
         }  # , 'num_block': [1, 1, 1, 1]
@@ -2023,7 +2024,7 @@ def train_seqganv3_dis_deep(setting_name='seqganv3_dis_deep'):
                     'vocab_size': num_classes,
                     'seq_len': snap_divisor,
                     'dropout': 0.2,
-                    'num_layers': 2,
+                    'num_layers': 3,
                 },
             ]
         }  # , 'num_block': [1, 1, 1, 1]
