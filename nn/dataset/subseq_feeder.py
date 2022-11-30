@@ -31,6 +31,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  random_seed=None,
                  binary=False,
                  inference=False,
+                 take_first=None,
                  **kwargs,
                  ):
         """
@@ -41,6 +42,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.data_path = data_path
         self.label_path = label_path
         self.use_random_iter = use_random_iter
+        self.take_first = take_first
 
         self.subseq_len = subseq_len
         self.inference = inference
@@ -58,10 +60,16 @@ class SubseqFeeder(torch.utils.data.Dataset):
             with open(self.data_path, 'rb') as f:
                 self.data = pickle.load(f)
 
+        if self.take_first is not None:
+            self.data = self.data[:self.take_first]
+
         if not self.inference:
             # load label
             with open(self.label_path, 'rb') as f:
                 self.label = pickle.load(f)
+
+            if self.take_first is not None:
+                self.label = self.label[:self.take_first]
 
             if self.binary:
                 for i in range(len(self.label)):

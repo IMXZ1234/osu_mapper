@@ -1746,7 +1746,7 @@ def train_seqganv2(setting_name='seqganv2'):
                     'cond_data_feature_dim': snap_feature,
                     'vocab_size': num_classes,
                     'seq_len': snap_divisor,
-                    'num_layers': 2,
+                    'num_layers': 3,
                 },
                 {
                     'embedding_dim': embedding_dim,
@@ -1786,6 +1786,7 @@ def train_seqganv2(setting_name='seqganv2'):
                          'random_seed': random_seed,
                          'use_random_iter': True,
                          'binary': False,
+                         'take_first': 250,
                          },
                     'batch_size': batch_size,
                     'shuffle': False,

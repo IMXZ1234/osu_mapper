@@ -13,6 +13,7 @@ data_arg:
     label_path: ./resources/data/fit/rnnv3_nolabel/label.pkl
     random_seed: 404
     subseq_len: 96
+    take_first: 250
     use_random_iter: true
 grad_alter_fn: null
 grad_alter_fn_arg:
@@ -32,7 +33,7 @@ model_arg:
   - cond_data_feature_dim: 514
     embedding_dim: 128
     hidden_dim: 512
-    num_layers: 2
+    num_layers: 3
     seq_len: 8
     vocab_size: 3
   - cond_data_feature_dim: 514
