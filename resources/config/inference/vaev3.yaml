@@ -3,34 +3,36 @@ cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
 collate_fn: nn.dataset.collate_fn.default_collate_inference
 data_arg:
   batch_size: 1
-  dataset: nn.dataset.subseq_feeder.SubseqFeeder
+  dataset: nn.dataset.subseq_density_feeder.SubseqFeeder
   drop_last: false
   num_workers: 1
   shuffle: false
   test_dataset_arg:
     binary: false
-    data_path: ./resources/data/fit/inference/rnnv3_nolabel/data.pkl
-    label_path: ./resources/data/fit/inference/rnnv3_nolabel/label.pkl
+    data_path: ./resources/data/fit/inference/label_pos/data.pkl
+    ho_pos: true
+    label_path: ./resources/data/fit/inference/label_pos/label.pkl
     random_seed: 404
-    subseq_len: 96
+    subseq_len: 384
     inference: true
     use_random_iter: false
 model_arg:
-  model_type: nn.net.seqganv2.Generator
   cond_data_feature_dim: 514
-  embedding_dim: 128
+  dec_layers: 1
+  enc_layers: 2
   hidden_dim: 512
-  num_layers: 2
-  seq_len: 8
-  vocab_size: 3
+  in_channels: 4
+  model_type: nn.net.vaev3.VAE
+  pos_emb_channels: 4
+  pos_emb_period: 8
 num_classes: 3
 output_arg:
-  log_dir: ./resources/result/seqganv2/0.01/%d
-  model_save_dir: ./resources/result/seqganv2/0.01/%d
+  log_dir: ./resources/result/vaev3/0.001/%d
+  model_save_dir: ./resources/result/vaev3/0.001/%d
   model_save_step: 8
 output_device: 0
 pred_arg:
   pred_type: nn.pred.multi_pred.MultiPred
 random_seed: 404
-train_type: rnngan_with_pretrain
-weights_path: ./resources/pretrained_models/model_0_epoch_0.pt
+train_type: vae
+weights_path: ./resources/result/vaev3/0.001/1/model_0_epoch_63.pt

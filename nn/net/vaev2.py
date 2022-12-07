@@ -28,33 +28,41 @@ class VAE(nn.Module):
         self.num_layers = num_layers
         self.gru = nn.GRU(cond_data_feature_dim, hidden_dim, bidirectional=True, num_layers=num_layers)
 
-        out_dim = seq_len * num_class
+        out_dim = seq_len * (num_class + 2)
         out_h_dim = hidden_dim * 2*self.num_layers
         h_dim = 512
+        self.z_dim = h_dim
         self.shrink_h = nn.Linear(out_h_dim, h_dim)
         total_feature_dim = out_dim + h_dim
         self.fc1 = nn.Linear(total_feature_dim, h_dim)
-        self.z_dim = h_dim // 4
+        self.fc1_1 = nn.Linear(h_dim, h_dim)
         self.fc2_mu = nn.Linear(h_dim, self.z_dim)
         self.fc2_log_std = nn.Linear(h_dim, self.z_dim)
         self.fc3 = nn.Linear(self.z_dim, h_dim)
-        self.fc4 = nn.Linear(h_dim + h_dim, h_dim + h_dim)
-        self.fc5 = nn.Linear(h_dim + h_dim, out_dim)
+        # self.fc4 = nn.Linear(h_dim + h_dim, h_dim + h_dim)
+        self.fc5 = nn.Linear(h_dim, out_dim)
 
     def init_hidden(self, batch_size=1, device='cpu'):
         return autograd.Variable(torch.zeros(2*self.num_layers, batch_size, self.hidden_dim, device=device))
 
     def encode(self, x):
         h1 = F.relu(self.fc1(x))
+        h1 = F.relu(self.fc1_1(h1))
         mu = self.fc2_mu(h1)
         log_std = self.fc2_log_std(h1)
         return mu, log_std
 
-    def decode(self, z, h):
+    # def decode(self, z, h):
+    #     h3 = F.relu(self.fc3(z))
+    #     h3 = torch.cat([h3, h], dim=1)
+    #     # h4 = F.relu(self.fc4(h3))
+    #     recon = torch.sigmoid(self.fc5(h3))  # use sigmoid because the input image's pixel is between 0-1
+    #     return recon
+
+    def decode(self, z):
         h3 = F.relu(self.fc3(z))
-        h3 = torch.cat([h3, h], dim=1)
-        h4 = F.relu(self.fc4(h3))
-        recon = torch.sigmoid(self.fc5(h4))  # use sigmoid because the input image's pixel is between 0-1
+        # h4 = F.relu(self.fc4(h3))
+        recon = torch.sigmoid(self.fc5(h3))  # use sigmoid because the input image's pixel is between 0-1
         return recon
 
     def reparametrize(self, mu, log_std):
@@ -68,8 +76,8 @@ class VAE(nn.Module):
         x: type_label [batch_size, seq_len, 3]
         cond_data: [batch_size, seq_len, cond_data_feature_dim]
         """
-        batch_size, seq_len = x.shape
-        x = F.one_hot(x, num_classes=self.num_class).reshape([batch_size, -1])
+        batch_size, seq_len, _ = x.shape
+        x = inp_to_one_hot(x, self.num_class).reshape([batch_size, -1])
         # print('x.shape')
         # print(x.shape)
         # print('cond_data')
@@ -93,27 +101,26 @@ class VAE(nn.Module):
         z = self.reparametrize(mu, log_std)
         # print(torch.isnan(z).any())
 
-        recon = self.decode(z, h)
+        recon = self.decode(z)
         recon = recon.reshape([batch_size, seq_len, -1])
         # print(torch.isnan(recon).any())
 
         return recon, mu, log_std
 
-    def loss_function(self, recon, mu, log_std, x) -> torch.Tensor:
+    def loss_function(self, recon, mu, log_std, x):
         # print('recon[0]')
         # print(recon[0])
         # x = inp_to_one_hot(x, self.num_class)
         # print('x[0]')
         # print(x[0])
-        batch_size, seq_len = x.shape
-        x = x.reshape(-1)
-        recon = recon.reshape([batch_size * seq_len, -1])
-        type_label_loss = F.cross_entropy(recon, x, reduction="mean")
+        type_label, ho_pos = x[:, :, 0].long().reshape(-1), x[:, :, 1:]
+        pred_type_label_prob, pred_ho_pos = recon[:, :, :self.num_class].reshape([-1, self.num_class]), recon[:, :, self.num_class:]
+        type_label_loss = F.cross_entropy(pred_type_label_prob, type_label, reduction="mean")
+        ho_pos_loss = F.mse_loss(pred_ho_pos, ho_pos, reduction="mean")
         kl_loss = -0.5 * (1 + 2*log_std - mu.pow(2) - torch.exp(2*log_std))
         kl_loss = torch.sum(kl_loss)
-        print('type_label_loss %.4f, kl_loss %.4f' % (type_label_loss.item(), kl_loss.item()))
-        loss = type_label_loss + kl_loss
-        return loss
+        print('ho_pos_loss %.4f, type_label_loss %.4f, kl_loss %.4f' % (ho_pos_loss.item(), type_label_loss.item(), kl_loss.item()))
+        return (type_label_loss + ho_pos_loss), kl_loss
 
     def sample(self, cond_data):
         batch_size, seq_len, _ = cond_data.shape
@@ -124,6 +131,6 @@ class VAE(nn.Module):
         # print('h.shape')
         # print(h.shape)
         h = self.shrink_h(h)
-        recon = self.decode(z, h)
+        recon = self.decode(z)
         recon = recon.reshape([batch_size, seq_len, -1])
         return recon

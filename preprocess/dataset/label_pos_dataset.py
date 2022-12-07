@@ -5,6 +5,7 @@ import random
 
 import numpy as np
 import slider
+from matplotlib import pyplot as plt
 
 from nn.dataset import dataset_util
 from preprocess import db, prepare_data, filter
@@ -245,6 +246,8 @@ class LabelPosDataset(fit_dataset.FitDataset):
                 filter.HitObjectFilter(),
             ]
         )
+        all_speed_stars = []
+        all_difficulty = []
         for id_ in ids:
             record = self.db.get_record(id_, table_name)
             first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
@@ -253,6 +256,11 @@ class LabelPosDataset(fit_dataset.FitDataset):
             if not sample_filter.filter(beatmap, audio_path):
                 print('skipping %d, title %s' % (id_, beatmap.title))
                 continue
+            try:
+                all_speed_stars.append(beatmap.speed_stars())
+                all_difficulty.append(beatmap.overall_difficulty)
+            except Exception:
+                print('failed calculating difficulty')
             # print('audio_path')
             # print(audio_path)
             if audio_path in cache:
@@ -278,6 +286,12 @@ class LabelPosDataset(fit_dataset.FitDataset):
             data.append(sample_data)
             label.append(sample_label)
 
+        print(all_difficulty)
+        print(all_speed_stars)
+        plt.hist(all_difficulty)
+        plt.show()
+        plt.hist(all_speed_stars)
+        plt.show()
         # max_value = np.max([np.max(seq_data[0]) for seq_data in cond_data])
         # for idx in range(len(cond_data)):
         #     cond_data[idx][0][:-label_num] = cond_data[idx][0][:-label_num] / max_value

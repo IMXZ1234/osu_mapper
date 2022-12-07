@@ -15,7 +15,7 @@ def normalize_label(label):
     return label
 
 
-class SubseqFeeder(torch.utils.data.Dataset):
+class WholeSeqFeeder(torch.utils.data.Dataset):
     """
     Simplest feeder yielding (data, label, index).
     Data may be either .pkl or .npy, style determined from path suffix.
@@ -24,10 +24,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
     def __init__(self,
                  data_path,
                  label_path,
-                 subseq_len,
                  use_random_iter=True,
-                 flatten=False,
-                 # subseq_num for each batch
                  random_seed=None,
                  binary=False,
                  inference=False,
@@ -46,11 +43,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.take_first = take_first
         self.ho_pos = ho_pos
 
-        self.subseq_len = subseq_len
         self.inference = inference
 
         self.binary = binary
-        self.flatten = flatten
         self.load_data()
 
     def load_data(self):
@@ -76,58 +71,17 @@ class SubseqFeeder(torch.utils.data.Dataset):
             if self.binary:
                 for i in range(len(self.label)):
                     self.label[i][np.where(self.label[i] != 0)[0]] = 1
-        # else:
-        #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
-        # print('len(self.data[0])')
-        # print(len(self.data[0]))
-        # print(np.max([np.max(label[:, 1:], axis=0) for label in self.label], axis=0))
-        # print(np.min([np.min(label[:, 1:], axis=0) for label in self.label], axis=0))
 
         self.seq_len = [
             self.data[i].shape[0]
             for i in range(self.n_seq)
         ]
-        if self.inference:
-            padded_data = []
-            for d in self.data:
-                length, feature_num = d.shape
-                tail = length % self.subseq_len
-                if tail == 0:
-                    padded = d
-                else:
-                    padded = np.pad(d, ((0, self.subseq_len-tail), (0, 0)), mode='reflect')
-                padded_data.append(padded)
-            self.data = padded_data
-        # print('self.seq_len')
-        # print(self.seq_len)
-        self.n_subseq = [
-            self.seq_len[i] // self.subseq_len
-            for i in range(self.n_seq)
-        ]
-        self.sample_div_pos = list(itertools.accumulate([0] + self.n_subseq))
-        print('self.sample_div_pos')
-        print(self.sample_div_pos)
-
-        subseq_data_list = []
-        for seq_data, n_subseq in zip(self.data, self.n_subseq):
-            for j in range(n_subseq):
-                start = j * self.subseq_len
-                end = start + self.subseq_len
-                subseq_data_list.append(seq_data[start:end])
-        self.data = subseq_data_list
 
         if not self.inference:
             if self.ho_pos:
                 self.label = [normalize_label(label) for label in self.label]
-            subseq_label_list = []
-            for seq_label, n_subseq in zip(self.label, self.n_subseq):
-                for j in range(n_subseq):
-                    start = j * self.subseq_len
-                    end = start + self.subseq_len
-                    subseq_label_list.append(seq_label[start:end])
-            self.label = subseq_label_list
         else:
             self.label = [None for _ in range(len(self.data))]
 
@@ -141,9 +95,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         if self.inference:
-            return self.data[index], index
+            return self.data[index], index, self.seq_len[index]
         else:
-            return self.data[index], self.label[index], index
+            return self.data[index], self.label[index], self.seq_len[index]
 
     def cat_sample_labels(self, labels):
         all_sample_labels = []

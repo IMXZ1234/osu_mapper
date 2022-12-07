@@ -93,14 +93,16 @@ class SnapInNicheFilter(OsuTrainDataFilter):
         bpm = beatmap.bpm_min()
         snap_milliseconds = 60000 / (bpm * 8)
         # tp_time = beatmap_util.get_first_uninherited_timing_point(beatmap).offset / timedelta(milliseconds=1)
+        if len(beatmap._hit_objects) == 0:
+            return False
         first_ho_time = beatmap._hit_objects[0].time / timedelta(milliseconds=1)
         for ho in beatmap._hit_objects:
             ho_time = ho.time / timedelta(milliseconds=1)
             snap_idx = (ho_time - first_ho_time) / snap_milliseconds
             if abs(snap_idx - round(snap_idx)) > 0.1:
-                print('not in niche!')
-                print(beatmap.beatmap_set_id)
-                print()
+                # print('not in niche!')
+                # print(beatmap.beatmap_set_id)
+                # print()
                 return False
         return True
 
@@ -108,14 +110,14 @@ class SnapInNicheFilter(OsuTrainDataFilter):
 class SnapDivisorFilter(OsuTrainDataFilter):
     def filter(self, beatmap: slider.Beatmap, audio_file_path):
         if beatmap.beat_divisor > 8:
-            print('beat_divisor > 8: %d' % beatmap.beat_divisor)
-            print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
-            print()
+            # print('beat_divisor > 8: %d' % beatmap.beat_divisor)
+            # print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
+            # print()
             return False
         if beatmap.beat_divisor % 2 != 0:
-            print('beat_divisor is odd: %d' % beatmap.beat_divisor)
-            print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
-            print()
+            # print('beat_divisor is odd: %d' % beatmap.beat_divisor)
+            # print('beatmap.beatmap_set_id %d' % beatmap.beatmap_set_id)
+            # print()
             return False
         return True
 

@@ -8,11 +8,22 @@ from torch.utils import data
 from torch.nn import functional as F
 
 
-def normalize_label(label):
+def process_label(label):
+    """
+    -> circle_density, slider_density, x, y
+    """
+    L, _ = label.shape
     # bounds in osu! beatmap editor
-    label[:, 1] = (label[:, 1] + 180) / (691 + 180)
-    label[:, 2] = (label[:, 2] + 82) / (407 + 82)
-    return label
+    x = (label[:, 1] + 180) / (691 + 180)
+    y = (label[:, 2] + 82) / (407 + 82)
+    # if snap is occupied by a hit_object,
+    # noise's value should be almost always within -0.25~+0.25
+    density = np.random.randn(2 * L).reshape([L, 2]) / 8
+    pos_circle = np.where(label[:, 0] == 1)[0]
+    pos_slider = np.where(label[:, 0] == 2)[0]
+    density[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1
+    density[pos_slider, np.ones(len(pos_slider), dtype=int)] += 1
+    return np.concatenate([density, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
 
 
 class SubseqFeeder(torch.utils.data.Dataset):
@@ -32,7 +43,6 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  binary=False,
                  inference=False,
                  take_first=None,
-                 ho_pos=False,
                  **kwargs,
                  ):
         """
@@ -44,7 +54,6 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.label_path = label_path
         self.use_random_iter = use_random_iter
         self.take_first = take_first
-        self.ho_pos = ho_pos
 
         self.subseq_len = subseq_len
         self.inference = inference
@@ -80,6 +89,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
         #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
+        self.data = [-np.log(d + 1) for d in self.data]
+        # print(self.data[0])
         # print('len(self.data[0])')
         # print(len(self.data[0]))
         # print(np.max([np.max(label[:, 1:], axis=0) for label in self.label], axis=0))
@@ -119,8 +130,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.data = subseq_data_list
 
         if not self.inference:
-            if self.ho_pos:
-                self.label = [normalize_label(label) for label in self.label]
+            self.label = [process_label(label) for label in self.label]
+            print('label')
+            print(self.label[0])
             subseq_label_list = []
             for seq_label, n_subseq in zip(self.label, self.n_subseq):
                 for j in range(n_subseq):

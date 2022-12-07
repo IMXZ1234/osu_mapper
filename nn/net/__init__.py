@@ -22,4 +22,8 @@ from . import (
     seqganv1,
     seqganv2,
     seqganv3,
+    vae,
+    vaev2,
+    vaev3,
+    vaev4,
 )

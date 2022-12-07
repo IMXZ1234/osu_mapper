@@ -1,0 +1,44 @@
+cal_acc_func: nn.metrics.valid_itv_metrics.cal_acc_func_valid_itv
+cal_cm_func: nn.metrics.valid_itv_metrics.cal_cm_func_valid_itv
+collate_fn: nn.dataset.collate_fn.default_collate_inference
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.subseq_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/inference/label_pos/data.pkl
+    ho_pos: true
+    label_path: ./resources/data/fit/inference/label_pos/label.pkl
+    random_seed: 404
+    subseq_len: 96
+    use_random_iter: true
+    inference: true
+model_arg:
+  decoder_args:
+    dropout: 0.5
+    embed_size: 16
+    hidden_size: 256
+    n_layers: 1
+    output_size: 5
+  embed_size: 16
+  encoder_args:
+    cond_data_feature_dim: 514
+    dropout: 0.5
+    hidden_size: 256
+    n_layers: 2
+  model_type: nn.net.seq2seq.Seq2Seq
+  num_class: 3
+output_arg:
+  log_dir: ./resources/result/seq2seq/0.01/%d
+  model_save_dir: ./resources/result/seq2seq/0.01/%d
+  model_save_step: 1
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.valid_itv_pred.ValidIntervalMultiPred
+test_extra:
+  teacher_forcing_ratio: 0
+train_type: seq2seq
+weights_path: ./resources/result/seq2seq/0.01/1/model_0_epoch_0.pt

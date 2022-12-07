@@ -31,13 +31,41 @@ def non_array_to_list(sample_list):
     return batch
 
 
-def default_collate(sample_list):
+def collate_whole_seq(sample_list):
     """
-    Any sample_data in should be [data(type=list), label, index], any item in data will be simply stacked as a list.
+    data in a batch may be of different length
+    we simply put all data in a batch into a list
+    padding/packing will be done later
 
-    :param sample_list:
-    :return:
+    note label may be type int or float(if with hit_object position)
+    data: seq_len, feature_dim
+    ->batch (data, label, seq_len), added batch dim(dim=0)
     """
+    batch = [[], [], []]
+    max_len = max([sample_data[2] for sample_data in sample_list])
+    for sample_data in sample_list:
+        # sample_data = [data, label]
+        data, label, seq_len = sample_data
+        data = torch.tensor(data, dtype=torch.float)
+        # pad aat the end with 0
+        data = F.pad(data, (0, max_len - seq_len, 0, 0), 'constant', 0)
+        batch[0].append(data)
+        label = np.array(label)
+        if label.dtype == int:
+            # classification label
+            label = torch.tensor(label, dtype=torch.long)
+        else:
+            # regression label
+            label = torch.tensor(label, dtype=torch.float)
+        label = F.pad(label, (0, max_len - seq_len, 0, 0), 'constant', 0)
+        batch[1].append(label)
+        batch[2].append(seq_len)
+    batch[0] = torch.stack(batch[0], dim=0)
+    batch[1] = torch.stack(batch[1], dim=0)
+    return batch
+
+
+def default_collate(sample_list):
     batch = [[], [], []]
     for sample_data in sample_list:
         # sample_data = [data, label]

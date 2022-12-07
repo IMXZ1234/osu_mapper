@@ -1,9 +1,11 @@
 import os
 from datetime import timedelta
+from typing import Generator
 
 from vis import vis_model
 
 import torch
+from matplotlib import pyplot as plt
 import pickle
 import numpy as np
 import slider
@@ -43,16 +45,31 @@ def view_model():
 
 
 def view_dataset():
+    # with open(
+    #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\label.pkl',
+    #     'rb'
+    # ) as f:
+    #     label_list = pickle.load(f)
+    # print(len(label_list))
+    #
+    # for label in label_list:
+    #     pos_less_0 = np.where(label < 0)
+    #     print(label[pos_less_0])
     with open(
-        r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\label.pkl',
+        r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\data.pkl',
         'rb'
     ) as f:
-        label_list = pickle.load(f)
-    print(len(label_list))
-
-    for label in label_list:
-        pos_less_0 = np.where(label < 0)
-        print(label[pos_less_0])
+        data_list = pickle.load(f)
+    print(len(data_list))
+    # print(data_list[0])
+    print(data_list[0].shape)
+    data = data_list[0]
+    print(np.mean(data))
+    print(np.max(data))
+    print(np.min(data))
+    # for label in label_list:
+    #     pos_less_0 = np.where(label < 0)
+    #     print(label[pos_less_0])
     # total_over_1 = 0
     # max_x = 0
     # max_y = 0
@@ -104,7 +121,8 @@ def view_beatmap():
                     print(pos)
                     print(pos_at_ticks)
 
-if __name__ == '__main__':
+
+def from_db_with_filter():
     table_name = 'MAIN'
     train_db = db.OsuDB(
         r'./resources/data/osu_train_mel.db'
@@ -113,8 +131,8 @@ if __name__ == '__main__':
     # cond_data, label
     items = [[], []]
     data, label = items
-    print('ids')
-    print(ids)
+    # print('ids')
+    # print(ids)
     cache = {0: None}
     sample_filter = filter.OsuTrainDataFilterGroup(
         [
@@ -131,15 +149,39 @@ if __name__ == '__main__':
         record = train_db.get_record(id_, table_name)
         first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
         beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
-        audio_path = os.path.join(r'', record[db.OsuDB.AUDIOFILENAME_POS])
+        audio_path = os.path.join(r'./resources/data/mel', record[db.OsuDB.AUDIOFILENAME_POS])
         if not sample_filter.filter(beatmap, audio_path):
             continue
-        snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
-        label = dataset_util.hitobjects_to_label_with_pos(beatmap, snap_ms=snap_ms)
-        if label is not None:
-            x, y = label[:, 1], label[:, 2]
-            pos = np.where(x < 0)
-            print(pos)
-            # print(label[pos])
-            print(label)
-            input()
+        yield beatmap, audio_path
+
+
+def view_mel():
+    for beatmap, audio_path in from_db_with_filter():
+        with open(audio_path, 'rb') as f:
+            audio_mel = pickle.load(f)
+        print(audio_mel.shape)
+        plt.imshow(audio_mel[0][:, :1000])
+        print(audio_mel)
+        plt.show()
+        break
+
+
+if __name__ == '__main__':
+    view_dataset()
+        # assert isinstance(beatmap, slider.Beatmap)
+        # try:
+        #     all_speed_stars.append(beatmap.speed_stars())
+        # except Exception:
+        #     continue
+    # plt.hist(all_speed_stars)
+    # plt.show()
+        # print(beatmap.speed_stars)
+        # snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+        # label = dataset_util.hitobjects_to_label_with_pos(beatmap, snap_ms=snap_ms)
+        # if label is not None:
+        #     x, y = label[:, 1], label[:, 2]
+        #     pos = np.where(x < 0)
+        #     print(pos)
+        #     # print(label[pos])
+        #     print(label)
+        #     input()

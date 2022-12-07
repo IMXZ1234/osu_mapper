@@ -8,4 +8,6 @@ from . import (
     rnnv3_generator_test,
     cgan_generator,
     seqganv1_generator,
+    seq2seq_generator,
+    vaev3_generator,
 )

@@ -13,5 +13,6 @@ from . import (
     rnn_feeder,
     rnnv2_feeder,
     subseq_feeder,
+    subseq_density_feeder,
     seqganv2_feeder,
 )

@@ -80,6 +80,8 @@ class Train:
         if 'grad_alter_fn' in config_dict and config_dict['grad_alter_fn'] is not None:
             if config_dict['grad_alter_fn'] == 'value':
                 self.grad_alter_fn = functools.partial(nn.utils.clip_grad_value_, **config_dict['grad_alter_fn_arg'])
+            elif config_dict['grad_alter_fn'] == 'norm':
+                self.grad_alter_fn = functools.partial(nn.utils.clip_grad_norm_, **config_dict['grad_alter_fn_arg'])
             else:
                 self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
                 self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
@@ -921,7 +923,7 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
         print('gen.sample(5)')
         label, pos = gen.sample(cond_data)[0]
         print(label[0].cpu().detach().numpy().tolist())
-        print(pos[0].cpu().detach().numpy().tolist()[:15])
+        # print(pos[0].cpu().detach().numpy().tolist()[:15])
 
         return epoch_dis_acc
 
@@ -973,6 +975,126 @@ class TrainSeqGANAdvLoss(TrainRNNGANPretrain):
             avg_loss, avg_acc))
 
         return avg_acc
+
+
+class TrainVAE(Train):
+    def run_train(self):
+        self.init_train_state()
+        self.teacher_forcing_ratio = self.config_dict['train_arg']['init_teacher_forcing_ratio']
+        epoch_loss_list = []
+
+        for epoch in range(self.epoch):
+            epoch_loss = self.train_epoch(epoch)
+            epoch_loss_list.append(epoch_loss)
+
+            self.save_model(epoch)
+
+        plt.plot(np.arange(len(epoch_loss_list)), epoch_loss_list)
+        plt.show()
+
+    def train_epoch(self, epoch):
+        # linear scheduled teacher_forcing_ratio
+        cur_teacher_forcing_ratio = self.teacher_forcing_ratio * (1 - epoch / self.epoch)
+        # loss_G, loss_D = self.loss
+        total_loss = 0
+        sys.stdout.flush()
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            self.optimizer.zero_grad()
+            # print(real_gen_output)
+
+            # batch_size = cond_data.shape[0]
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            recon, mu, log_std = self.model(cond_data, real_gen_output, teacher_forcing_ratio=cur_teacher_forcing_ratio)
+            recon_loss, kl_loss = self.model.loss_function(recon, mu, log_std, real_gen_output)
+
+            # kl_loss *= 0.025
+            # kl annealing
+            kl_loss = kl_loss * (epoch / self.epoch)
+            print('annealed kl_loss %.4f' % kl_loss)
+            loss = recon_loss + kl_loss
+            total_loss += loss.item()
+
+            loss.backward()
+            if self.grad_alter_fn is not None:
+                self.grad_alter_fn(self.model.parameters())
+            self.optimizer.step()
+        avg_loss = total_loss / len(self.train_iter.dataset)
+        print('avg_loss %d' % avg_loss)
+        recon = recon[0].detach().cpu().numpy()
+        print(np.where(recon[:, 0] > 0.5, 1, 0))
+        print(np.where(recon[:, 1] > 0.5, 2, 0))
+        # print(sampled[:, :2][:32])
+        print(recon[:, 2:][:32])
+        sampled = self.model.sample(cond_data)[0].detach().cpu().numpy()
+        print(np.where(sampled[:, 0] > 0.5, 1, 0))
+        print(np.where(sampled[:, 1] > 0.5, 2, 0))
+        # print(sampled[:, :2][:32])
+        print(sampled[:, 2:][:32])
+        # self.scheduler.step()
+        return avg_loss
+
+
+class TrainSeq2Seq(Train):
+    def run_train(self):
+        self.init_train_state()
+
+        for epoch in range(self.epoch):
+            self.train_epoch(epoch)
+
+            self.save_model(epoch)
+
+            self.test_epoch(epoch)
+
+    def test_epoch(self, epoch):
+        pass
+        # for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.test_iter)):
+        #     cond_data = recursive_wrap_data(cond_data, self.output_device)
+        #     real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+
+    def train_epoch(self, epoch):
+        # loss_G, loss_D = self.loss
+        teacher_forcing_ratio = self.train_extra['teacher_forcing_ratio'] if 'teacher_forcing_ratio' in self.train_extra else 0.5
+        total_loss = 0
+        sys.stdout.flush()
+        for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            self.optimizer.zero_grad()
+            # print(real_gen_output)
+
+            batch_size, seq_len, _ = cond_data.shape
+            cond_data = recursive_wrap_data(cond_data, self.output_device)
+            real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+            out = self.model(cond_data, real_gen_output, teacher_forcing_ratio)
+
+            pred_type_label, pred_ho_pos = \
+                out[:, :, :3].reshape([batch_size * seq_len, -1]), \
+                out[:, :, 3:]
+            type_label, ho_pos = \
+                real_gen_output[:, :, 0].reshape(-1).long(), \
+                real_gen_output[:, :, 1:]
+
+            # print('type_label')
+            # print(type_label.shape)
+            # print('pred_type_label')
+            # print(pred_type_label.shape)
+            # print('pred_ho_pos')
+            # print(pred_ho_pos.shape)
+            # print('ho_pos')
+            # print(ho_pos.shape)
+            type_label_loss = F.cross_entropy(pred_type_label, type_label, weight=torch.tensor([1., 10., 1.], device=cond_data.device))
+            ho_pos_loss = F.mse_loss(pred_ho_pos, ho_pos)
+            loss = type_label_loss + ho_pos_loss
+
+            total_loss += loss.item()
+
+            loss.backward()
+            if self.grad_alter_fn is not None:
+                self.grad_alter_fn(self.model.parameters())
+            self.optimizer.step()
+        print('avg_loss %.4f' % (total_loss / len(self.train_iter.dataset)))
+        print(torch.argmax(pred_type_label, dim=-1).detach().cpu().numpy())
+        print(pred_ho_pos.detach().cpu().numpy())
+        # self.scheduler.step()
 
 
 def recursive_detach(items):
@@ -1027,6 +1149,10 @@ def train_with_config(config_path, format_config=False, folds=5):
             train = TrainRNNGANPretrain(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'gan':
             train = TrainGAN(formatted_config_dict)
+        elif formatted_config_dict['train_type'] == 'vae':
+            train = TrainVAE(formatted_config_dict)
+        elif formatted_config_dict['train_type'] == 'seq2seq':
+            train = TrainSeq2Seq(formatted_config_dict)
         # elif formatted_config_dict['train_type'] == 'rnngan_with_pretrain_inherit':
         #     train = TrainRNNGANPretrainInherit(formatted_config_dict)
         elif formatted_config_dict['train_type'] == 'seqgan_adv_loss':

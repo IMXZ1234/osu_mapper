@@ -1,0 +1,59 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 16
+  dataset: nn.dataset.subseq_density_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  train_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/label_pos/data.pkl
+    ho_pos: true
+    label_path: ./resources/data/fit/label_pos/label.pkl
+    random_seed: 404
+    subseq_len: 384
+    take_first: 500
+    use_random_iter: true
+grad_alter_fn: norm
+grad_alter_fn_arg:
+  max_norm: 10
+loss_arg:
+  loss_type:
+  - MSELoss
+  - BCELoss
+  params:
+  - {}
+  - {}
+model_arg:
+  cond_data_feature_dim: 514
+  dec_layers: 1
+  enc_layers: 2
+  hidden_dim: 512
+  in_channels: 4
+  model_type: nn.net.vaev3.VAE
+  pos_emb_channels: 4
+  pos_emb_period: 8
+num_classes: 3
+optimizer_arg:
+  lr: 0.001
+  optimizer_type: Adam
+output_arg:
+  log_dir: ./resources/result/vaev3_new/0.001/%d
+  model_save_dir: ./resources/result/vaev3_new/0.001/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
+scheduler_arg:
+  gamma: 0.3
+  scheduler_type: StepLR
+  step_size: 16
+train_arg:
+  epoch: 64
+  eval_step: 1
+  init_teacher_forcing_ratio: 0.5
+  use_ext_cond_data: false
+train_type: vae

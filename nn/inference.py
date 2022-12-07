@@ -155,8 +155,6 @@ class Inference:
         print(epoch_output_list)
         output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
         output = recursive_to_cpu(output)
-        print('output')
-        print(output)
         return [label.numpy() for label in output]
 
     def run_inference_seqganv3(self):
@@ -170,7 +168,7 @@ class Inference:
         epoch_output_list = []
         for batch, (data, index) in enumerate(self.data_iter):
             data = recursive_wrap_data(data, self.output_device)
-            output, h = self.model.sample(data)
+            output = self.model.sample(data)
             type_label, ho_pos = output
             output = torch.cat([type_label.float().unsqueeze(dim=2), ho_pos], dim=2)
             epoch_output_list.append(output.reshape([-1, 3]))
@@ -179,6 +177,47 @@ class Inference:
         output = recursive_to_cpu(output)
         print('output')
         print(output)
+        return [label.numpy() for label in output]
+
+    def run_inference_vaev2(self):
+        """
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output = self.model.sample(data).reshape([-1, 5])
+            type_label, pos = output[:, :3], output[:, 3:]
+            type_label = torch.argmax(type_label, dim=1).float().unsqueeze(dim=1)
+            epoch_output_list.append(torch.cat([type_label, pos], dim=1))
+        print(epoch_output_list)
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        output = recursive_to_cpu(output)
+        print('output')
+        print(output)
+        return [label.numpy() for label in output]
+
+    def run_inference_vaev3(self):
+        """
+        use label density
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output = self.model.sample(data).reshape([-1, 4])
+            epoch_output_list.append(output)
+        # print(epoch_output_list)
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        output = recursive_to_cpu(output)
+        print([np.where(label[:, 0] > 0.5, 1, 0) for label in output][0].tolist())
+        print([np.where(label[:, 1] > 0.5, 2, 0) for label in output][0].tolist())
         return [label.numpy() for label in output]
 
     def run_inference_sample_rnn(self, data, state):
@@ -204,4 +243,22 @@ class Inference:
         # print('label')
         # print(label)
         return label.numpy(), state
+
+    def run_inference_seq2seq(self):
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output = self.model.generate(data).reshape([-1, 5])
+            type_label, pos = output[:, :3], output[:, 3:]
+            type_label = torch.argmax(type_label, dim=1).float().unsqueeze(dim=1)
+            epoch_output_list.append(torch.cat([type_label, pos], dim=1))
+        print(epoch_output_list)
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        output = recursive_to_cpu(output)
+        print('output')
+        print(output)
+        return [label.numpy() for label in output]
 

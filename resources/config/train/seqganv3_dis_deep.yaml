@@ -1,0 +1,96 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 16
+  dataset: nn.dataset.subseq_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/label_pos/test%d_data.pkl
+    label_path: ./resources/data/fit/label_pos/test%d_label.pkl
+    random_seed: 404
+    subseq_len: 96
+    use_random_iter: true
+  train_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/label_pos/train%d_data.pkl
+    label_path: ./resources/data/fit/label_pos/train%d_label.pkl
+    random_seed: 404
+    subseq_len: 96
+    use_random_iter: true
+grad_alter_fn: value
+grad_alter_fn_arg:
+  clip_value: 10
+loss_arg:
+  loss_type:
+  - MSELoss
+  - BCELoss
+  params:
+  - {}
+  - {}
+model_arg:
+  model_type:
+  - nn.net.seqganv3.Generator
+  - nn.net.seqganv3.Discriminator
+  params:
+  - cond_data_feature_dim: 514
+    embedding_dim: 128
+    hidden_dim: 512
+    num_layers: 2
+    seq_len: 8
+    vocab_size: 3
+  - cond_data_feature_dim: 514
+    dropout: 0.2
+    embedding_dim: 128
+    hidden_dim: 512
+    num_layers: 2
+    seq_len: 8
+    vocab_size: 3
+num_classes: 3
+optimizer_arg:
+  models_index:
+  - 0
+  - 0
+  - 1
+  optimizer_type:
+  - Adam
+  - Adam
+  - Adam
+  params:
+  - lr: 0.01
+  - lr: 0.01
+  - lr: 0.01
+output_arg:
+  log_dir: ./resources/result/seqganv3_dis_deep/0.01/%d
+  model_save_dir: ./resources/result/seqganv3_dis_deep/0.01/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
+scheduler_arg:
+  params:
+  - gamma: 0.3
+    step_size: 16
+  - gamma: 0.3
+    step_size: 16
+  - gamma: 0.1
+    step_size: 128
+  scheduler_type:
+  - StepLR
+  - StepLR
+  - StepLR
+train_arg:
+  adaptive_adv_train: true
+  adv_discriminator_epoch: 1
+  adv_generator_epoch: 1
+  adv_loss_multiplier: 1.0
+  discriminator_pretrain_epoch: 1
+  epoch: 64
+  eval_step: 1
+  generator_pretrain_epoch: 4
+  use_ext_cond_data: false
+train_type: seqgan_adv_loss
