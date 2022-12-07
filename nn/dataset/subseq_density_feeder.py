@@ -131,8 +131,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
 
         if not self.inference:
             self.label = [process_label(label) for label in self.label]
-            print('label')
-            print(self.label[0])
+            # print('label')
+            # print(self.label[0])
             subseq_label_list = []
             for seq_label, n_subseq in zip(self.label, self.n_subseq):
                 for j in range(n_subseq):
