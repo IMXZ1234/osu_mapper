@@ -21,11 +21,11 @@ class LabelPosDataset(fit_dataset.FitDataset):
     We predict label of every snap with features:
     [
         mel features of audio_mel around target snap,
-        # following two features are now appended after each sample's features
+        # following five meta features are appended after every snap's mel features
         ho_density(number of hit_objects over total snap number, empirically ~N(0.125, 0.058)),
         blank_proportion(proportion of snaps which is not occupied by a hit_object, that is, where keyboard is up, empirically ~N(0.5, 0.07)),
         circle_proportion(num_circle/(num_circle+num_slider), empirically ~N(0.5, 0.15)),
-        difficulty(displayed stars in osu!),
+        approach_rate('AR' in osu!),
         bpm,
     ]
     """
@@ -34,7 +34,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
                  audio_dir=prepare_data.DEFAULT_TRAIN_MEL_AUDIO_DIR,
                  audio_mel=4, snap_mel=4, snap_divisor=8,
                  take_first=100, random_seed=None,
-                 coeff_overall_difficulty=2.5,
+                 coeff_approach_rate=10.,
                  coeff_bpm=120,
                  label_num=3,
                  switch_label=False,
@@ -46,6 +46,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
         """
         subseq_beat: length of subsequences.
         audio_mel: number of mel frames around target snap to be used as feature.
+        label_num: zero is counted
         """
         super().__init__(save_dir, item_names, logger)
         self.db = db.OsuDB(db_path)
@@ -60,7 +61,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
         self.half_audio_mel = audio_mel // 2
         self.half_audio_snap = math.ceil(self.half_audio_mel / self.snap_mel)
 
-        self.coeff_overall_difficulty = coeff_overall_difficulty
+        self.coeff_approach_rate = coeff_approach_rate
         self.coeff_bpm = coeff_bpm
 
         self.label_num = label_num
@@ -70,13 +71,22 @@ class LabelPosDataset(fit_dataset.FitDataset):
         self.eye = np.eye(self.label_num)
         self.preprocess_arg = preprocess_arg
 
-    def make_feature(self, mel, overall_difficulty, bpm):
+    def make_feature(self,
+                     mel,
+                     ho_density,
+                     blank_proportion,
+                     circle_proportion,
+                     approach_rate,
+                     bpm):
         """
         label of former snaps to one hot, and concatenate all features of this snap(sample) into a vector
         """
         mel = mel.reshape([-1])
         return np.concatenate([mel,
-                               np.array([overall_difficulty / self.coeff_overall_difficulty]),
+                               np.array([ho_density]),
+                               np.array([blank_proportion]),
+                               np.array([circle_proportion]),
+                               np.array([approach_rate / self.coeff_approach_rate]),
                                np.array([bpm / self.coeff_bpm]),
                                ])
 
@@ -119,25 +129,25 @@ class LabelPosDataset(fit_dataset.FitDataset):
         # to 1 channel
         audio_data = np.mean(audio_data, axis=0)
         # print('crop_start_time %d' % crop_start_time)
-        try:
-            speed_stars = beatmap.speed_stars()
-        except Exception:
-            return None, None
         assert isinstance(beatmap, slider.Beatmap)
         snap_ms = beatmap_util.get_snap_milliseconds(beatmap)
         total_snaps = beatmap_util.get_total_snaps(beatmap, self.snap_divisor)
         first_ho_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
         # one label per snap
         # three classes by default
-        beatmap_label = dataset_util.hitobjects_to_label_with_pos(
-            beatmap,
-            first_ho_time,
-            snap_ms,
-            total_snaps,
-            None,
-            multi_label=(self.label_num != 2),
-            multibeat_label_fmt=self.multibeat_label_fmt,
-        )
+        try:
+            beatmap_label = dataset_util.hitobjects_to_label_with_pos(
+                beatmap,
+                first_ho_time,
+                snap_ms,
+                total_snaps,
+                None,
+                multi_label=(self.label_num != 2),
+                multibeat_label_fmt=self.multibeat_label_fmt,
+            )
+        except Exception:
+            print('failed hitobjects_to_label_with_pos')
+            return None, None
         if beatmap_label is None:
             return None, None
         start_snap = max(first_ho_snap, self.half_audio_snap)
@@ -166,7 +176,8 @@ class LabelPosDataset(fit_dataset.FitDataset):
             start_mel = sample_idx * self.audio_mel
             feature = self.make_feature(
                 audio_data[:, start_mel:start_mel + self.audio_mel],
-                speed_stars,
+                *dataset_util.calculate_meta(beatmap, beatmap_label),
+                beatmap.approach_rate,
                 beatmap.bpm_min(),
             )
             sample_data_list.append(feature)
@@ -184,11 +195,6 @@ class LabelPosDataset(fit_dataset.FitDataset):
         # to 1 channel
         audio_data = np.mean(audio_data, axis=0)
         # print('crop_start_time %d' % crop_start_time)
-        try:
-            speed_stars = beatmap.speed_stars()
-        except Exception:
-            print('use overall_difficulty as speed_stars in inference')
-            speed_stars = beatmap.overall_difficulty
         assert isinstance(beatmap, slider.Beatmap)
         start_snap = max(first_ho_snap, self.half_audio_snap)
         end_snap = (audio_data.shape[1] - start_snap * self.snap_mel - self.half_audio_mel) // self.snap_mel + start_snap
@@ -204,7 +210,8 @@ class LabelPosDataset(fit_dataset.FitDataset):
             start_mel = sample_idx * self.audio_mel
             feature = self.make_feature(
                 audio_data[:, start_mel:start_mel + self.audio_mel],
-                speed_stars,
+                *dataset_util.sample_meta(),
+                beatmap.approach_rate,  # approach_rate = np.random.uniform(0, 10)
                 beatmap.bpm_min(),
             )
             sample_data_list.append(feature)

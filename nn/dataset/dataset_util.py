@@ -21,6 +21,35 @@ SWITCH_SPINNER_LABEL = 4
 SWITCH_HOLDNOTE_LABEL = 5
 
 
+def calculate_meta(beatmap, label):
+    total_snap_num = len(label)
+    ho_density = len(beatmap._hit_objects) / total_snap_num
+    num_circle, num_slider = 0, 0
+    for ho in beatmap._hit_objects:
+        if isinstance(ho, slider.beatmap.Circle):
+            num_circle += 1
+        elif isinstance(ho, slider.beatmap.Slider):
+            num_slider += 1
+    blank_proportion = len(np.where(np.array(label) == 0)[0]) / len(label)
+    circle_proportion = num_circle / (num_slider + num_circle)
+    return ho_density, blank_proportion, circle_proportion
+
+
+def sample_meta():
+    """
+    ho_density(number of hit_objects over total snap number, empirically ~N(0.1277, 0.0579)),
+    blank_proportion(proportion of snaps which is not occupied by a hit_object, that is, where keyboard is up, empirically ~N(0.4829, 0.0693)),
+    circle_proportion(num_circle/(num_circle+num_slider), empirically ~N(0.4785, 0.1482)),
+    """
+    # at least 0.0225
+    ho_density = np.clip(np.random.normal(0.1277, 0.0579), 0.0225, 0.3323)
+    # at least
+    blank_proportion = np.clip(np.random.normal(0.4829, 0.0693), 0.0671, 0.7434)
+    # at least 0.055
+    circle_proportion = np.clip(np.random.normal(0.4785, 0.1482), 0.0551, 1.0)
+    return ho_density, blank_proportion, circle_proportion
+
+
 def hitobjects_to_label(beatmap: slider.Beatmap, aligned_start_time, snap_per_microsecond, total_snap_num,
                         align_to_snaps=None, multi_label=False,
                         include_circle=True, include_slider=True, include_spinner=False, include_holdnote=False):

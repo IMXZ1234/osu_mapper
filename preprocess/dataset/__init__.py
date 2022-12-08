@@ -9,4 +9,5 @@ from . import (
     rnnv4_dataset,
     mlp_nolabel_dataset,
     label_pos_dataset,
+    label_pos_datasetv2,
 )

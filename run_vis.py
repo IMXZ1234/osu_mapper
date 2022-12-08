@@ -222,6 +222,7 @@ def ho_density_distribution():
     num_circle_list, num_slider_list = [], []
     circle_proportion = []
     overall_difficulty_list = []
+    approach_rate_list = []
     for beatmap, audio_path in from_db_with_filter():
         assert isinstance(beatmap, slider.Beatmap)
         snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
@@ -240,12 +241,14 @@ def ho_density_distribution():
         circle_proportion.append(float(num_circle) / float(num_circle + num_slider))
         blank_proportion_list.append(len(np.where(np.array(label) == 0)[0]) / len(label))
         overall_difficulty_list.append(beatmap.overall_difficulty)
+        approach_rate_list.append(beatmap.approach_rate)
     view_distribution(ho_density_list, 'ho_density')
     view_distribution(blank_proportion_list, 'blank_proportion')
     view_distribution(num_circle_list, 'num_circle')
     view_distribution(num_slider_list, 'num_slider')
     view_distribution(circle_proportion, 'circle_proportion')
     view_distribution(overall_difficulty_list, 'overall_difficulty')
+    view_distribution(approach_rate_list, 'approach_rate_list')
 
 
 if __name__ == '__main__':

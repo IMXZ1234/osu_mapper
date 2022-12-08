@@ -2403,7 +2403,7 @@ def train_vaev3(setting_name='vaev3_new'):
             'scheduler_type': 'StepLR',
             'step_size': 16, 'gamma': 0.3,
         }
-        data_arg = {'dataset': 'nn.dataset.subseq_density_feeder.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder.SubseqFeeder',
                     'train_dataset_arg':
                         {'data_path': r'./resources/data/fit/label_pos/data.pkl',
                          'label_path': r'./resources/data/fit/label_pos/label.pkl',
@@ -2517,7 +2517,7 @@ def train_vaev4(setting_name='vaev4'):
             'scheduler_type': 'StepLR',
             'step_size': 16, 'gamma': 0.3,
         }
-        data_arg = {'dataset': 'nn.dataset.subseq_density_feeder.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder.SubseqFeeder',
                     'train_dataset_arg':
                         {'data_path': r'./resources/data/fit/label_pos/data.pkl',
                          'label_path': r'./resources/data/fit/label_pos/label.pkl',
@@ -2636,7 +2636,7 @@ def train_cganv5(setting_name='cganv5'):
                 {'step_size': 128, 'gamma': 0.1},
             ]
         }
-        data_arg = {'dataset': 'nn.dataset.subseq_density_feeder.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder.SubseqFeeder',
                     'train_dataset_arg':
                         {'data_path': r'./resources/data/fit/label_pos/data.pkl',
                          'label_path': r'./resources/data/fit/label_pos/label.pkl',
@@ -2709,7 +2709,7 @@ def train_cganv6(setting_name='cganv6'):
     scheduler_step_size = 64
 
     # mel features 4 * 128 + bpm 1 + speed_star 1
-    snap_feature = 514
+    snap_feature = 517
     snap_divisor = 8
     sample_beats = 48
     sample_snaps = sample_beats * snap_divisor
@@ -2754,19 +2754,19 @@ def train_cganv6(setting_name='cganv6'):
                 {'step_size': 128, 'gamma': 0.1},
             ]
         }
-        data_arg = {'dataset': 'nn.dataset.subseq_density_feeder.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder.SubseqFeeder',
                     'train_dataset_arg':
-                        {'data_path': r'./resources/data/fit/label_pos/data.pkl',
-                         'label_path': r'./resources/data/fit/label_pos/label.pkl',
+                        {'data_path': r'./resources/data/fit/label_pos_v2/data.pkl',
+                         'label_path': r'./resources/data/fit/label_pos_v2/label.pkl',
                          'subseq_len': subseq_len,
                          'random_seed': random_seed,
                          'use_random_iter': True,
                          'binary': False,
-                         'take_first': None,
+                         'take_first': 100,
                          },
                     'batch_size': batch_size,
                     'shuffle': False,
-                    'num_workers': 1,
+                    'num_workers': 0,
                     'drop_last': False}
         loss_arg = {'loss_type': [
             # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
@@ -2782,10 +2782,11 @@ def train_cganv6(setting_name='cganv6'):
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
-                     'discriminator_pretrain_epoch': 1,
+                     'discriminator_pretrain_epoch': 9,
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 3,
+                     'lambda_gp': 0.0001,
                      }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
@@ -2805,7 +2806,7 @@ def train_cganv6(setting_name='cganv6'):
 
 
 if __name__ == '__main__':
-    train_cganv5()
+    train_cganv6()
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'
