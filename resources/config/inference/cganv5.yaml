@@ -1,0 +1,35 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate_inference
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.subseq_density_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/inference/label_pos/data.pkl
+    label_path: ./resources/data/fit/inference/label_pos/label.pkl
+    random_seed: 404
+    subseq_len: 384
+    take_first: null
+    use_random_iter: false
+    inference: true
+model_arg:
+  model_type: nn.net.cganv5.Generator
+  cond_data_feature_dim: 514
+  label_dim: 4
+  noise_dim: 64
+  seq_len: 384
+num_classes: 3
+output_arg:
+  log_dir: ./resources/result/cganv5/%d
+  model_save_dir: ./resources/result/cganv5/%d
+  model_save_step: 8
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
+train_type: wgan
+weights_path: ./resources/pretrained_models/cganv5_pretrained.pt

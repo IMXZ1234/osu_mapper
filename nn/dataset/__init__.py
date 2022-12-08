@@ -13,6 +13,6 @@ from . import (
     rnn_feeder,
     rnnv2_feeder,
     subseq_feeder,
-    subseq_density_feeder,
+    subseq_heatmap_feeder,
     seqganv2_feeder,
 )

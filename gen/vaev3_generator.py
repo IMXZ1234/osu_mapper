@@ -1,7 +1,7 @@
 import os
 
 from gen.beatmap_generator import BeatmapGenerator
-from gen.label_interpreter import DensityLabelWithPosInterpreter
+from gen.label_interpreter import HeatmapLabelWithPosInterpreter
 from util import beatmap_util
 
 
@@ -77,7 +77,7 @@ class VAEGenerator(BeatmapGenerator):
             start_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
             # clear formerly added two dummy hitobjects
             beatmap._hit_objects.clear()
-            DensityLabelWithPosInterpreter.gen_hitobjects(
+            HeatmapLabelWithPosInterpreter.gen_hitobjects(
                 beatmap, beatmap_label, start_time, snap_ms, self.snap_divisor
             )
             print(beatmap._hit_objects)

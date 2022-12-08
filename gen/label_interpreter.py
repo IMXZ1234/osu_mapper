@@ -324,9 +324,17 @@ class LabelWithPosInterpreter:
                 pos += 1
 
 
-class DensityLabelWithPosInterpreter:
+class HeatmapLabelWithPosInterpreter:
     @staticmethod
     def map_pos(x, y):
+        if x < 0:
+            x = 0.1
+        if x > 1:
+            x = 0.9
+        if y < 0:
+            y = 0.1
+        if y > 1:
+            y = 0.9
         x = int(x * (691 + 180) - 180)
         y = int(y * (407 + 82) - 82)
         return x, y
@@ -334,7 +342,7 @@ class DensityLabelWithPosInterpreter:
     @staticmethod
     def parse_step_label(step_label):
         circle_density, slider_density, x, y = step_label
-        x, y = DensityLabelWithPosInterpreter.map_pos(x, y)
+        x, y = HeatmapLabelWithPosInterpreter.map_pos(x, y)
         if circle_density < 0.5 and slider_density < 0.5:
             return 0, x, y
         if circle_density > slider_density:
@@ -348,7 +356,7 @@ class DensityLabelWithPosInterpreter:
         snap_ms = ms_per_beat / snap_divisor
         pos = 0
         while pos < len(labels):
-            label, x, y = DensityLabelWithPosInterpreter.parse_step_label(labels[pos])
+            label, x, y = HeatmapLabelWithPosInterpreter.parse_step_label(labels[pos])
             time = start_time + pos * snap_ms
             if label == 1:
                 # circles, period == 1
@@ -360,7 +368,7 @@ class DensityLabelWithPosInterpreter:
                 start_pos = pos + 1
                 # slider start
                 while pos < len(labels):
-                    label, x, y = DensityLabelWithPosInterpreter.parse_step_label(labels[pos])
+                    label, x, y = HeatmapLabelWithPosInterpreter.parse_step_label(labels[pos])
                     if label == 2:
                         pos_list.append([x, y])
                         pos += 1

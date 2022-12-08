@@ -2,6 +2,8 @@ import os
 from datetime import timedelta
 from typing import Generator
 
+import librosa
+
 from vis import vis_model
 
 import torch
@@ -13,6 +15,16 @@ from nn.dataset import dataset_util
 from util import beatmap_util
 from preprocess import db, filter
 np.set_printoptions(threshold=np.inf)
+
+
+def plot_spectrogram(specgram, title=None, ylabel="freq_bin"):
+    fig, axs = plt.subplots(1, 1)
+    axs.set_title(title or "Spectrogram (db)")
+    axs.set_ylabel(ylabel)
+    axs.set_xlabel("frame")
+    im = axs.imshow(librosa.power_to_db(specgram), origin="lower", aspect="auto")
+    fig.colorbar(im, ax=axs)
+    plt.show(block=False)
 
 
 def view_osu():
@@ -176,18 +188,32 @@ def from_db_with_filter():
 
 
 def view_mel():
+    i = 5
     for beatmap, audio_path in from_db_with_filter():
         with open(audio_path, 'rb') as f:
             audio_mel = pickle.load(f)
         print(audio_mel.shape)
-        plt.imshow(audio_mel[0][:, :1000])
-        print(audio_mel)
-        plt.show()
-        break
+        plot_spectrogram(audio_mel[0])
+        # plt.imshow(audio_mel[0][:, :1000])
+        # plt.show()
+        # print(audio_mel)
+        i -= 1
+        if i < 0:
+            break
+
+
+def ho_density_distribution():
+    ho_density_list = []
+    kb_pressed_proportion = []
+    circle_proportion = []
+    for beatmap, audio_path in from_db_with_filter():
+        total_snap_num = beatmap_util.get_total_snaps(beatmap)
+        ho_density_list.append(len(beatmap.hit_objects) / total_snap_num)
+        circle_proportion.append(len())
 
 
 if __name__ == '__main__':
-    view_dataset()
+    view_mel()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:
         #     all_speed_stars.append(beatmap.speed_stars())

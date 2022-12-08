@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 def process_label(label):
     """
-    -> circle_density, slider_density, x, y
+    -> circle_heat_value, slider_heat_value, x, y
     """
     L, _ = label.shape
     # bounds in osu! beatmap editor
@@ -18,12 +18,12 @@ def process_label(label):
     y = (label[:, 2] + 82) / (407 + 82)
     # if snap is occupied by a hit_object,
     # noise's value should be almost always within -0.25~+0.25
-    density = np.random.randn(2 * L).reshape([L, 2]) / 8
+    heat_value = np.random.randn(2 * L).reshape([L, 2]) / 8
     pos_circle = np.where(label[:, 0] == 1)[0]
     pos_slider = np.where(label[:, 0] == 2)[0]
-    density[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1
-    density[pos_slider, np.ones(len(pos_slider), dtype=int)] += 1
-    return np.concatenate([density, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
+    heat_value[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1
+    heat_value[pos_slider, np.ones(len(pos_slider), dtype=int)] += 1
+    return np.concatenate([heat_value, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
 
 
 class SubseqFeeder(torch.utils.data.Dataset):

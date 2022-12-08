@@ -1,14 +1,14 @@
 import os
 
 from gen.beatmap_generator import BeatmapGenerator
-from gen.label_interpreter import AssembledLabelOutputInterpreter
+from gen.label_interpreter import HeatmapLabelWithPosInterpreter
 from util import beatmap_util
 
 
 class CGANGenerator(BeatmapGenerator):
     def __init__(self,
-                 inference_config_path='./resources/config/inference/rnnv1_lr0.1.yaml',
-                 prepare_data_config_path='./resources/config/prepare_data/inference/rnn_data.yaml'):
+                 inference_config_path='./resources/config/inference/cganv5.yaml',
+                 prepare_data_config_path='./resources/config/prepare_data/inference/label_pos_data.yaml'):
         print('using inference_config_path %s' % inference_config_path)
         print('using prepare_data_config_path %s' % prepare_data_config_path)
         super().__init__(inference_config_path, prepare_data_config_path)
@@ -47,15 +47,7 @@ class CGANGenerator(BeatmapGenerator):
         # run inference and get beatmapset_label for each audio
         print('running inference...')
         # into batch of size 1 to conform to the model input format
-        beatmapset_label = self.inference.run_inference_gan()
-        print(beatmapset_label)
-        beatmapset_label_div = self.inference.data_iter.dataset.sample_div_pos
-        # although all beatmaps in beatmapset share same audio,
-        # they may have different cond_data due to different difficulty
-        beatmap_label_list = [
-            beatmapset_label[beatmapset_label_div[i - 1]:beatmapset_label_div[i]].reshape([-1])
-            for i in range(1, len(beatmapset_label_div))
-        ]
+        beatmap_label_list = self.inference.run_inference_cganv5()
         print(beatmap_label_list)
 
         # generate .osu files
@@ -77,7 +69,7 @@ class CGANGenerator(BeatmapGenerator):
             start_time = beatmap_util.get_first_hit_object_time_milliseconds(beatmap)
             # clear formerly added two dummy hitobjects
             beatmap._hit_objects.clear()
-            AssembledLabelOutputInterpreter.gen_hitobjects(
+            HeatmapLabelWithPosInterpreter.gen_hitobjects(
                 beatmap, beatmap_label, start_time, snap_ms, self.snap_divisor
             )
             print(beatmap._hit_objects)

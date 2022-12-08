@@ -54,22 +54,21 @@ class Generator(nn.Module):
         self.noise_dim = noise_dim
         self.fold_len = fold_len
 
-        self.output_feature_num = self.seq_len * self.label_dim
-
         self.model = nn.Sequential(
             *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
             # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
             # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
             *conv_block2d(self.label_dim * 16, self.label_dim * 4, kernel_size=(5, 5)),
+            *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(3, 3)),
-            nn.Flatten(),
-            nn.Linear(self.label_dim * 4 * self.seq_len, self.output_feature_num),
             # nn.LeakyReLU(0.2, inplace=True),
             # nn.Linear(self.num_classes * self.output_len, self.num_classes * self.output_len),
             # *conv_block(self.num_classes * 4, self.num_classes, kernel_size=1),
             # *conv_block(self.num_classes, self.num_classes, act=False),
         )
+        self.fc = nn.Linear(self.label_dim * 4, self.label_dim)
 
     def forward(self, cond_data):
         """
@@ -96,7 +95,8 @@ class Generator(nn.Module):
         # N, num_classes, num_snaps -> N, num_snaps, num_classes
         # gen_output = self.model(gen_input).transpose(1, 2)
         # N * num_classes * num_snaps -> N, num_snaps, num_classes
-        gen_output = self.model(gen_input).reshape([N, self.seq_len, self.label_dim])
+        gen_output = self.model(gen_input).reshape([N, self.seq_len, -1])
+        gen_output = self.fc(gen_output.reshape([N * self.seq_len, -1])).reshape([N, self.seq_len, -1])
         # gen_output = torch.nn.functional.gumbel_softmax(gen_output, dim=-1, hard=True)
         # N, num_snaps, num_classes
         # print('gen_output.shape')
@@ -121,11 +121,15 @@ class Discriminator(nn.Module):
 
         self.model = nn.Sequential(
             *conv_block2d(self.label_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 8, kernel_size=(3, 3)),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
+            # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
+            # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 4, kernel_size=(5, 5)),
+            *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(5, 5)),
+            *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(3, 3)),
         )
-
-        self.fcn = nn.Linear(self.label_dim * 8, 1)
+        self.fc = nn.Linear(self.label_dim * 4, 1)
 
     def forward(self, cond_data, gen_output):
         """
@@ -150,7 +154,7 @@ class Discriminator(nn.Module):
         validity = self.model(d_in)
         validity = F.avg_pool2d(validity, (validity.shape[2], validity.shape[3])).squeeze(-1).squeeze(-1)
 
-        validity = self.fcn(validity)
+        validity = self.fc(validity)
 
         # N, 1
         return validity

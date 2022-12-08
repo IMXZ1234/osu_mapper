@@ -1,11 +1,11 @@
+import copy
 import functools
 import logging
 import math
 import os
 import pickle
-import sys
-import copy
 import random
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,16 +13,13 @@ import torch
 import yaml
 from tensorboardX import SummaryWriter
 from torch import nn
-from torch.autograd import Variable
-from torch.nn.utils import clip_grad_norm_
 from torch.nn import functional as F
 from torch.utils import data
 from tqdm import tqdm
 
-from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
-from util.result import metrics_util
-from nn.metrics import default_metrices
 from nn.dataset import collate_fn
+from nn.metrics import default_metrices
+from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
 
 np.set_printoptions(suppress=True)
 
@@ -695,7 +692,7 @@ class TrainWGAN(TrainGAN):
         # epoch_dis_acc = epoch_dis_acc / total_sample_num
         # print('epoch_dis_acc %.3f' % epoch_dis_acc)
         epoch_pg_loss = epoch_pg_loss / total_sample_num
-        print('epoch_pg_loss %.8f' % epoch_pg_loss)
+        print('epoch_pg_loss %.6f' % epoch_pg_loss)
 
         sys.stdout.flush()
         print('sample')
@@ -766,7 +763,7 @@ class TrainWGAN(TrainGAN):
             avg_acc = total_acc / total_sample_num / 2
 
             sys.stdout.flush()
-            print(' average_loss = %.8f, train_acc = %.8f' % (
+            print(' average_loss = %.6f, train_acc = %.6f' % (
                 avg_loss, avg_acc))
         else:
             avg_acc = 0.5

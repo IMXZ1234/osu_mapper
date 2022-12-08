@@ -15,6 +15,7 @@ from gen.seqganv2_generator import SeqGANv2Generator
 # from gen.seq2seq_generator import Seq2SeqGenerator
 from gen.vae_generator import VAEGenerator
 from gen.vaev3_generator import VAEGenerator
+from gen.cganv5_generator import CGANGenerator
 # from gen.rnnv3_generator_test import RNNGenerator
 
 from util import general_util
@@ -370,5 +371,5 @@ def test_gen_5(generator):
 
 
 if __name__ == '__main__':
-    generator = VAEGenerator()
-    test_gen_5(generator)
+    generator = CGANGenerator()
+    test_gen_3(generator)
