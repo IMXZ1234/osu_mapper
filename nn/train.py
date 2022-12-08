@@ -1,25 +1,28 @@
-import copy
 import functools
 import logging
 import math
 import os
 import pickle
-import random
 import sys
+import copy
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
 from tensorboardX import SummaryWriter
-from torch import nn
+from torch import nn, autograd
+from torch.autograd import Variable
+from torch.nn.utils import clip_grad_norm_
 from torch.nn import functional as F
 from torch.utils import data
 from tqdm import tqdm
 
-from nn.dataset import collate_fn
-from nn.metrics import default_metrices
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
+from util.result import metrics_util
+from nn.metrics import default_metrices
+from nn.dataset import collate_fn
 
 np.set_printoptions(suppress=True)
 
@@ -270,7 +273,7 @@ class Train:
         for index in model_index:
             model = models[index]
             torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
-        print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
+        self.logger.info('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
 
     def init_train_state(self):
         if not isinstance(self.model, (list, tuple)):
@@ -659,6 +662,37 @@ class TrainGAN(Train):
 
 
 class TrainWGAN(TrainGAN):
+    def __init__(self, config_dict, train_type, **kwargs):
+        super(TrainWGAN, self).__init__(config_dict, train_type, **kwargs)
+
+        if 'lambda_gp' in self.config_dict['train_arg']:
+            self.lambda_gp = self.config_dict['train_arg']['lambda_gp']
+        else:
+            self.lambda_gp = None
+
+    def compute_gradient_penalty(self, real_samples, fake_samples):
+        """Calculates the gradient penalty loss for WGAN GP"""
+        gen, dis = self.model
+        batch_size = real_samples.shape[0]
+        # Random weight term for interpolation between real and fake samples
+        alpha = torch.rand([batch_size] + list(real_samples.shape[1:]), device=real_samples.device)
+        # Get random interpolation between real and fake samples
+        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+        d_interpolates = dis(interpolates)
+        fake = torch.ones([batch_size, 1], dtype=torch.float, device=real_samples.device)
+        # Get gradient w.r.t. interpolates
+        gradients = autograd.grad(
+            outputs=d_interpolates,
+            inputs=interpolates,
+            grad_outputs=fake,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        gradients = gradients.view(gradients.size(0), -1)
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty
+
     def train_generator(self):
         """
         Using Wesserstein GAN Loss
@@ -667,7 +701,7 @@ class TrainWGAN(TrainGAN):
         # loss_G, loss_D = self.loss
         gen, dis = self.model
         epoch_dis_acc = 0
-        epoch_pg_loss = 0
+        epoch_gen_loss = 0
         total_sample_num = 0
         sys.stdout.flush()
         for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
@@ -685,21 +719,21 @@ class TrainWGAN(TrainGAN):
 
             gen_loss = -torch.mean(dis_cls_out)
 
-            epoch_pg_loss += gen_loss.item()
+            epoch_gen_loss += gen_loss.item()
             gen_loss.backward()
             optimizer_G.step()
 
         # epoch_dis_acc = epoch_dis_acc / total_sample_num
         # print('epoch_dis_acc %.3f' % epoch_dis_acc)
-        epoch_pg_loss = epoch_pg_loss / total_sample_num
-        print('epoch_pg_loss %.6f' % epoch_pg_loss)
+        epoch_gen_loss = epoch_gen_loss / total_sample_num
+        self.logger.info('epoch_gen_loss %.8f' % epoch_gen_loss)
 
         sys.stdout.flush()
         print('sample')
         sample = gen(cond_data)[0].cpu().detach().numpy()
-        print(np.where(sample[:, 0] > 0.5, 1, 0)[:32])
-        print(np.where(sample[:, 1] > 0.5, 2, 0)[:32])
-        print(sample[:, 2:][:32])
+        self.logger.info(str(np.where(sample[:, 0] > 0.5, 1, 0)[:32]))
+        self.logger.info(str(np.where(sample[:, 1] > 0.5, 2, 0)[:32]))
+        print(str(sample[:, 2:][:32]))
 
         return epoch_dis_acc
 
@@ -737,8 +771,12 @@ class TrainWGAN(TrainGAN):
             # print('dis_real_cls_out')
             # print(dis_real_cls_out)
             # total_acc += torch.sum(dis_real_cls_out > 0.5).data.item()
-
-            loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out)
+            if self.lambda_gp is not None:
+                # use wgan gradient penalty
+                gradient_penalty = self.compute_gradient_penalty(real_gen_output.data, fake.data)
+                loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out) + self.lambda_gp * gradient_penalty
+            else:
+                loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out)
             # print('dis loss')
             # print(loss)
 
@@ -763,7 +801,7 @@ class TrainWGAN(TrainGAN):
             avg_acc = total_acc / total_sample_num / 2
 
             sys.stdout.flush()
-            print(' average_loss = %.6f, train_acc = %.6f' % (
+            self.logger.info('average_loss = %.8f, train_acc = %.8f' % (
                 avg_loss, avg_acc))
         else:
             avg_acc = 0.5

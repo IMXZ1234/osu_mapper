@@ -22,7 +22,10 @@ class LabelPosDataset(fit_dataset.FitDataset):
     [
         mel features of audio_mel around target snap,
         # following two features are now appended after each sample's features
-        overall_density,
+        ho_density(number of hit_objects over total snap number, empirically ~N(0.125, 0.058)),
+        blank_proportion(proportion of snaps which is not occupied by a hit_object, that is, where keyboard is up, empirically ~N(0.5, 0.07)),
+        circle_proportion(num_circle/(num_circle+num_slider), empirically ~N(0.5, 0.15)),
+        difficulty(displayed stars in osu!),
         bpm,
     ]
     """
@@ -31,7 +34,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
                  audio_dir=prepare_data.DEFAULT_TRAIN_MEL_AUDIO_DIR,
                  audio_mel=4, snap_mel=4, snap_divisor=8,
                  take_first=100, random_seed=None,
-                 coeff_overall_density=2.5,
+                 coeff_overall_difficulty=2.5,
                  coeff_bpm=120,
                  label_num=3,
                  switch_label=False,
@@ -57,7 +60,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
         self.half_audio_mel = audio_mel // 2
         self.half_audio_snap = math.ceil(self.half_audio_mel / self.snap_mel)
 
-        self.coeff_speed_stars = coeff_speed_stars
+        self.coeff_overall_difficulty = coeff_overall_difficulty
         self.coeff_bpm = coeff_bpm
 
         self.label_num = label_num
@@ -67,13 +70,13 @@ class LabelPosDataset(fit_dataset.FitDataset):
         self.eye = np.eye(self.label_num)
         self.preprocess_arg = preprocess_arg
 
-    def make_feature(self, mel, speed_stars, bpm):
+    def make_feature(self, mel, overall_difficulty, bpm):
         """
         label of former snaps to one hot, and concatenate all features of this snap(sample) into a vector
         """
         mel = mel.reshape([-1])
         return np.concatenate([mel,
-                               np.array([speed_stars / self.coeff_speed_stars]),
+                               np.array([overall_difficulty / self.coeff_overall_difficulty]),
                                np.array([bpm / self.coeff_bpm]),
                                ])
 

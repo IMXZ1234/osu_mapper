@@ -2,7 +2,7 @@ import os
 from datetime import timedelta
 from typing import Generator
 
-import librosa
+# import librosa
 
 from vis import vis_model
 
@@ -17,12 +17,17 @@ from preprocess import db, filter
 np.set_printoptions(threshold=np.inf)
 
 
+def power_to_db(specgram):
+    return 10 * np.log10(specgram)
+
+
 def plot_spectrogram(specgram, title=None, ylabel="freq_bin"):
     fig, axs = plt.subplots(1, 1)
     axs.set_title(title or "Spectrogram (db)")
     axs.set_ylabel(ylabel)
     axs.set_xlabel("frame")
-    im = axs.imshow(librosa.power_to_db(specgram), origin="lower", aspect="auto")
+    # im = axs.imshow(librosa.power_to_db(specgram), origin="lower", aspect="auto")
+    im = axs.imshow(power_to_db(specgram), origin="lower", aspect="auto")
     fig.colorbar(im, ax=axs)
     plt.show(block=False)
 
@@ -160,26 +165,20 @@ def from_db_with_filter():
         r'./resources/data/osu_train_mel.db'
     )
     ids = train_db.all_ids(table_name)
-    # cond_data, label
-    items = [[], []]
-    data, label = items
-    # print('ids')
-    # print(ids)
-    cache = {0: None}
     sample_filter = filter.OsuTrainDataFilterGroup(
         [
             filter.ModeFilter(),
             filter.SnapDivisorFilter(),
-            filter.SnapInNicheFilter(),
-            filter.SingleUninheritedTimingPointFilter(),
-            filter.SingleBMPFilter(),
             filter.BeatmapsetSingleAudioFilter(),
             filter.HitObjectFilter(),
+            filter.SingleUninheritedTimingPointFilter(),
+            filter.SingleBMPFilter(),
+            filter.SnapInNicheFilter(),
         ]
     )
     for id_ in ids:
         record = train_db.get_record(id_, table_name)
-        first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
+        # first_ho_snap = record[db.OsuDB.EXTRA_START_POS + 1]
         beatmap = pickle.loads(record[db.OsuDB.BEATMAP_POS])
         audio_path = os.path.join(r'./resources/data/mel', record[db.OsuDB.AUDIOFILENAME_POS])
         if not sample_filter.filter(beatmap, audio_path):
@@ -202,18 +201,55 @@ def view_mel():
             break
 
 
+def view_distribution(list_in, title=None, save=True):
+    list_in = np.array(list_in)
+    min_value, mean_value, max_value = np.min(list_in), np.mean(list_in), np.max(list_in)
+    std = np.std(list_in)
+    plt.hist(list_in)
+    if title is None:
+        title = 'plot'
+    plt.title(title)
+    if save:
+        plt.savefig(r'./resources/vis/%s_%.4f_%.4f_%.4f_%.4f.png' % (title, min_value, mean_value, max_value, std))
+    plt.show()
+    with open('./resources/vis/meta/%s.pkl' % title, 'wb') as f:
+        pickle.dump(list_in, f)
+
+
 def ho_density_distribution():
     ho_density_list = []
-    kb_pressed_proportion = []
+    blank_proportion_list = []
+    num_circle_list, num_slider_list = [], []
     circle_proportion = []
+    overall_difficulty_list = []
     for beatmap, audio_path in from_db_with_filter():
-        total_snap_num = beatmap_util.get_total_snaps(beatmap)
-        ho_density_list.append(len(beatmap.hit_objects) / total_snap_num)
-        circle_proportion.append(len())
+        assert isinstance(beatmap, slider.Beatmap)
+        snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+        label = dataset_util.hitobjects_to_label_v2(beatmap, snap_ms=snap_ms)
+        # total_snap_num = beatmap_util.get_total_snaps(beatmap)
+        total_snap_num = len(label)
+        ho_density_list.append(len(beatmap._hit_objects) / total_snap_num)
+        num_circle, num_slider = 0, 0
+        for ho in beatmap._hit_objects:
+            if isinstance(ho, slider.beatmap.Circle):
+                num_circle += 1
+            elif isinstance(ho, slider.beatmap.Slider):
+                num_slider += 1
+        num_circle_list.append(num_circle)
+        num_slider_list.append(num_slider)
+        circle_proportion.append(float(num_circle) / float(num_circle + num_slider))
+        blank_proportion_list.append(len(np.where(np.array(label) == 0)[0]) / len(label))
+        overall_difficulty_list.append(beatmap.overall_difficulty)
+    view_distribution(ho_density_list, 'ho_density')
+    view_distribution(blank_proportion_list, 'blank_proportion')
+    view_distribution(num_circle_list, 'num_circle')
+    view_distribution(num_slider_list, 'num_slider')
+    view_distribution(circle_proportion, 'circle_proportion')
+    view_distribution(overall_difficulty_list, 'overall_difficulty')
 
 
 if __name__ == '__main__':
-    view_mel()
+    ho_density_distribution()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:
         #     all_speed_stars.append(beatmap.speed_stars())

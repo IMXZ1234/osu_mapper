@@ -3,19 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conv_block1d(in_feat, out_feat, kernel_size=(3), normalize=True, act=True):
-    layers = [nn.Conv1d(in_feat, out_feat, kernel_size=kernel_size, padding=kernel_size // 2)]
-    if normalize:
-        layers.append(nn.BatchNorm1d(out_feat))
-    if act:
-        layers.append(nn.LeakyReLU(0.2, inplace=True))
-    return layers
-
-
-def conv_block2d(in_feat, out_feat, kernel_size=(3, 3), normalize=True, act=True):
+def conv_block2d(in_feat, out_feat, kernel_size=(3, 3), normalize='LN', act=True):
     layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, padding=[k // 2 for k in kernel_size])]
-    if normalize:
-        layers.append(nn.BatchNorm2d(out_feat))
+    if normalize is not None:
+        if normalize == 'BN':
+            layers.append(nn.BatchNorm2d(out_feat))
+        elif normalize == 'LN':
+            layers.append(nn.LayerNorm(out_feat))
+        else:
+            raise ValueError('unknown normalization layer')
     if act:
         layers.append(nn.LeakyReLU(0.2, inplace=True))
     return layers
@@ -55,18 +51,12 @@ class Generator(nn.Module):
         self.fold_len = fold_len
 
         self.model = nn.Sequential(
-            *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
+            *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7)),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7)),
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
-            # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
             *conv_block2d(self.label_dim * 16, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(3, 3)),
-            # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear(self.num_classes * self.output_len, self.num_classes * self.output_len),
-            # *conv_block(self.num_classes * 4, self.num_classes, kernel_size=1),
-            # *conv_block(self.num_classes, self.num_classes, act=False),
         )
         self.fc = nn.Linear(self.label_dim * 4, self.label_dim)
 
@@ -120,11 +110,9 @@ class Discriminator(nn.Module):
         # self.ext = FeatureExtractor(self.ext_in_channels, self.ext_out_channels)
 
         self.model = nn.Sequential(
-            *conv_block2d(self.label_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
-            # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
+            *conv_block2d(self.label_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7)),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7)),
+            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7)),
             *conv_block2d(self.label_dim * 16, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(3, 3)),
