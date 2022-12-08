@@ -54,21 +54,22 @@ class Generator(nn.Module):
         self.noise_dim = noise_dim
         self.fold_len = fold_len
 
+        self.output_feature_num = self.seq_len * self.label_dim
+
         self.model = nn.Sequential(
             *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, kernel_size=(7, 7), normalize=False),
             # *conv_block(self.num_classes * 16, self.num_classes * 16, kernel_size=7),
             # *conv_block(self.num_classes * 16, self.num_classes * 8, kernel_size=3),
             *conv_block2d(self.label_dim * 16, self.label_dim * 4, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 4, self.label_dim * 4, kernel_size=(3, 3)),
+            nn.Flatten(),
+            nn.Linear(self.label_dim * 4 * self.seq_len, self.output_feature_num),
             # nn.LeakyReLU(0.2, inplace=True),
             # nn.Linear(self.num_classes * self.output_len, self.num_classes * self.output_len),
             # *conv_block(self.num_classes * 4, self.num_classes, kernel_size=1),
             # *conv_block(self.num_classes, self.num_classes, act=False),
         )
-        self.fc = nn.Linear(self.label_dim * 4, self.label_dim)
 
     def forward(self, cond_data):
         """

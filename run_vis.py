@@ -44,29 +44,49 @@ def view_model():
         print(torch.sum(torch.abs(item)) / torch.numel(item))
 
 
+def find_single_elem(label, elem=2):
+    total_len = 0
+    pos = 0
+    num_single_elem = 0
+    while pos < len(label):
+        while label[pos] == elem:
+            total_len += 1
+            pos += 1
+            if pos >= len(label):
+                break
+        if total_len == 1:
+            num_single_elem += 1
+        total_len = 0
+        pos += 1
+    return num_single_elem
+
+
 def view_dataset():
-    # with open(
-    #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\label.pkl',
-    #     'rb'
-    # ) as f:
-    #     label_list = pickle.load(f)
-    # print(len(label_list))
-    #
-    # for label in label_list:
-    #     pos_less_0 = np.where(label < 0)
-    #     print(label[pos_less_0])
     with open(
-        r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\data.pkl',
+        r'./resources/data/fit/label_pos/label.pkl',
         'rb'
     ) as f:
-        data_list = pickle.load(f)
-    print(len(data_list))
-    # print(data_list[0])
-    print(data_list[0].shape)
-    data = data_list[0]
-    print(np.mean(data))
-    print(np.max(data))
-    print(np.min(data))
+        label_list = pickle.load(f)
+    print(len(label_list))
+
+    for label in label_list:
+        type_label = label[:, 0]
+        num_single_elem = find_single_elem(type_label, 2)
+        if num_single_elem > 0:
+            print(num_single_elem)
+            print(type_label)
+    # with open(
+    #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\data.pkl',
+    #     'rb'
+    # ) as f:
+    #     data_list = pickle.load(f)
+    # print(len(data_list))
+    # # print(data_list[0])
+    # print(data_list[0].shape)
+    # data = data_list[0]
+    # print(np.mean(data))
+    # print(np.max(data))
+    # print(np.min(data))
     # for label in label_list:
     #     pos_less_0 = np.where(label < 0)
     #     print(label[pos_less_0])

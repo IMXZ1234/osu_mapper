@@ -565,8 +565,8 @@ class TrainGAN(Train):
                 print('\nAdversarial Training Discriminator : ')
                 for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
                     self.train_discriminator()
-                # if (epoch + 1) % self.model_save_step == 0:
-            self.save_model(epoch, (0, ))
+            if (epoch + 1) % self.model_save_step == 0:
+                self.save_model(epoch, (0, ))
 
         self.save_model(-1)
         # self.save_properties()
@@ -695,7 +695,7 @@ class TrainWGAN(TrainGAN):
         # epoch_dis_acc = epoch_dis_acc / total_sample_num
         # print('epoch_dis_acc %.3f' % epoch_dis_acc)
         epoch_pg_loss = epoch_pg_loss / total_sample_num
-        print('epoch_pg_loss %.3f' % epoch_pg_loss)
+        print('epoch_pg_loss %.8f' % epoch_pg_loss)
 
         sys.stdout.flush()
         print('sample')
@@ -766,7 +766,7 @@ class TrainWGAN(TrainGAN):
             avg_acc = total_acc / total_sample_num / 2
 
             sys.stdout.flush()
-            print(' average_loss = %.4f, train_acc = %.4f' % (
+            print(' average_loss = %.8f, train_acc = %.8f' % (
                 avg_loss, avg_acc))
         else:
             avg_acc = 0.5
