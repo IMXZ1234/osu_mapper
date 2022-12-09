@@ -3,107 +3,94 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='BN', act=True):
-    layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, padding=[k // 2 for k in kernel_size])]
-    if normalize is not None:
-        if normalize == 'BN':
-            layers.append(nn.BatchNorm2d(out_feat))
-        elif normalize == 'LN':
-            layers.append(nn.LayerNorm([out_feat] + dims))
-        else:
-            raise ValueError('unknown normalization layer')
-    if act:
-        layers.append(nn.LeakyReLU(0.2, inplace=True))
-    return layers
+class double_conv1d_bn(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, strides=1):
+        super(double_conv1d_bn, self).__init__()
+        padding = kernel_size // 2
+        self.conv1 = nn.Conv1d(in_channels, out_channels,
+                               kernel_size=kernel_size,
+                               stride=strides, padding=padding, bias=True)
+        self.conv2 = nn.Conv1d(out_channels, out_channels,
+                               kernel_size=kernel_size,
+                               stride=strides, padding=padding, bias=True)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.relu(self.bn2(self.conv2(out)))
+        return out
 
 
-class ContextExtractor(nn.Module):
-    """
-    cond_data: N, L(output_len), snap_feature(514 here) -> N, L, out_feature
-    """
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
+class deconv1d_bn(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=2, strides=2):
+        super(deconv1d_bn, self).__init__()
+        self.conv1 = nn.ConvTranspose1d(in_channels, out_channels,
+                                        kernel_size=kernel_size,
+                                        stride=strides, bias=True)
+        self.bn1 = nn.BatchNorm1d(out_channels)
 
-        self.model = nn.Sequential(
-            *conv_block2d(in_channels, out_channels, kernel_size=1, normalize=False, act=False),
-            # *conv_block(in_channels // 4, in_channels // 16),
-            # *conv_block(in_channels // 16, out_channels, act=False),
-        )
-
-    def forward(self, cond_data):
-        cond_data = cond_data.transpose(1, 2)
-        cond_data = self.model(cond_data)
-        return cond_data
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        return out
 
 
 class Generator(nn.Module):
-    def __init__(self, seq_len, label_dim, noise_dim,
-                 cond_data_feature_dim,
-                 fold_len=16, **kwargs):
-        """
-        output_snaps = output_feature_num // num_classes
-        """
+    """
+    use Unet like structure
+    """
+    def __init__(self, label_dim, cond_data_feature_dim, noise_dim):
         super(Generator, self).__init__()
+        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim + noise_dim, 128, kernel_size=7)
+        self.layer2_conv = double_conv1d_bn(128, 32, kernel_size=7)
 
-        self.label_dim = label_dim
-        self.seq_len = seq_len
-        self.noise_dim = noise_dim
-        self.fold_len = fold_len
+        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5)
+        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5)
 
-        dims = [seq_len // self.fold_len, self.fold_len]
+        self.layer5_conv = double_conv1d_bn(32, 32, kernel_size=5)
 
-        self.model = nn.Sequential(
-            *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 4, dims, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 4, self.label_dim * 4, dims, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 4, self.label_dim * 4, dims, kernel_size=(3, 3)),
-        )
-        self.fc = nn.Linear(self.label_dim * 4, self.label_dim)
+        self.layer6_conv = double_conv1d_bn(64, 32, kernel_size=5)
+        self.layer7_conv = double_conv1d_bn(64, 32, kernel_size=5)
+        # self.layer8_conv = double_conv1d_bn(64, 32, kernel_size=3)
+        # self.layer9_conv = double_conv1d_bn(16, 8)
 
-    def forward(self, cond_data):
-        """
-        noise: N, L, noise_dim
-        cond_data: N, L, cond_data_feature_dim
-        """
-        N, L, _ = cond_data.shape
-        noise = torch.randn([N, L, self.noise_dim], device=cond_data.device)
-        # print('in G')
-        # print('cond_data.shape')
-        # print(cond_data.shape)
-        # print('noise.shape')
-        # print(noise.shape)
-        # Concatenate label embedding and image to produce input
-        # cond_data = self.ext(cond_data)
-        # noise = noise.transpose(1, 2)
-        # print('cond_data.shape')
-        # print(cond_data.shape)
-        # print('noise.shape')
-        # print(noise.shape)
-        gen_input = torch.cat([cond_data, noise], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
-        # print('before cnn')
-        # print(torch.min(gen_input[0]))
-        # print(torch.max(gen_input[0]))
-        # print(gen_input[0])
-        # N, num_classes, num_snaps -> N, num_snaps, num_classes
-        # gen_output = self.model(gen_input).transpose(1, 2)
-        # N * num_classes * num_snaps -> N, num_snaps, num_classes
-        gen_output = self.model(gen_input).reshape([N, self.seq_len, -1])
-        # print('after cnn')
-        # print(torch.min(gen_output[0]))
-        # print(torch.max(gen_output[0]))
-        # print(gen_input[0])
-        gen_output = self.fc(gen_output.reshape([N * self.seq_len, -1])).reshape([N, self.seq_len, -1])
-        # print('before fc')
-        # print(torch.min(gen_output[0]))
-        # print(torch.max(gen_output[0]))
-        # print(gen_input[0])
-        # gen_output = torch.nn.functional.gumbel_softmax(gen_output, dim=-1, hard=True)
-        # N, num_snaps, num_classes
-        # print('gen_output.shape')
-        # print(gen_output.shape)
-        return gen_output
+        # self.deconv1 = deconv1d_bn(32, 32, kernel_size=3)
+        self.deconv2 = deconv1d_bn(32, 32, kernel_size=5, strides=4)
+        self.deconv3 = deconv1d_bn(32, 32, kernel_size=5, strides=4)
+        # self.deconv4 = deconv1d_bn(16, 8)
+
+        self.layer9_conv = double_conv1d_bn(32, 32, kernel_size=5)
+        self.fc = nn.Linear(32, label_dim)
+
+        # self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        conv1 = self.layer1_conv(x)
+        pool1 = F.max_pool2d(conv1, 2)
+
+        conv2 = self.layer2_conv(pool1)
+        pool2 = F.max_pool2d(conv2, 2)  # length of pool2 = length of output = 1/4 * length of input = 384*4 / 4 = 384
+
+        conv3 = self.layer3_conv(pool2)
+        pool3 = F.max_pool2d(conv3, 4)
+
+        conv4 = self.layer4_conv(pool3)
+        pool4 = F.max_pool2d(conv4, 4)
+
+        conv5 = self.layer5_conv(pool4)
+
+        convt1 = self.deconv1(conv5)
+        concat1 = torch.cat([convt1, conv4], dim=1)
+        conv6 = self.layer6_conv(concat1)
+
+        convt2 = self.deconv2(conv6)
+        concat2 = torch.cat([convt2, conv3], dim=1)
+        conv7 = self.layer7_conv(concat2)
+
+        conv9 = self.layer9_conv(conv7)
+        outp = self.layer10_conv(conv9)
+        # outp = self.sigmoid(outp)
+        return outp
 
 
 class Discriminator(nn.Module):
@@ -124,14 +111,11 @@ class Discriminator(nn.Module):
         # self.ext = FeatureExtractor(self.ext_in_channels, self.ext_out_channels)
 
         self.model = nn.Sequential(
-            *conv_block2d(self.label_dim + cond_data_feature_dim, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(7, 7)),
-            *conv_block2d(self.label_dim * 16, self.label_dim * 4, dims, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 4, self.label_dim * 4, dims, kernel_size=(5, 5)),
-            *conv_block2d(self.label_dim * 4, self.label_dim * 4, dims, kernel_size=(3, 3)),
+            double_conv1d_bn(self.label_dim + cond_data_feature_dim, 256, kernel_size=7),
+            double_conv1d_bn(256, 128, kernel_size=5),
+            double_conv1d_bn(128, 64, kernel_size=3),
         )
-        self.fc = nn.Linear(self.label_dim * 4, 1)
+        self.fc = nn.Linear(64, 1)
 
     def forward(self, cond_data, gen_output):
         """

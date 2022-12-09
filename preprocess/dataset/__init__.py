@@ -10,4 +10,5 @@ from . import (
     mlp_nolabel_dataset,
     label_pos_dataset,
     label_pos_datasetv2,
+    label_pos_datasetv3,
 )
