@@ -85,13 +85,14 @@ def view_dataset():
     ) as f:
         label_list = pickle.load(f)
     print(len(label_list))
+    print(label_list[0])
 
-    for label in label_list:
-        type_label = label[:, 0]
-        num_single_elem = find_single_elem(type_label, 2)
-        if num_single_elem > 0:
-            print(num_single_elem)
-            print(type_label)
+    # for label in label_list:
+    #     type_label = label[:, 0]
+    #     num_single_elem = find_single_elem(type_label, 2)
+    #     if num_single_elem > 0:
+    #         print(num_single_elem)
+    #         print(type_label)
     # with open(
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\data.pkl',
     #     'rb'
@@ -252,7 +253,7 @@ def ho_density_distribution():
 
 
 if __name__ == '__main__':
-    ho_density_distribution()
+    view_dataset()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:
         #     all_speed_stars.append(beatmap.speed_stars())

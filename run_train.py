@@ -2705,7 +2705,7 @@ def train_cganv6(setting_name='cganv6'):
         else:
             num_classes = 3
             weight = None
-    epoch = 128
+    epoch = 2048
     scheduler_step_size = 64
 
     # mel features 4 * 128 + bpm 1 + speed_star 1
@@ -2741,7 +2741,7 @@ def train_cganv6(setting_name='cganv6'):
             ]
         }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {
-            'optimizer_type': ['SGD', 'SGD'],
+            'optimizer_type': ['RMSprop', 'RMSprop'],
             'params': [
                 {'lr': gen_lr,},
                 {'lr': dis_lr,},
@@ -2762,11 +2762,11 @@ def train_cganv6(setting_name='cganv6'):
                          'random_seed': random_seed,
                          'use_random_iter': True,
                          'binary': False,
-                         'take_first': 100,
+                         'take_first': None,
                          },
                     'batch_size': batch_size,
                     'shuffle': False,
-                    'num_workers': 0,
+                    'num_workers': 1,
                     'drop_last': False}
         loss_arg = {'loss_type': [
             # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
@@ -2780,13 +2780,13 @@ def train_cganv6(setting_name='cganv6'):
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
         output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
-                      'model_save_step': 8}
+                      'model_save_step': 32}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
-                     'discriminator_pretrain_epoch': 9,
+                     'discriminator_pretrain_epoch': 3,
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
-                     'adv_discriminator_epoch': 3,
-                     'lambda_gp': 0.0001,
+                     'adv_discriminator_epoch': 1,
+                     'lambda_gp': None,
                      }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,

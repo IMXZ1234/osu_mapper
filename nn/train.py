@@ -20,6 +20,7 @@ from tqdm import tqdm
 from nn.dataset import collate_fn
 from nn.metrics import default_metrices
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
+from util.plt_util import plot_loss
 
 np.set_printoptions(suppress=True)
 
@@ -161,6 +162,8 @@ class Train:
                 optimizer = torch.optim.SGD(model.parameters(), **kwargs)
             elif optimizer_type == 'Adam':
                 optimizer = torch.optim.Adam(model.parameters(), **kwargs)
+            elif optimizer_type == 'RMSprop':
+                optimizer = torch.optim.RMSprop(model.parameters(), **kwargs)
             else:
                 optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
         return optimizer
@@ -522,6 +525,8 @@ class TrainGAN(Train):
         with open(self.control_file_path, 'w') as f:
             yaml.dump(control_dict, f)
 
+        self.dis_loss_list, self.gen_loss_list = [], []
+
         # # GENERATOR MLE TRAINING
         # print('Starting Generator MLE Training...')
         # for epoch in range(self.config_dict['train_arg']['generator_pretrain_epoch']):
@@ -533,20 +538,20 @@ class TrainGAN(Train):
         # gen.load_state_dict(torch.load(pretrained_gen_path))
 
         # PRETRAIN DISCRIMINATOR
-        print('\nStarting Discriminator Training...')
+        self.logger.info('\nStarting Discriminator Training...')
         for epoch in range(self.config_dict['train_arg']['discriminator_pretrain_epoch']):
-            print('epoch %d : ' % (epoch + 1), end='')
+            self.logger.info('epoch %d : ' % (epoch + 1))
             self.train_discriminator()
 
         # torch.save(dis.state_dict(), pretrained_dis_path)
         # dis.load_state_dict(torch.load(pretrained_dis_path))
 
         # # ADVERSARIAL TRAINING
-        print('\nStarting Adversarial Training...')
+        self.logger.info('\nStarting Adversarial Training...')
         acc_limit = self.config_dict['train_arg']['acc_limit'] if 'acc_limit' in self.config_dict['train_arg'] else 0.6
 
         for epoch in range(self.epoch):
-            print('\n--------\nEPOCH %d\n--------' % (epoch + 1))
+            self.logger.info('\n--------\nEPOCH %d\n--------' % (epoch + 1))
             if self.config_dict['train_arg']['adaptive_adv_train']:
                 while self.train_generator() > acc_limit:
                     pass
@@ -554,18 +559,23 @@ class TrainGAN(Train):
                     pass
             else:
                 # TRAIN GENERATOR
-                print('\nAdversarial Training Generator : ', end='')
+                self.logger.info('\nAdversarial Training Generator : ')
                 for i in range(self.config_dict['train_arg']['adv_generator_epoch']):
                     self.train_generator()
 
                 # TRAIN DISCRIMINATOR
-                print('\nAdversarial Training Discriminator : ')
+                self.logger.info('\nAdversarial Training Discriminator : ')
                 for i in range(self.config_dict['train_arg']['adv_discriminator_epoch']):
                     self.train_discriminator()
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0, ))
 
         self.save_model(-1)
+        log_dir = self.config_dict['output_arg']['log_dir']
+        plot_loss(self.dis_loss_list, 'discriminator loss',
+                  save_path=os.path.join(log_dir, 'discriminator_loss.png'), show=True)
+        plot_loss(self.gen_loss_list, 'generator loss',
+                  save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
         # self.save_properties()
 
     def train_generator(self):
@@ -598,12 +608,12 @@ class TrainGAN(Train):
             optimizer_G.step()
 
         epoch_dis_acc = epoch_dis_acc / total_sample_num
-        print('epoch_dis_acc %.3f' % epoch_dis_acc)
+        self.logger.info('epoch_dis_acc %.3f' % epoch_dis_acc)
 
         sys.stdout.flush()
-        print('sample')
+        # print('sample')
         sample = gen(cond_data)[0].cpu().detach().numpy()
-        print(sample[:])
+        self.logger.info(sample[:])
 
         return epoch_dis_acc
 
@@ -645,14 +655,14 @@ class TrainGAN(Train):
 
             total_loss += loss.data.item()
 
-        print(fake[0].cpu().detach().numpy().tolist())
-        print(real_gen_output[0].cpu().detach().numpy().tolist())
+        self.logger.info(str(fake[0].cpu().detach().numpy().tolist()))
+        self.logger.info(str(real_gen_output[0].cpu().detach().numpy().tolist()))
 
         avg_loss = total_loss / total_sample_num
         avg_acc = total_acc / total_sample_num / 2
 
         sys.stdout.flush()
-        print(' average_loss = %.4f, train_acc = %.4f' % (
+        self.logger.info(' average_loss = %.4f, train_acc = %.4f' % (
             avg_loss, avg_acc))
 
         return avg_acc
@@ -666,6 +676,8 @@ class TrainWGAN(TrainGAN):
             self.lambda_gp = self.config_dict['train_arg']['lambda_gp']
         else:
             self.lambda_gp = None
+        print('self.lambda_gp')
+        print(self.lambda_gp)
 
     def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
         """Calculates the gradient penalty loss for WGAN GP"""
@@ -716,28 +728,29 @@ class TrainWGAN(TrainGAN):
 
             gen_loss = -torch.mean(dis_cls_out)
 
-            epoch_gen_loss += gen_loss.item()
+            epoch_gen_loss += gen_loss.item() * batch_size
             gen_loss.backward()
             optimizer_G.step()
 
         # epoch_dis_acc = epoch_dis_acc / total_sample_num
         # print('epoch_dis_acc %.3f' % epoch_dis_acc)
-        epoch_gen_loss = epoch_gen_loss / len(self.train_iter)
+        epoch_gen_loss = epoch_gen_loss / total_sample_num
         self.logger.info('epoch_gen_loss %.8f' % epoch_gen_loss)
+        self.gen_loss_list.append(epoch_gen_loss)
 
         sys.stdout.flush()
-        print('sample')
+        # print('sample')
         sample = gen(cond_data)[0].cpu().detach().numpy()
         self.logger.info(str(np.where(sample[:, 0] > 0.5, 1, 0)[:32]))
         self.logger.info(str(np.where(sample[:, 1] > 0.5, 2, 0)[:32]))
-        print(str(sample[:, 2:][:32]))
+        self.logger.info(str(sample[:, 2:][:16]))
 
         return epoch_dis_acc
 
     def train_discriminator(self):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
-        Samples are drawn d_steps times, and the discriminator is trained for epochs epochs.
+        Samples are drawn d_steps times, and the discriminator is trained for 'epochs' epochs.
         """
         optimizer_D = self.optimizer[1]
         # loss_D = self.loss[1]
@@ -775,6 +788,8 @@ class TrainWGAN(TrainGAN):
                 gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output.data, fake.data)
                 loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out) + self.lambda_gp * gradient_penalty
                 epoch_gp += gradient_penalty.item()
+                # print('gradient_penalty.item()')
+                # print(gradient_penalty.item())
             else:
                 loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out)
             # print('dis loss')
@@ -785,11 +800,12 @@ class TrainWGAN(TrainGAN):
             optimizer_D.step()
 
             # Clip weights of discriminator
-            clip_value = 0.01
-            for p in dis.parameters():
-                p.data.clamp_(-clip_value, clip_value)
+            if self.lambda_gp is None:
+                clip_value = 1
+                for p in dis.parameters():
+                    p.data.clamp_(-clip_value, clip_value)
 
-            total_loss += loss.data.item()
+            total_loss += loss.item() * batch_size
 
         if total_sample_num != 0:
             # sample = gen(cond_data)[0].cpu().detach().numpy()
@@ -797,8 +813,9 @@ class TrainWGAN(TrainGAN):
             # print(np.where(sample[:, 1] > 0.5, 2, 0))
             # print(sample[:, 2:])
 
-            avg_loss = total_loss / len(self.train_iter)
+            avg_loss = total_loss / total_sample_num
             avg_acc = total_acc / len(self.train_iter) / 2
+            self.dis_loss_list.append(avg_loss)
 
             sys.stdout.flush()
             self.logger.info('average_loss = %.8f, train_acc = %.8f' % (

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='LN', act=True):
+def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='BN', act=True):
     layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, padding=[k // 2 for k in kernel_size])]
     if normalize is not None:
         if normalize == 'BN':
@@ -82,13 +82,23 @@ class Generator(nn.Module):
         # print('noise.shape')
         # print(noise.shape)
         gen_input = torch.cat([cond_data, noise], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
-        # print('gen_input.shape')
-        # print(gen_input.shape)
+        # print('before cnn')
+        # print(torch.min(gen_input[0]))
+        # print(torch.max(gen_input[0]))
+        # print(gen_input[0])
         # N, num_classes, num_snaps -> N, num_snaps, num_classes
         # gen_output = self.model(gen_input).transpose(1, 2)
         # N * num_classes * num_snaps -> N, num_snaps, num_classes
         gen_output = self.model(gen_input).reshape([N, self.seq_len, -1])
+        # print('after cnn')
+        # print(torch.min(gen_output[0]))
+        # print(torch.max(gen_output[0]))
+        # print(gen_input[0])
         gen_output = self.fc(gen_output.reshape([N * self.seq_len, -1])).reshape([N, self.seq_len, -1])
+        # print('before fc')
+        # print(torch.min(gen_output[0]))
+        # print(torch.max(gen_output[0]))
+        # print(gen_input[0])
         # gen_output = torch.nn.functional.gumbel_softmax(gen_output, dim=-1, hard=True)
         # N, num_snaps, num_classes
         # print('gen_output.shape')
@@ -139,14 +149,26 @@ class Discriminator(nn.Module):
         # cond_data = self.ext(cond_data)
         # Concatenate label embedding and image to produce input
         # -> N, C, L
-        d_in = torch.cat([gen_output, cond_data], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
+        dis_input = torch.cat([gen_output, cond_data], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
+        # print('before cnn')
+        # print(torch.min(dis_input[0]))
+        # print(torch.max(dis_input[0]))
         # print('d_in.shape')
         # print(d_in.shape)
         # -> N, C, fold_len, L // fold_len
-        validity = self.model(d_in)
+        validity = self.model(dis_input)
+        # print('after cnn')
+        # print(torch.min(validity[0]))
+        # print(torch.max(validity[0]))
         validity = F.avg_pool2d(validity, (validity.shape[2], validity.shape[3])).squeeze(-1).squeeze(-1)
+        # print('after pool')
+        # print(torch.min(validity[0]))
+        # print(torch.max(validity[0]))
 
         validity = self.fc(validity)
+        # print('after fc')
+        # print(torch.min(validity[0]))
+        # print(torch.max(validity[0]))
 
         # N, 1
         return validity

@@ -3,4 +3,5 @@ from . import (
     general_util,
     beatmap_util,
     audio_util,
+    plt_util,
 )
