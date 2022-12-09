@@ -54,9 +54,9 @@ class Generator(nn.Module):
         # self.layer8_conv = double_conv1d_bn(64, 32, kernel_size=3)
         # self.layer9_conv = double_conv1d_bn(16, 8)
 
-        # self.deconv1 = deconv1d_bn(32, 32, kernel_size=3)
-        self.deconv2 = deconv1d_bn(32, 32, kernel_size=5, strides=4)
-        self.deconv3 = deconv1d_bn(32, 32, kernel_size=5, strides=4)
+        self.deconv1 = deconv1d_bn(32, 32, kernel_size=4, strides=4)
+        self.deconv2 = deconv1d_bn(32, 32, kernel_size=4, strides=4)
+        # self.deconv3 = deconv1d_bn(32, 32, kernel_size=4, strides=4)
         # self.deconv4 = deconv1d_bn(16, 8)
 
         self.layer9_conv = double_conv1d_bn(32, 32, kernel_size=5)
@@ -110,11 +110,12 @@ class Discriminator(nn.Module):
 
         # self.ext = FeatureExtractor(self.ext_in_channels, self.ext_out_channels)
 
-        self.model = nn.Sequential(
-            double_conv1d_bn(self.label_dim + cond_data_feature_dim, 256, kernel_size=7),
-            double_conv1d_bn(256, 128, kernel_size=5),
-            double_conv1d_bn(128, 64, kernel_size=3),
-        )
+        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim + label_dim, 128, kernel_size=7)
+        self.layer2_conv = double_conv1d_bn(128, 32, kernel_size=7)
+
+        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5)
+        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5)
+
         self.fc = nn.Linear(64, 1)
 
     def forward(self, cond_data, gen_output):
@@ -133,18 +134,30 @@ class Discriminator(nn.Module):
         # cond_data = self.ext(cond_data)
         # Concatenate label embedding and image to produce input
         # -> N, C, L
-        dis_input = torch.cat([gen_output, cond_data], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
+        x = torch.cat([gen_output, cond_data], dim=2).permute(0, 2, 1).reshape([N, -1, L // self.fold_len, self.fold_len])
         # print('before cnn')
         # print(torch.min(dis_input[0]))
         # print(torch.max(dis_input[0]))
         # print('d_in.shape')
         # print(d_in.shape)
         # -> N, C, fold_len, L // fold_len
-        validity = self.model(dis_input)
+
+        x = self.layer1_conv(x)
+        x = F.max_pool1d(x, 4)
+
+        x = self.layer2_conv(x)
+        x = F.max_pool1d(x, 4)
+
+        x = self.layer3_conv(x)
+        x = F.max_pool1d(x, 4)
+
+        x = self.layer4_conv(x)
+        # x = F.max_pool1d(x, 4)
+
         # print('after cnn')
         # print(torch.min(validity[0]))
         # print(torch.max(validity[0]))
-        validity = F.avg_pool2d(validity, (validity.shape[2], validity.shape[3])).squeeze(-1).squeeze(-1)
+        validity = F.avg_pool1d(x, x.shape[2]).squeeze(-1)
         # print('after pool')
         # print(torch.min(validity[0]))
         # print(torch.max(validity[0]))

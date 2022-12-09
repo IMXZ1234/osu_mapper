@@ -20,6 +20,7 @@ np.set_printoptions(threshold=np.inf)
 
 
 def power_to_db(specgram):
+    specgram = np.where(specgram == 0, np.finfo(float).eps, specgram)
     return 10 * np.log10(specgram)
 
 
@@ -304,38 +305,70 @@ def mel_from_audio():
     print(audio_data.shape)
     plot_wave(audio_data)
     audio_data = torch.tensor(audio_data, dtype=torch.float)
+
+    n_fft = 1024
+    win_length = None
+    hop_length = n_fft // 2
+    n_mels = 128
+
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
         sample_rate=sr,
-        n_fft=1024,
-        win_length=None,
-        hop_length=512,
+        n_fft=n_fft,
+        win_length=win_length,
+        hop_length=hop_length,
         center=True,
         pad_mode="reflect",
         power=2.0,
         norm="slaney",
         onesided=True,
-        n_mels=128,
+        n_mels=n_mels,
         mel_scale="htk",
     )
     melspec = mel_spectrogram(audio_data)
     melspec = melspec.numpy()
     plot_spectrogram(melspec, 'sr %.f' % sr)
-    mel_spectrogram = torchaudio.transforms.MelSpectrogram(
-        sample_rate=sr * 2,
-        n_fft=1024,
-        win_length=None,
-        hop_length=512,
-        center=True,
-        pad_mode="reflect",
-        power=2.0,
-        norm="slaney",
-        onesided=True,
-        n_mels=128,
-        mel_scale="htk",
+    print(melspec.shape)
+
+    print(np.min(melspec))
+    print(np.max(melspec))
+    print(np.mean(melspec))
+    plt.figure()
+    plt.hist(melspec.reshape([-1]))
+    plt.show()
+    melspec = np.where(melspec == 0, np.finfo(float).eps, melspec)
+    melspec = np.log10(melspec)
+    print(np.min(melspec))
+    print(np.max(melspec))
+    print(np.mean(melspec))
+    plt.figure()
+    plt.hist(melspec.reshape([-1]))
+    plt.show()
+
+    mfcc = torchaudio.transforms.MFCC(
+        sample_rate=sr,
+        melkwargs={
+            'n_fft': n_fft,
+            'win_length': win_length,
+            'hop_length': hop_length,
+            'center': True,
+            'pad_mode': "reflect",
+            'power': 2.0,
+            'norm': "slaney",
+            'onesided': True,
+            'n_mels': n_mels,
+            'mel_scale': "htk",
+        }
     )
-    melspec = mel_spectrogram(audio_data)
-    melspec = melspec.numpy()
-    plot_spectrogram(melspec, 'sr %.f' % (sr * 2))
+    mfcc_data = mfcc(audio_data)
+    mfcc_data = mfcc_data.numpy()
+    print(mfcc_data.shape)
+    plot_spectrogram(mfcc_data, 'mfcc')
+    print(np.min(mfcc_data))
+    print(np.max(mfcc_data))
+    print(np.mean(mfcc_data))
+    plt.figure()
+    plt.hist(mfcc_data.reshape([-1]))
+    plt.show()
     # print(audioread.available_backends(True))
     # audio_data, sr = torchaudio.backend.list_audio_backends()
     # print(torchaudio.backend.soundfile_backend.list_audio_backends())

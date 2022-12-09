@@ -2720,7 +2720,7 @@ def train_cganv6(setting_name='cganv6'):
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.0001, 0.001]]:
+    for gen_lr, dis_lr in [[0.001, 0.001]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -2782,10 +2782,10 @@ def train_cganv6(setting_name='cganv6'):
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_step': 32}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
-                     'discriminator_pretrain_epoch': 1,
+                     'discriminator_pretrain_epoch': 3,
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
-                     'adv_discriminator_epoch': 1,
+                     'adv_discriminator_epoch': 2,
                      'lambda_gp': None,
                      }
         with open(config_path, 'w') as f:

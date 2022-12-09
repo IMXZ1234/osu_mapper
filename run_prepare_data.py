@@ -336,7 +336,7 @@ def prepare_label_pos_datasetv3():
 
 
 if __name__ == '__main__':
-    prepare_label_pos_datasetv3()
+    prepare_label_pos_datasetv2()
     # prepare_mel_train_data()
     # prepare_rnn_dataset()
     # cond_data = rnn_dataset.RNNDataset(
