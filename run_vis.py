@@ -2,17 +2,19 @@ import os
 from datetime import timedelta
 from typing import Generator
 
-# import librosa
+import librosa
+import audioread
 
 from vis import vis_model
 
 import torch
+import torchaudio
 from matplotlib import pyplot as plt
 import pickle
 import numpy as np
 import slider
 from nn.dataset import dataset_util
-from util import beatmap_util
+from util import beatmap_util, audio_util
 from preprocess import db, filter
 np.set_printoptions(threshold=np.inf)
 
@@ -22,13 +24,30 @@ def power_to_db(specgram):
 
 
 def plot_spectrogram(specgram, title=None, ylabel="freq_bin"):
+    """
+    specgram: channels, length, n_mels
+    """
     fig, axs = plt.subplots(1, 1)
     axs.set_title(title or "Spectrogram (db)")
     axs.set_ylabel(ylabel)
     axs.set_xlabel("frame")
     # im = axs.imshow(librosa.power_to_db(specgram), origin="lower", aspect="auto")
-    im = axs.imshow(power_to_db(specgram), origin="lower", aspect="auto")
+    im = axs.imshow(power_to_db(specgram[0]), origin="lower", aspect="auto")
     fig.colorbar(im, ax=axs)
+    plt.show(block=False)
+
+
+def plot_wave(wave, title=None, ylabel="ampl"):
+    """
+    wave: channels, length, ampl
+    """
+    fig, axs = plt.subplots(1, 1)
+    axs.set_title(title or "ampl")
+    axs.set_ylabel(ylabel)
+    axs.set_xlabel("frame")
+    # im = axs.imshow(librosa.power_to_db(specgram), origin="lower", aspect="auto")
+    axs.plot(np.arange(len(wave[0])), wave[0])
+    # fig.colorbar(im, ax=axs)
     plt.show(block=False)
 
 
@@ -78,6 +97,23 @@ def find_single_elem(label, elem=2):
     return num_single_elem
 
 
+def find_sequence_elem(label, elem=1):
+    total_len = 0
+    pos = 0
+    num_seq_elem = 0
+    while pos < len(label):
+        while label[pos] == elem:
+            total_len += 1
+            pos += 1
+            if pos >= len(label):
+                break
+        if total_len > 1:
+            num_seq_elem += 1
+        total_len = 0
+        pos += 1
+    return num_seq_elem
+
+
 def view_dataset():
     with open(
         r'./resources/data/fit/label_pos/label.pkl',
@@ -87,12 +123,17 @@ def view_dataset():
     print(len(label_list))
     print(label_list[0])
 
-    # for label in label_list:
-    #     type_label = label[:, 0]
-    #     num_single_elem = find_single_elem(type_label, 2)
-    #     if num_single_elem > 0:
-    #         print(num_single_elem)
-    #         print(type_label)
+    with_1_seq = 0
+
+    for label in label_list:
+        type_label = label[:, 0]
+        num = find_sequence_elem(type_label, 1)
+        if num > 0:
+            with_1_seq += 1
+            print(num)
+            print(type_label)
+    print('with_1_seq')
+    print(with_1_seq)
     # with open(
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\label_pos\data.pkl',
     #     'rb'
@@ -252,8 +293,57 @@ def ho_density_distribution():
     view_distribution(approach_rate_list, 'approach_rate_list')
 
 
+def mel_from_audio():
+    # audio_data, sr = librosa.load(r'./resources/data/bgm/audio.mp3', sr=None)
+    audio_data, sr = audio_util.audioread_get_audio_data(
+        # r'./resources/data/bgm/audio.mp3',
+        r'resources/data/bgm/audio_limelight.mp3',
+        ret_tensor=False)
+    print('sr')
+    print(sr)
+    print(audio_data.shape)
+    plot_wave(audio_data)
+    audio_data = torch.tensor(audio_data, dtype=torch.float)
+    mel_spectrogram = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sr,
+        n_fft=1024,
+        win_length=None,
+        hop_length=512,
+        center=True,
+        pad_mode="reflect",
+        power=2.0,
+        norm="slaney",
+        onesided=True,
+        n_mels=128,
+        mel_scale="htk",
+    )
+    melspec = mel_spectrogram(audio_data)
+    melspec = melspec.numpy()
+    plot_spectrogram(melspec, 'sr %.f' % sr)
+    mel_spectrogram = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sr * 2,
+        n_fft=1024,
+        win_length=None,
+        hop_length=512,
+        center=True,
+        pad_mode="reflect",
+        power=2.0,
+        norm="slaney",
+        onesided=True,
+        n_mels=128,
+        mel_scale="htk",
+    )
+    melspec = mel_spectrogram(audio_data)
+    melspec = melspec.numpy()
+    plot_spectrogram(melspec, 'sr %.f' % (sr * 2))
+    # print(audioread.available_backends(True))
+    # audio_data, sr = torchaudio.backend.list_audio_backends()
+    # print(torchaudio.backend.soundfile_backend.list_audio_backends())
+    # =(r'./resources/data/bgm/audio.mp3', ret_tensor=False)
+
+
 if __name__ == '__main__':
-    view_dataset()
+    mel_from_audio()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:
         #     all_speed_stars.append(beatmap.speed_stars())

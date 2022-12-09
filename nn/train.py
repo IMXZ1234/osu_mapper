@@ -726,6 +726,7 @@ class TrainWGAN(TrainGAN):
 
             optimizer_G.zero_grad()
 
+            # smaller the loss, better the generator performance
             gen_loss = -torch.mean(dis_cls_out)
 
             epoch_gen_loss += gen_loss.item() * batch_size
@@ -791,6 +792,8 @@ class TrainWGAN(TrainGAN):
                 # print('gradient_penalty.item()')
                 # print(gradient_penalty.item())
             else:
+                # optimization direction: larger score for real samples, smaller score for fake samples
+                # smaller the loss, better the discriminator performance
                 loss = -torch.mean(dis_real_cls_out) + torch.mean(dis_fake_cls_out)
             # print('dis loss')
             # print(loss)
