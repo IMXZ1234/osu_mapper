@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='BN', act=True):
+def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='LN', act=True):
     layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, padding=[k // 2 for k in kernel_size])]
     if normalize is not None:
         if normalize == 'BN':
@@ -52,7 +52,7 @@ class Generator(nn.Module):
 
         dims = [seq_len // self.fold_len, self.fold_len]
 
-        self.cond_data_bn = nn.BatchNorm1d(cond_data_feature_dim)
+        # self.cond_data_bn = nn.BatchNorm1d(cond_data_feature_dim)
 
         self.model = nn.Sequential(
             *conv_block2d(noise_dim + cond_data_feature_dim, self.label_dim * 64, dims, kernel_size=(7, 7)),
@@ -62,8 +62,16 @@ class Generator(nn.Module):
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(3, 3)),
         )
-        self.fc = nn.Linear(self.label_dim * 16, self.label_dim * 4)
-        self.fc2 = nn.Linear(self.label_dim * 4, self.label_dim)
+        self.ho_pos_pred = nn.Sequential(
+            nn.Linear(self.label_dim * 16, self.label_dim * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(self.label_dim * 8, self.label_dim // 2),
+        )
+        self.type_label_pred = nn.Sequential(
+            nn.Linear(self.label_dim * 16, self.label_dim * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(self.label_dim * 8, self.label_dim // 2),
+        )
 
     def forward(self, cond_data):
         """
@@ -84,8 +92,8 @@ class Generator(nn.Module):
         # print(cond_data.shape)
         # print('noise.shape')
         # print(noise.shape)
-        cond_data = self.cond_data_bn(cond_data.permute(0, 2, 1))
-        gen_input = torch.cat([cond_data, noise], dim=1).reshape([N, -1, L // self.fold_len, self.fold_len])
+        # cond_data = self.cond_data_bn(cond_data)
+        gen_input = torch.cat([cond_data.permute(0, 2, 1), noise], dim=1).reshape([N, -1, L // self.fold_len, self.fold_len])
         # print('before cnn')
         # print(torch.min(gen_input[0]))
         # print(torch.max(gen_input[0]))
@@ -98,8 +106,11 @@ class Generator(nn.Module):
         # print(torch.min(gen_output[0]))
         # print(torch.max(gen_output[0]))
         # print(gen_input[0])
-        x = self.fc(x.reshape([N * self.seq_len, -1]))
-        gen_output = self.fc2(F.leaky_relu(x)).reshape([N, self.seq_len, -1])
+        x = x.reshape([N * self.seq_len, -1])
+        ho_pos = self.ho_pos_pred(x)
+        type_label = self.type_label_pred(x)
+        gen_output = torch.cat([ho_pos, type_label], dim=1)
+        gen_output = gen_output.reshape([N, self.seq_len, -1])
         # print('before fc')
         # print(torch.min(gen_output[0]))
         # print(torch.max(gen_output[0]))
@@ -123,7 +134,7 @@ class Discriminator(nn.Module):
         self.fold_len = fold_len
         # self.ext_in_channels = in_channels
         # self.ext_out_channels = in_channels
-        self.cond_data_bn = nn.BatchNorm1d(cond_data_feature_dim)
+        # self.cond_data_bn = nn.BatchNorm1d(cond_data_feature_dim)
 
         dims = [seq_len // self.fold_len, self.fold_len]
 
@@ -137,8 +148,11 @@ class Discriminator(nn.Module):
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(5, 5)),
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(3, 3)),
         )
-        self.fc = nn.Linear(self.label_dim * 16, self.label_dim * 4)
-        self.fc2 = nn.Linear(self.label_dim * 4, 1)
+        self.validity_pred = nn.Sequential(
+            nn.Linear(self.label_dim * 16, self.label_dim * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(self.label_dim * 8, 1),
+        )
 
     def forward(self, cond_data, gen_output):
         """
@@ -155,9 +169,9 @@ class Discriminator(nn.Module):
         # gen_output = gen_output.transpose(1, 2)
         # cond_data = self.ext(cond_data)
         # Concatenate label embedding and image to produce input
-        cond_data = self.cond_data_bn(cond_data.permute(0, 2, 1))
+        # cond_data = self.cond_data_bn(cond_data)
         # -> N, C, L
-        dis_input = torch.cat([gen_output.permute(0, 2, 1), cond_data], dim=1).reshape([N, -1, L // self.fold_len, self.fold_len])
+        dis_input = torch.cat([gen_output.permute(0, 2, 1), cond_data.permute(0, 2, 1)], dim=1).reshape([N, -1, L // self.fold_len, self.fold_len])
         # print('before cnn')
         # print(torch.min(dis_input[0]))
         # print(torch.max(dis_input[0]))
@@ -169,12 +183,11 @@ class Discriminator(nn.Module):
         # print(torch.min(validity[0]))
         # print(torch.max(validity[0]))
         x = F.avg_pool2d(x, (x.shape[2], x.shape[3])).squeeze(-1).squeeze(-1)
-        x = self.fc(x)
         # print('after pool')
         # print(torch.min(validity[0]))
         # print(torch.max(validity[0]))
 
-        dis_output = self.fc2(F.leaky_relu(x))
+        dis_output = self.validity_pred(x)
         # print('after fc')
         # print(torch.min(validity[0]))
         # print(torch.max(validity[0]))

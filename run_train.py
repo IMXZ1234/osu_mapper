@@ -2714,13 +2714,13 @@ def train_cganv6(setting_name='cganv6'):
     sample_beats = 48
     sample_snaps = sample_beats * snap_divisor
 
-    batch_size = 6
+    batch_size = 8
 
     subseq_len = sample_beats * snap_divisor
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.001, 0.001]]:
+    for gen_lr, dis_lr in [[0.00001, 0.001]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -2762,6 +2762,7 @@ def train_cganv6(setting_name='cganv6'):
                          'random_seed': random_seed,
                          'use_random_iter': True,
                          'binary': False,
+                         'shuffle': True,
                          'take_first': None,
                          },
                     'batch_size': batch_size,
@@ -2786,7 +2787,7 @@ def train_cganv6(setting_name='cganv6'):
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 2,
-                     'lambda_gp': None,
+                     'lambda_gp': 10,
                      }
         with open(config_path, 'w') as f:
             yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
@@ -2797,8 +2798,8 @@ def train_cganv6(setting_name='cganv6'):
                        'num_classes': num_classes,
                        'random_seed': random_seed,
                        'collate_fn': 'nn.dataset.collate_fn.default_collate',
-                       'grad_alter_fn': 'util.net_util.grad_clipping',
-                       'grad_alter_fn_arg': {'theta': 10},
+                       'grad_alter_fn': 'norm',
+                       'grad_alter_fn_arg': {'max_norm': 1},
                        'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
                        'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
                        }, f)

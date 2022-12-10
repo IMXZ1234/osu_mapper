@@ -172,6 +172,7 @@ def view_dataset():
         #     print(label[where_1])
             # print(label)
 
+
 def view_beatmap():
     beatmap = slider.Beatmap.from_path(
         # r'C:\Users\asus\coding\python\osu_mapper\resources\solfa feat. Ceui - primal (Shikibe Mayu) [Expert].osu'
@@ -374,9 +375,34 @@ def mel_from_audio():
     # print(torchaudio.backend.soundfile_backend.list_audio_backends())
     # =(r'./resources/data/bgm/audio.mp3', ret_tensor=False)
 
+def process_label(label):
+    """
+    -> circle_heat_value, slider_heat_value, x, y
+    """
+    L, _ = label.shape
+    # bounds in osu! beatmap editor
+    x = (label[:, 1] + 180) / (691 + 180)
+    y = (label[:, 2] + 82) / (407 + 82)
+    # if snap is occupied by a hit_object,
+    # noise's value should be almost always within -0.25~+0.25
+    heat_value = np.random.randn(2 * L).reshape([L, 2]) / 8
+    pos_circle = np.where(label[:, 0] == 1)[0]
+    pos_slider = np.where(label[:, 0] == 2)[0]
+    heat_value[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1
+    heat_value[pos_slider, np.ones(len(pos_slider), dtype=int)] += 1
+    return np.concatenate([heat_value, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
+
 
 if __name__ == '__main__':
-    mel_from_audio()
+    with open(
+        r'D:\osu_mapper\resources\data\fit\label_pos_v2\label.pkl',
+        'rb'
+    ) as f:
+        label_list = pickle.load(f)
+    print(label_list[0])
+    processed = process_label(label_list[0])
+    print(processed)
+    # mel_from_audio()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:
         #     all_speed_stars.append(beatmap.speed_stars())

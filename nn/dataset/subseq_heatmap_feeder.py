@@ -89,7 +89,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
-        self.data = [np.log(d + np.finfo(float).eps) for d in self.data]
+        # self.data = [np.log(d + np.finfo(float).eps) for d in self.data]
+        for i, data in enumerate(self.data):
+            data[:, :512] = np.log10(data[:, :512] + np.finfo(float).eps) / 15.
+            # self.data[i] = data
         # print(self.data[0])
         # print('len(self.data[0])')
         # print(len(self.data[0]))
