@@ -43,6 +43,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  binary=False,
                  inference=False,
                  take_first=None,
+                 pad=True,
                  **kwargs,
                  ):
         """
@@ -54,6 +55,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.label_path = label_path
         self.use_random_iter = use_random_iter
         self.take_first = take_first
+        self.pad = pad
 
         self.subseq_len = subseq_len
         self.inference = inference
@@ -103,7 +105,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
             self.data[i].shape[0]
             for i in range(self.n_seq)
         ]
-        if self.inference:
+        if self.inference and self.pad:
             padded_data = []
             for d in self.data:
                 length, feature_num = d.shape
