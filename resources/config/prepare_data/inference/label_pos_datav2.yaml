@@ -1,0 +1,21 @@
+fit_dataset: true
+fit_dataset_arg:
+  dataset_type: preprocess.dataset.label_pos_datasetv2.LabelPosDataset
+  save_dir: ./resources/data/fit/inference/label_posv2
+  audio_mel: 4
+  label_num: 3
+  snap_divisor: 8
+  coeff_approach_rate: 10
+  coeff_bpm: 120
+  switch_label: false
+  multibeat_label_fmt: 0
+  preprocess_arg:
+    beat_feature_frames: 16384
+    snap_offset: 0
+    n_fft: 1024
+    win_length: null
+    hop_length: 512
+    n_mels: 128
+    snap_divisor: 8
+    from_resampled: false
+inference: true

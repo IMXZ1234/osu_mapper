@@ -172,11 +172,12 @@ class LabelPosDataset(fit_dataset.FitDataset):
             return None, None
         sample_data_list = []
         skip_sample = False
+        ho_density, blank_proportion, circle_proportion = dataset_util.calculate_meta(beatmap, beatmap_label)
         for sample_idx in range(len(beatmap_label)):
             start_mel = sample_idx * self.audio_mel
             feature = self.make_feature(
                 audio_data[:, start_mel:start_mel + self.audio_mel],
-                *dataset_util.calculate_meta(beatmap, beatmap_label),
+                ho_density, blank_proportion, circle_proportion,
                 beatmap.approach_rate,
                 beatmap.bpm_min(),
             )
@@ -205,12 +206,14 @@ class LabelPosDataset(fit_dataset.FitDataset):
 
         total_snaps = end_snap - start_snap + 1
 
+        ho_density, blank_proportion, circle_proportion = dataset_util.sample_meta()
+        print(ho_density, blank_proportion, circle_proportion)
         sample_data_list = []
         for sample_idx in range(total_snaps):
             start_mel = sample_idx * self.audio_mel
             feature = self.make_feature(
                 audio_data[:, start_mel:start_mel + self.audio_mel],
-                *dataset_util.sample_meta(),
+                ho_density, blank_proportion, circle_proportion,
                 beatmap.approach_rate,  # approach_rate = np.random.uniform(0, 10)
                 beatmap.bpm_min(),
             )

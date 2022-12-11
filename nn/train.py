@@ -921,7 +921,7 @@ class TrainWGANWithinBatch(TrainWGAN):
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
 
                 # train generator batch
-                if batch % adv_generator_epoch == 0:
+                if batch % adv_generator_epoch == 0 or (epoch_gen_loss / total_sample_num) > 10:
                     gen_loss = self.train_generator_batch(batch, cond_data, real_gen_output, other)
                     epoch_gen_loss += gen_loss * batch_size
 
@@ -933,7 +933,7 @@ class TrainWGANWithinBatch(TrainWGAN):
                     # if fake loss value is too large, generator training will be difficult
                     win_avg_loss = win_avg_loss + (fake_loss - last_few_batch_loss.popleft()) / win_len
                     last_few_batch_loss.append(fake_loss)
-                    if win_avg_loss < -100:
+                    if np.abs(win_avg_loss) > 100:
                         continue
 
                     total_loss += loss * batch_size

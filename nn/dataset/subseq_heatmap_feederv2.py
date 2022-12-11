@@ -116,7 +116,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # print('self.seq_len')
         # print(self.seq_len)
         self.n_subseq = [
-            self.seq_len[i] // self.subseq_len
+            self.seq_len[i] // (self.subseq_len * self.snap_data_len)
             for i in range(self.n_seq)
         ]
         self.sample_div_pos = list(itertools.accumulate([0] + self.n_subseq))

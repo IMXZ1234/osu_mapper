@@ -97,7 +97,8 @@ class Generator(nn.Module):
         # print('before cnn')
         # print(torch.min(gen_input[0]))
         # print(torch.max(gen_input[0]))
-        # print(gen_input[0])
+        # print('gen_input.shape')
+        # print(gen_input.shape)
         # N, num_classes, num_snaps -> N, num_snaps, num_classes
         # gen_output = self.model(gen_input).transpose(1, 2)
         # N * num_classes * num_snaps -> N, num_snaps, num_classes
