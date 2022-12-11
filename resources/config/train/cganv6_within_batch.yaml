@@ -1,0 +1,75 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate
+data_arg:
+  batch_size: 8
+  dataset: nn.dataset.subseq_heatmap_feeder.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  train_dataset_arg:
+    binary: false
+    data_path: ./resources/data/fit/label_pos_v2/data.pkl
+    label_path: ./resources/data/fit/label_pos_v2/label.pkl
+    random_seed: 404
+    shuffle: true
+    subseq_len: 384
+    take_first: null
+    use_random_iter: true
+grad_alter_fn: norm
+grad_alter_fn_arg:
+  max_norm: 1
+loss_arg:
+  loss_type:
+  - CrossEntropyLoss
+  - CrossEntropyLoss
+  params:
+  - weight: null
+  - weight: null
+model_arg:
+  model_type:
+  - nn.net.cganv6.Generator
+  - nn.net.cganv6.Discriminator
+  params:
+  - cond_data_feature_dim: 517
+    label_dim: 4
+    noise_dim: 64
+    seq_len: 384
+  - cond_data_feature_dim: 517
+    label_dim: 4
+    seq_len: 384
+num_classes: 3
+optimizer_arg:
+  optimizer_type:
+  - RMSprop
+  - RMSprop
+  params:
+  - lr: 0.001
+  - lr: 0.001
+output_arg:
+  log_dir: ./resources/result/cganv6_within_batch/%d
+  model_save_dir: ./resources/result/cganv6_within_batch/%d
+  model_save_step: 32
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
+scheduler_arg:
+  params:
+  - gamma: 0.3
+    step_size: 16
+  - gamma: 0.1
+    step_size: 128
+  scheduler_type:
+  - StepLR
+  - StepLR
+train_arg:
+  adaptive_adv_train: false
+  adv_discriminator_epoch: 1
+  adv_generator_epoch: 5
+  discriminator_pretrain_epoch: 3
+  epoch: 2048
+  eval_step: 1
+  lambda_gp: 10
+  use_ext_cond_data: false
+train_type: wganwb
