@@ -1,3 +1,4 @@
+import os
 import random
 import itertools
 
@@ -38,18 +39,14 @@ class SubseqFeeder(torch.utils.data.Dataset):
     """
 
     def __init__(self,
-                 data_path,
-                 label_path,
-                 subseq_len,
+                 save_dir,
                  use_random_iter=True,
-                 flatten=False,
                  # subseq_num for each batch
                  random_seed=None,
                  binary=False,
                  inference=False,
                  take_first=None,
                  data_process_dim=128,  # do some preprocessing to data
-                 snap_data_len=4,
                  **kwargs,
                  ):
         """
@@ -57,117 +54,50 @@ class SubseqFeeder(torch.utils.data.Dataset):
         """
         if random_seed is not None:
             random.seed(random_seed)
-        self.data_path = data_path
-        self.label_path = label_path
+        self.save_dir = save_dir
+        self.data_dir = os.path.join(self.save_dir, 'data')
+        self.label_dir = os.path.join(self.save_dir, 'label')
+        self.info_path = os.path.join(self.save_dir, 'info.pkl')
         self.use_random_iter = use_random_iter
         self.take_first = take_first
 
-        self.subseq_len = subseq_len
-        self.snap_data_len = snap_data_len
         self.inference = inference
         self.data_process_dim = data_process_dim
 
         self.binary = binary
-        self.flatten = flatten
-        self.load_data()
 
-    def load_data(self):
-        print(self.data_path)
+        with open(self.info_path, 'rb') as f:
+            self.info = pickle.load(f)
+        print(self.info)
+
+    def load_data(self, sample_idx):
+        data_path = os.path.join(self.data_dir, '%d.pkl' % sample_idx)
+        label_path = os.path.join(self.label_dir, '%d.pkl' % sample_idx)
         # load cond_data
-        if self.data_path.endswith('.npy'):
-            self.data = np.load(self.data_path)
+        if data_path.endswith('.npy'):
+            data = np.load(data_path)
         else:
-            with open(self.data_path, 'rb') as f:
-                self.data = pickle.load(f)
-
-        if self.take_first is not None:
-            self.data = self.data[:self.take_first]
+            with open(data_path, 'rb') as f:
+                data = pickle.load(f)
+        data = process_data(data, self.data_process_dim)
 
         if not self.inference:
             # load label
-            with open(self.label_path, 'rb') as f:
-                self.label = pickle.load(f)
-
-            if self.take_first is not None:
-                self.label = self.label[:self.take_first]
-
-            if self.binary:
-                for i in range(len(self.label)):
-                    self.label[i][np.where(self.label[i] != 0)[0]] = 1
-        # else:
-        #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
-
-        self.n_seq = len(self.data)
-        self.data = [process_data(d, self.data_process_dim) for d in self.data]
-        # print(self.data[0])
-        # print('len(self.data[0])')
-        # print(len(self.data[0]))
-        # print(np.max([np.max(label[:, 1:], axis=0) for label in self.label], axis=0))
-        # print(np.min([np.min(label[:, 1:], axis=0) for label in self.label], axis=0))
-
-        self.seq_len = [
-            self.data[i].shape[0]
-            for i in range(self.n_seq)
-        ]
-        if self.inference:
-            padded_data = []
-            for d in self.data:
-                length, feature_num = d.shape
-                tail = length % self.subseq_len
-                if tail == 0:
-                    padded = d
-                else:
-                    padded = np.pad(d, ((0, self.subseq_len-tail), (0, 0)), mode='reflect')
-                padded_data.append(padded)
-            self.data = padded_data
-        # print('self.seq_len')
-        # print(self.seq_len)
-        self.n_subseq = [
-            self.seq_len[i] // (self.subseq_len * self.snap_data_len)
-            for i in range(self.n_seq)
-        ]
-        self.sample_div_pos = list(itertools.accumulate([0] + self.n_subseq))
-        print('self.sample_div_pos')
-        print(self.sample_div_pos)
-
-        subseq_data_list = []
-        for seq_data, n_subseq in zip(self.data, self.n_subseq):
-            for j in range(n_subseq):
-                start = j * self.subseq_len
-                end = start + self.subseq_len
-                subseq_data_list.append(seq_data[start * self.snap_data_len:end * self.snap_data_len])
-        self.data = subseq_data_list
-
-        if not self.inference:
-            self.label = [process_label(label) for label in self.label]
-            # print('label')
-            # print(self.label[0])
-            subseq_label_list = []
-            for seq_label, n_subseq in zip(self.label, self.n_subseq):
-                for j in range(n_subseq):
-                    start = j * self.subseq_len
-                    end = start + self.subseq_len
-                    subseq_label_list.append(seq_label[start:end])
-            self.label = subseq_label_list
+            with open(label_path, 'rb') as f:
+                label = pickle.load(f)
+            label = process_label(label)
         else:
-            self.label = [None for _ in range(len(self.data))]
+            label = None
 
-        if self.use_random_iter:
-            zipped = list(zip(self.data, self.label))
-            random.shuffle(zipped)
-            self.data, self.label = list(zip(*zipped))
+        return data, label
 
     def __len__(self):
-        return len(self.data)
+        return len(self.info)
 
     def __getitem__(self, index):
+        data, label = self.load_data(index)
         if self.inference:
-            return self.data[index], index
+            return data, index
         else:
-            return self.data[index], self.label[index], index
+            return data, label, index
 
-    def cat_sample_labels(self, labels):
-        all_sample_labels = []
-        for i in range(len(self.sample_div_pos) - 1):
-            all_sample_labels.append(torch.cat(labels[self.sample_div_pos[i]: self.sample_div_pos[i+1]]))
-        return all_sample_labels

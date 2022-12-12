@@ -13,7 +13,10 @@ class double_conv1d_bn(nn.Module):
         self.conv2 = nn.Conv1d(out_channels, out_channels,
                                kernel_size=kernel_size,
                                stride=strides, padding=padding, bias=True)
-        if normalize == 'BN':
+        if normalize is None:
+            self.bn1 = nn.Identity()
+            self.bn2 = nn.Identity()
+        elif normalize == 'BN':
             self.bn1 = nn.BatchNorm1d(out_channels)
             self.bn2 = nn.BatchNorm1d(out_channels)
         elif normalize == 'LN':
@@ -38,7 +41,9 @@ class deconv1d_bn(nn.Module):
         self.conv1 = nn.ConvTranspose1d(in_channels, out_channels,
                                         kernel_size=kernel_size,
                                         stride=strides, bias=True)
-        if normalize == 'BN':
+        if normalize is None:
+            self.bn1 = nn.Identity()
+        elif normalize == 'BN':
             self.bn1 = nn.BatchNorm1d(out_channels)
         elif normalize == 'LN':
             assert dim is not None
@@ -55,29 +60,29 @@ class Generator(nn.Module):
     """
     use Unet like structure
     """
-    def __init__(self, seq_len, label_dim, cond_data_feature_dim, noise_dim):
+    def __init__(self, seq_len, label_dim, cond_data_feature_dim, noise_dim, normalize='LN'):
         super(Generator, self).__init__()
         self.noise_dim = noise_dim
 
-        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim + noise_dim, 128, kernel_size=7, dim=seq_len)
-        self.layer2_conv = double_conv1d_bn(128, 32, kernel_size=7, dim=seq_len // 2)
+        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim + noise_dim, 128, kernel_size=7, dim=seq_len, normalize=normalize)
+        self.layer2_conv = double_conv1d_bn(128, 32, kernel_size=7, dim=seq_len // 2, normalize=normalize)
 
-        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 4)
-        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 16)
+        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 4, normalize=normalize)
+        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 16, normalize=normalize)
 
-        self.layer5_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64)
+        self.layer5_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64, normalize=normalize)
 
-        self.layer6_conv = double_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 16)
-        self.layer7_conv = double_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 4)
+        self.layer6_conv = double_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 16, normalize=normalize)
+        self.layer7_conv = double_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 4, normalize=normalize)
         # self.layer8_conv = double_conv1d_bn(64, 32, kernel_size=3)
         # self.layer9_conv = double_conv1d_bn(16, 8)
 
-        self.deconv1 = deconv1d_bn(32, 32, kernel_size=4, strides=4, dim=seq_len // 16)
-        self.deconv2 = deconv1d_bn(32, 32, kernel_size=4, strides=4, dim=seq_len // 4)
+        self.deconv1 = deconv1d_bn(32, 32, kernel_size=4, strides=4, dim=seq_len // 16, normalize=normalize)
+        self.deconv2 = deconv1d_bn(32, 32, kernel_size=4, strides=4, dim=seq_len // 4, normalize=normalize)
         # self.deconv3 = deconv1d_bn(32, 32, kernel_size=4, strides=4)
         # self.deconv4 = deconv1d_bn(16, 8)
 
-        self.layer9_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 4)
+        self.layer9_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 4, normalize=normalize)
         self.fc = nn.Conv1d(32, label_dim, kernel_size=1)
 
         # self.sigmoid = nn.Sigmoid()
@@ -116,7 +121,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, seq_len, label_dim, cond_data_feature_dim,
+    def __init__(self, seq_len, label_dim, cond_data_feature_dim, normalize='LN',
                  **kwargs):
         """
         output_feature_num = num_classes(density map) + 2(x, y)
@@ -125,17 +130,17 @@ class Discriminator(nn.Module):
         self.label_dim = label_dim
         self.seq_len = seq_len
 
-        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim, 128, kernel_size=7, dim=seq_len)
-        self.layer2_conv = double_conv1d_bn(128 + label_dim, 32, kernel_size=7, dim=seq_len // 4)
+        self.layer1_conv = double_conv1d_bn(cond_data_feature_dim, 128, kernel_size=7, dim=seq_len, normalize=normalize)
+        self.layer2_conv = double_conv1d_bn(128 + label_dim, 32, kernel_size=7, dim=seq_len // 4, normalize=normalize)
 
-        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 8)
-        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 16)
+        self.layer3_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 8, normalize=normalize)
+        self.layer4_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 16, normalize=normalize)
 
-        self.layer5_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 32)
-        self.layer6_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64)
+        self.layer5_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 32, normalize=normalize)
+        self.layer6_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64, normalize=normalize)
 
-        self.layer7_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64)
-        self.layer8_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64)
+        self.layer7_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64, normalize=normalize)
+        self.layer8_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64, normalize=normalize)
 
         self.fc = nn.Linear(32, 1)
 
