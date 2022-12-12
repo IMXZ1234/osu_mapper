@@ -7,11 +7,15 @@ from sklearn import model_selection
 
 def _save_items(item_paths, items):
     for item_path, item in zip(item_paths, items):
-        dirname = os.path.dirname(item_path)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-        with open(item_path, 'wb') as f:
-            pickle.dump(item, f)
+        _save_item(item_path, item)
+
+
+def _save_item(item_path, item):
+    dirname = os.path.dirname(item_path)
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+    with open(item_path, 'wb') as f:
+        pickle.dump(item, f)
 
 
 def _load_items(item_paths):
@@ -239,3 +243,23 @@ class FitDataset:
             else item[np.asarray(idx_list, dtype=int)]
             for item in self.get_raw_items()
         ]
+
+    def save_raw_separate(self):
+        """
+        save each sample in a separate file
+        """
+        for item_name, item in zip(self.item_names, self.items):
+            item_save_dir = os.path.join(self.save_dir, item_name)
+            _save_items(
+                [os.path.join(item_save_dir, '%d.pkl' % idx)
+                 for idx in range(len(item))],
+                item
+            )
+
+    def save_raw_separate_sample_items(self, sample_items, sample_idx):
+        for item_name, item in zip(self.item_names, sample_items):
+            item_save_dir = os.path.join(self.save_dir, item_name)
+            _save_item(
+                os.path.join(item_save_dir, '%d.pkl' % sample_idx),
+                item
+            )

@@ -325,18 +325,19 @@ def prepare_label_pos_datasetv3():
         r'./resources/data/fit/label_pos_v3',
         step_snaps=6*8,
         switch_label=False,
-        take_first=500,
+        take_first=1500,
         random_seed=404,
         coeff_approach_rate=10,
         coeff_bpm=120,
         label_num=3,
+        separate_save=True
     )
     ds.prepare()
     # ds.div_folds(save_first=1)
 
 
 if __name__ == '__main__':
-    prepare_label_pos_datasetv2()
+    prepare_label_pos_datasetv3()
     # prepare_mel_train_data()
     # prepare_rnn_dataset()
     # cond_data = rnn_dataset.RNNDataset(

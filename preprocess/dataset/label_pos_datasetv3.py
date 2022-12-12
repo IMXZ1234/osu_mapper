@@ -42,6 +42,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
                  multibeat_label_fmt=0,
                  item_names=fit_dataset.FitDataset.DEFAULT_ITEM_NAMES, logger=None,
                  preprocess_arg=dict(),
+                 separate_save=True,
                  **kwargs):
         """
         subseq_beat: length of subsequences.
@@ -51,6 +52,7 @@ class LabelPosDataset(fit_dataset.FitDataset):
         super().__init__(save_dir, item_names, logger)
         self.db = db.OsuDB(db_path)
         self.audio_dir = audio_dir
+        self.separate_save = separate_save
 
         self.take_first = take_first
         self.random_seed = random_seed
@@ -229,7 +231,13 @@ class LabelPosDataset(fit_dataset.FitDataset):
             )
             self.items[0].append(sample_data)
         if save:
-            self.save_raw()
+            if self.separate_save:
+                self.save_raw_separate()
+                data_len_list = [len(d) // self.snap_mel for d in self.items[0]]
+                with open(os.path.join(self.save_dir, 'info.pkl'), 'wb') as f:
+                    pickle.dump(data_len_list, f)
+            else:
+                self.save_raw()
 
     def prepare(self, save=True):
         if self.random_seed is not None:
@@ -256,6 +264,8 @@ class LabelPosDataset(fit_dataset.FitDataset):
                 filter.HitObjectFilter(),
             ]
         )
+        sample_idx = 0
+        data_len_list = []
         all_speed_stars = []
         all_difficulty = []
         for id_ in ids:
@@ -293,29 +303,38 @@ class LabelPosDataset(fit_dataset.FitDataset):
                 continue
             else:
                 print('success %d' % id_)
-            data.append(sample_data)
-            label.append(sample_label)
+            if self.separate_save and save:
+                data_len_list.append(len(sample_data) // self.snap_mel)
+                self.save_raw_separate_sample_items([sample_data, sample_label], sample_idx)
+            else:
+                data.append(sample_data)
+                label.append(sample_label)
+            sample_idx += 1
 
-        print(all_difficulty)
-        print(all_speed_stars)
-        plt.hist(all_difficulty)
-        plt.show()
-        plt.hist(all_speed_stars)
-        plt.show()
-        # max_value = np.max([np.max(seq_data[0]) for seq_data in cond_data])
-        # for idx in range(len(cond_data)):
-        #     cond_data[idx][0][:-label_num] = cond_data[idx][0][:-label_num] / max_value
-        print([np.max(seq_data) for seq_data in data])
-        print([np.min(seq_data) for seq_data in data])
-        print('cond_data.shape')
-        print([seq_data.shape for seq_data in data])
-        print('label.shape')
-        print([seq_label.shape for seq_label in label])
-        print(label[0])
-        # self.items[0] = np.stack(cond_data)
-        # self.items[0] = np.stack(label)
-        if save:
-            self.save_raw()
+        if self.separate_save and save:
+            with open(os.path.join(self.save_dir, 'info.pkl'), 'wb') as f:
+                pickle.dump(data_len_list, f)
+        else:
+            print(all_difficulty)
+            print(all_speed_stars)
+            plt.hist(all_difficulty)
+            plt.show()
+            plt.hist(all_speed_stars)
+            plt.show()
+            # max_value = np.max([np.max(seq_data[0]) for seq_data in cond_data])
+            # for idx in range(len(cond_data)):
+            #     cond_data[idx][0][:-label_num] = cond_data[idx][0][:-label_num] / max_value
+            print([np.max(seq_data) for seq_data in data])
+            print([np.min(seq_data) for seq_data in data])
+            print('cond_data.shape')
+            print([seq_data.shape for seq_data in data])
+            print('label.shape')
+            print([seq_label.shape for seq_label in label])
+            print(label[0])
+            # self.items[0] = np.stack(cond_data)
+            # self.items[0] = np.stack(label)
+            if save:
+                self.save_raw()
 
     def prepare_from_songs_dir(self, save=True):
         if self.random_seed is not None:

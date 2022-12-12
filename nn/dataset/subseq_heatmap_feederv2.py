@@ -26,6 +26,11 @@ def process_label(label):
     return np.concatenate([heat_value, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
 
 
+def process_data(data, process_dim=128):
+    data[:, :process_dim] = np.log10(data[:, :process_dim] + np.finfo(float).eps) / 15.
+    return data
+
+
 class SubseqFeeder(torch.utils.data.Dataset):
     """
     Simplest feeder yielding (data, label, index).
@@ -43,6 +48,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  binary=False,
                  inference=False,
                  take_first=None,
+                 data_process_dim=128,  # do some preprocessing to data
                  snap_data_len=4,
                  **kwargs,
                  ):
@@ -59,6 +65,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.subseq_len = subseq_len
         self.snap_data_len = snap_data_len
         self.inference = inference
+        self.data_process_dim = data_process_dim
 
         self.binary = binary
         self.flatten = flatten
@@ -91,7 +98,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         #     self.label = [np.zeros([sample_data.shape[0]]) for sample_data in self.data]
 
         self.n_seq = len(self.data)
-        self.data = [-np.log(d + 1) for d in self.data]
+        self.data = [process_data(d, self.data_process_dim) for d in self.data]
         # print(self.data[0])
         # print('len(self.data[0])')
         # print(len(self.data[0]))

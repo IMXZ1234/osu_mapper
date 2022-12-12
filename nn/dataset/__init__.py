@@ -15,5 +15,6 @@ from . import (
     subseq_feeder,
     subseq_heatmap_feeder,
     subseq_heatmap_feederv2,
+    subseq_heatmap_feeder_separate,
     seqganv2_feeder,
 )
