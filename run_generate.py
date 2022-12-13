@@ -372,4 +372,4 @@ def test_gen_5(generator):
 
 if __name__ == '__main__':
     generator = CGANGenerator()
-    test_gen_3(generator)
+    test_gen_5(generator)

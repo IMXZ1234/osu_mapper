@@ -1,3 +1,4 @@
+import math
 import random
 import itertools
 
@@ -94,8 +95,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
             # calculate padding for the last subseq in this sample
             pad_len = 0
             if self.pad:
-                in_sample_subseq_num = np.ceil(in_sample_subseq_num)
-                pad_len = sample_len - (sample_len % self.subseq_len)
+                in_sample_subseq_num = math.ceil(in_sample_subseq_num)
+                pad_len = self.subseq_len - (sample_len % self.subseq_len)
             else:
                 in_sample_subseq_num = int(in_sample_subseq_num)
 
@@ -156,12 +157,14 @@ class SubseqFeeder(torch.utils.data.Dataset):
             sample_idx, start, end, pad_len = self.subseq_dict[subseq_idx]
             if pad_len > 0:
                 # truncate padded portion
-                label = label[:pad_len]
+                label = label[:-pad_len]
             if sample_idx not in sample_label:
                 sample_label[sample_idx] = []
             sample_label[sample_idx].append((subseq_idx, label))
         all_sample_labels = []
-        for sample_labels in sorted(sample_label.keys()):
-            sample_labels = list(sorted(sample_labels, key=lambda x: x[0]))
-            all_sample_labels.append(torch.cat(sample_labels, dim=0))
+        for sample_idx in sorted(sample_label.keys()):
+            idx_label_tuple = sample_label[sample_idx]
+            idx_label_tuple = list(sorted(idx_label_tuple, key=lambda x: x[0]))
+            subseq_idx_list, label_list = list(zip(*idx_label_tuple))
+            all_sample_labels.append(torch.cat(label_list, dim=0))
         return all_sample_labels

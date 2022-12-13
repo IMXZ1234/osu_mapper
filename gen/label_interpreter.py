@@ -376,7 +376,7 @@ class HeatmapLabelWithPosInterpreter:
                         break
                 if pos - start_pos < 2:
                     # bad slider
-                    beatmap_util.add_circle(beatmap, (x, y), time)
+                    # beatmap_util.add_circle(beatmap, (x, y), time)
                     continue
                 num_beats = (pos-start_pos) / snap_divisor
 

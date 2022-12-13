@@ -141,6 +141,23 @@ class Inference:
         output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
         return [out.numpy() for out in output]
 
+    def run_inference_cganv7(self):
+        """
+        Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,
+        because same model may be used on different datasets.
+        """
+        if self.data_arg is None:
+            print('data_arg not specified!')
+        self.data_iter = self.load_data(**self.data_arg)
+        epoch_output_list = []
+        for batch, (data, index) in enumerate(self.data_iter):
+            data = recursive_wrap_data(data, self.output_device)
+            output = self.model(data).reshape([-1, 4])
+            epoch_output_list.append(recursive_to_cpu(output))
+        # print(epoch_output_list)
+        output = self.data_iter.dataset.cat_sample_labels(epoch_output_list)
+        return [out.numpy() for out in output]
+
     def run_inference_sample(self, data):
         """
         Unlike in Train, we initialize dataloader(data_iter) right before passing data through model,

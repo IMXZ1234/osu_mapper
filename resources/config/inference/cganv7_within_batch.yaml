@@ -1,0 +1,38 @@
+cal_acc_func: nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func
+cal_cm_func: nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func
+collate_fn: nn.dataset.collate_fn.default_collate_inference
+data_arg:
+  batch_size: 1
+  dataset: nn.dataset.subseq_heatmap_feeder_separate.SubseqFeeder
+  drop_last: false
+  num_workers: 1
+  shuffle: false
+  test_dataset_arg:
+    binary: false
+    data_process_dim: 128
+    random_seed: 404
+    pad: true
+    save_dir: ./resources/data/fit/inference/label_posv3
+    snap_data_len: 4
+    subseq_len: 2304
+    take_first: null
+    use_random_iter: false
+    inference: true
+grad_alter_fn: null
+model_arg:
+  model_type: nn.net.cganv7.Generator
+  cond_data_feature_dim: 133
+  label_dim: 4
+  noise_dim: 64
+  seq_len: 9216
+num_classes: 3
+output_arg:
+  log_dir: ./resources/result/cganv7_within_batch/%d
+  model_save_dir: ./resources/result/cganv7_within_batch/%d
+  model_save_step: 32
+output_device: 0
+pred_arg:
+  pred_type: nn.pred.multi_pred.MultiPred
+random_seed: 404
+train_type: wganwb
+weights_path: ./resources/pretrained_models/model_0_epoch_1887.pt

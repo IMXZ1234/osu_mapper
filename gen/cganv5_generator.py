@@ -7,8 +7,8 @@ from util import beatmap_util
 
 class CGANGenerator(BeatmapGenerator):
     def __init__(self,
-                 inference_config_path='./resources/config/inference/cganv6_within_batch.yaml',
-                 prepare_data_config_path='./resources/config/prepare_data/inference/label_pos_datav2.yaml'):
+                 inference_config_path='./resources/config/inference/cganv7_within_batch.yaml',
+                 prepare_data_config_path='./resources/config/prepare_data/inference/label_pos_datav3.yaml'):
         print('using inference_config_path %s' % inference_config_path)
         print('using prepare_data_config_path %s' % prepare_data_config_path)
         super().__init__(inference_config_path, prepare_data_config_path)
