@@ -1,3 +1,4 @@
+import os
 import random
 import itertools
 
@@ -8,11 +9,27 @@ from torch.utils import data
 from torch.nn import functional as F
 
 
-def normalize_label(label):
+def process_label(label):
+    """
+    -> circle_heat_value, slider_heat_value, x, y
+    """
+    L, _ = label.shape
     # bounds in osu! beatmap editor
-    label[:, 1] = (label[:, 1] + 180) / (691 + 180)
-    label[:, 2] = (label[:, 2] + 82) / (407 + 82)
-    return label
+    x = (label[:, 1] + 180) / (691 + 180)
+    y = (label[:, 2] + 82) / (407 + 82)
+    # if snap is occupied by a hit_object,
+    # noise's value should be almost always within -0.25~+0.25
+    heat_value = np.random.randn(2 * L).reshape([L, 2]) / 8
+    pos_circle = np.where(label[:, 0] == 1)[0]
+    pos_slider = np.where(label[:, 0] == 2)[0]
+    heat_value[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1
+    heat_value[pos_slider, np.ones(len(pos_slider), dtype=int)] += 1
+    return np.concatenate([heat_value, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
+
+
+def process_data(data, process_dim=128):
+    data[:, :process_dim] = np.log10(data[:, :process_dim] + np.finfo(float).eps) / 15.
+    return data
 
 
 class WholeSeqFeeder(torch.utils.data.Dataset):
@@ -22,14 +39,16 @@ class WholeSeqFeeder(torch.utils.data.Dataset):
     """
 
     def __init__(self,
-                 data_path,
-                 label_path,
+                 save_dir,
                  use_random_iter=True,
+                 # subseq_num for each batch
                  random_seed=None,
                  binary=False,
                  inference=False,
                  take_first=None,
-                 ho_pos=False,
+                 to_multiples_of=64,
+                 data_process_dim=128,  # do some preprocessing to data
+                 snap_data_len=4,
                  **kwargs,
                  ):
         """
@@ -37,70 +56,56 @@ class WholeSeqFeeder(torch.utils.data.Dataset):
         """
         if random_seed is not None:
             random.seed(random_seed)
-        self.data_path = data_path
-        self.label_path = label_path
+        self.save_dir = save_dir
+        self.data_dir = os.path.join(self.save_dir, 'data')
+        self.label_dir = os.path.join(self.save_dir, 'label')
+        self.info_path = os.path.join(self.save_dir, 'info.pkl')
         self.use_random_iter = use_random_iter
         self.take_first = take_first
-        self.ho_pos = ho_pos
 
         self.inference = inference
+        self.data_process_dim = data_process_dim
+        self.snap_data_len = snap_data_len
 
         self.binary = binary
-        self.load_data()
+        self.to_multiples_of = to_multiples_of
 
-    def load_data(self):
-        print(self.data_path)
+        with open(self.info_path, 'rb') as f:
+            self.info = pickle.load(f)
+        print(self.info)
+
+    def load_data(self, sample_idx):
+        data_path = os.path.join(self.data_dir, '%d.pkl' % sample_idx)
+        label_path = os.path.join(self.label_dir, '%d.pkl' % sample_idx)
         # load cond_data
-        if self.data_path.endswith('.npy'):
-            self.data = np.load(self.data_path)
+        if data_path.endswith('.npy'):
+            data = np.load(data_path)
         else:
-            with open(self.data_path, 'rb') as f:
-                self.data = pickle.load(f)
-
-        if self.take_first is not None:
-            self.data = self.data[:self.take_first]
+            with open(data_path, 'rb') as f:
+                data = pickle.load(f)
+        total_len = len(data)
+        normalized_len = total_len - (total_len % self.to_multiples_of)
+        data = data[:normalized_len]
+        data = process_data(data, self.data_process_dim)
 
         if not self.inference:
             # load label
-            with open(self.label_path, 'rb') as f:
-                self.label = pickle.load(f)
-
-            if self.take_first is not None:
-                self.label = self.label[:self.take_first]
-
-            if self.binary:
-                for i in range(len(self.label)):
-                    self.label[i][np.where(self.label[i] != 0)[0]] = 1
-
-        self.n_seq = len(self.data)
-
-        self.seq_len = [
-            self.data[i].shape[0]
-            for i in range(self.n_seq)
-        ]
-
-        if not self.inference:
-            if self.ho_pos:
-                self.label = [normalize_label(label) for label in self.label]
+            with open(label_path, 'rb') as f:
+                label = pickle.load(f)
+            label = label[:normalized_len // self.snap_data_len]
+            label = process_label(label)
         else:
-            self.label = [None for _ in range(len(self.data))]
+            label = None
 
-        if self.use_random_iter:
-            zipped = list(zip(self.data, self.label))
-            random.shuffle(zipped)
-            self.data, self.label = list(zip(*zipped))
+        return data, label
 
     def __len__(self):
-        return len(self.data)
+        return len(self.info)
 
     def __getitem__(self, index):
+        data, label = self.load_data(index)
         if self.inference:
-            return self.data[index], index, self.seq_len[index]
+            return data, index
         else:
-            return self.data[index], self.label[index], self.seq_len[index]
+            return data, label, index
 
-    def cat_sample_labels(self, labels):
-        all_sample_labels = []
-        for i in range(len(self.sample_div_pos) - 1):
-            all_sample_labels.append(torch.cat(labels[self.sample_div_pos[i]: self.sample_div_pos[i+1]]))
-        return all_sample_labels

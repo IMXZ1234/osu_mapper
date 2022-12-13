@@ -898,18 +898,22 @@ class TrainWGANWithinBatch(TrainWGAN):
 
         adv_generator_epoch, adv_discriminator_epoch =\
             self.config_dict['train_arg']['adv_generator_epoch'], self.config_dict['train_arg']['adv_discriminator_epoch']
+        print(adv_generator_epoch)
+        print(adv_discriminator_epoch)
 
         gen, dis = self.model
+        gen_sched, dis_sched = self.scheduler
 
         for epoch in range(self.epoch):
             self.logger.info('\n--------\nEPOCH %d\n--------' % (epoch + 1))
+            self.logger.info('lr %.8f' % self.optimizer[0]['lr'])
             epoch_gen_loss = 0
             total_loss = 0
             total_sample_num = 0
 
-            epoch_gp = 0
             epoch_fake_loss = 0
             epoch_real_loss = 0
+            epoch_gp_loss = 0
             win_len = 10
             last_few_batch_loss = collections.deque([0 for _ in range(win_len)])
             win_avg_loss = 0
@@ -921,12 +925,12 @@ class TrainWGANWithinBatch(TrainWGAN):
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
 
                 # train generator batch
-                if batch % adv_generator_epoch == 0 or (epoch_gen_loss / total_sample_num) > 10:
+                if random.random() < adv_generator_epoch or (epoch_gen_loss / total_sample_num) > 10:
                     gen_loss = self.train_generator_batch(batch, cond_data, real_gen_output, other)
                     epoch_gen_loss += gen_loss * batch_size
 
                 # train discriminator batch
-                if batch % adv_discriminator_epoch == 0:
+                if random.random() < adv_discriminator_epoch:
                     loss, fake_loss, real_loss, gp_loss = self.train_discriminator_batch(batch, cond_data, real_gen_output, other)
 
                     # we only concern fake loss value
@@ -939,6 +943,10 @@ class TrainWGANWithinBatch(TrainWGAN):
                     total_loss += loss * batch_size
                     epoch_fake_loss += fake_loss * batch_size
                     epoch_real_loss += real_loss * batch_size
+                    epoch_gp_loss += gp_loss * batch_size
+
+            gen_sched.step()
+            dis_sched.step()
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
@@ -947,7 +955,7 @@ class TrainWGANWithinBatch(TrainWGAN):
             sample = gen(cond_data)[0].cpu().detach().numpy()
             self.logger.info(str(np.where(sample[:, 0] > 0.5, 1, 0)[:32]))
             self.logger.info(str(np.where(sample[:, 1] > 0.5, 2, 0)[:32]))
-            self.logger.info(str(sample[:, 2:][:16]))
+            self.logger.info('\n' + str(sample[:, 2:][:16]))
 
             avg_loss = total_loss / total_sample_num
             avg_fake_loss = epoch_fake_loss / total_sample_num
@@ -958,7 +966,7 @@ class TrainWGANWithinBatch(TrainWGAN):
             self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
             self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
             if self.lambda_gp is not None:
-                self.logger.info('avg_gp_loss = %.8f' % (epoch_gp / len(self.train_iter)))
+                self.logger.info('avg_gp_loss = %.8f' % (epoch_gp_loss / len(self.train_iter)))
 
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
