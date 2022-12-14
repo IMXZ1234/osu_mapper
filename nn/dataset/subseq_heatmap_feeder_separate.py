@@ -18,9 +18,12 @@ def process_label(label):
     # bounds in osu! beatmap editor
     x = (label[:, 1] + 180) / (691 + 180)
     y = (label[:, 2] + 82) / (407 + 82)
+    # add noise to x and y
+    x = x + np.random.randn(L) / 64
+    y = y + np.random.randn(L) / 64
     # if snap is occupied by a hit_object,
-    # noise's value should be almost always within -0.25~+0.25
-    heat_value = np.random.randn(2 * L).reshape([L, 2]) / 8
+    # noise's value should be almost always within -0.12 +0.12
+    heat_value = np.random.randn(2 * L).reshape([L, 2]) / 16
     pos_circle = np.where(label[:, 0] == 1)[0]
     pos_slider = np.where(label[:, 0] == 2)[0]
     heat_value[pos_circle, np.zeros(len(pos_circle), dtype=int)] += 1

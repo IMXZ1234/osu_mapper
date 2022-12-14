@@ -2926,6 +2926,127 @@ def train_cganv6_within_batch(setting_name='cganv6_within_batch'):
         train_with_config(config_path, folds=1, format_config=True)
 
 
+def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_seq'):
+    """
+    use slider and circle label
+    """
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 2048
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 133
+    snap_divisor = 8
+    sample_beats = 48
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 4
+
+    batch_size = 16
+
+    subseq_len = sample_beats * snap_divisor
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.1, 0.1]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv7.Generator', 'nn.net.cganv7.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len * snap_data_len,
+                    'label_dim': 4,
+                    'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'normalize': 'LN',
+                },
+                {
+                    'seq_len': subseq_len * snap_data_len,
+                    'label_dim': 4,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'normalize': 'LN',
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['StepLR', 'StepLR'],
+            'params': [
+                {'step_size': 16, 'gamma': 0.3},
+                {'step_size': 128, 'gamma': 0.1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.whole_seq_feeder.WholeSeqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v3',
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 128,
+                         'binary': False,
+                         'take_first': None,
+                         },
+                    'batch_size': 1,
+                    'shuffle': False,
+                    'num_workers': 4,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 32}
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 10,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 0.1,
+                     'adv_discriminator_epoch': 1.,
+                     'lambda_gp': 10,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
 # def train_cganv7_within_batch(setting_name='cganv7_within_batch'):
 #     """
 #     use slider and circle label
@@ -3074,17 +3195,17 @@ def train_cganv7_within_batch(setting_name='cganv7_within_batch'):
     # snap_feature = 517
     snap_feature = 133
     snap_divisor = 8
-    sample_beats = 288
+    sample_beats = 144
     sample_snaps = sample_beats * snap_divisor
     snap_data_len = 4
 
-    batch_size = 4
+    batch_size = 8
 
     subseq_len = sample_beats * snap_divisor
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.001, 0.001]]:
+    for gen_lr, dis_lr in [[0.01, 0.01]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -3112,10 +3233,10 @@ def train_cganv7_within_batch(setting_name='cganv7_within_batch'):
             ]
         }
         scheduler_arg = {
-            'scheduler_type': ['StepLR', 'StepLR'],
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
             'params': [
-                {'step_size': 250, 'gamma': 0.3},
-                {'step_size': 250, 'gamma': 0.3},
+                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
+                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
             ]
         }
         data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separate.SubseqFeeder',
@@ -3145,12 +3266,14 @@ def train_cganv7_within_batch(setting_name='cganv7_within_batch'):
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
         output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
-                      'model_save_step': 32}
+                      'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
                      'discriminator_pretrain_epoch': 10,
                      'adaptive_adv_train': False,
-                     'adv_generator_epoch': 0.05,
+                     'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 1,
+                     'gen_lambda_step': [50, 100],
+                     'gen_lambda': [0.05, 0.075, 0.1],
                      'lambda_gp': 10,
                      }
         with open(config_path, 'w') as f:
@@ -3171,7 +3294,7 @@ def train_cganv7_within_batch(setting_name='cganv7_within_batch'):
         train_with_config(config_path, folds=1, format_config=True)
 
 
-def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_seq'):
+def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
     """
     use slider and circle label
     """
@@ -3197,35 +3320,33 @@ def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_
     # snap_feature = 517
     snap_feature = 133
     snap_divisor = 8
-    sample_beats = 48
+    sample_beats = 144
     sample_snaps = sample_beats * snap_divisor
     snap_data_len = 4
 
-    batch_size = 16
+    batch_size = 8
 
     subseq_len = sample_beats * snap_divisor
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.1, 0.1]]:
+    for gen_lr, dis_lr in [[0.01, 0.01]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
-            'model_type': ['nn.net.cganv7.Generator', 'nn.net.cganv7.Discriminator'],
+            'model_type': ['nn.net.cganv8.Generator', 'nn.net.cganv8.Discriminator'],
             'params': [
                 {
                     'seq_len': subseq_len * snap_data_len,
                     'label_dim': 4,
                     'noise_dim': 64,
                     'cond_data_feature_dim': snap_feature,
-                    'normalize': 'LN',
                 },
                 {
                     'seq_len': subseq_len * snap_data_len,
                     'label_dim': 4,
                     # 'noise_dim': 64,
                     'cond_data_feature_dim': snap_feature,
-                    'normalize': 'LN',
                 },
             ]
         }  # , 'num_block': [1, 1, 1, 1]
@@ -3237,22 +3358,24 @@ def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_
             ]
         }
         scheduler_arg = {
-            'scheduler_type': ['StepLR', 'StepLR'],
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
             'params': [
-                {'step_size': 16, 'gamma': 0.3},
-                {'step_size': 128, 'gamma': 0.1},
+                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
+                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
             ]
         }
-        data_arg = {'dataset': 'nn.dataset.whole_seq_feeder.WholeSeqFeeder',
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separate.SubseqFeeder',
                     'train_dataset_arg':
                         {'save_dir': r'./resources/data/fit/label_pos_v3',
+                         'subseq_len': subseq_len,
                          'random_seed': random_seed,
                          'use_random_iter': True,
+                         'snap_data_len': 4,
                          'data_process_dim': 128,
                          'binary': False,
                          'take_first': None,
                          },
-                    'batch_size': 1,
+                    'batch_size': batch_size,
                     'shuffle': False,
                     'num_workers': 4,
                     'drop_last': False}
@@ -3268,12 +3391,14 @@ def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
         output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
-                      'model_save_step': 32}
+                      'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
                      'discriminator_pretrain_epoch': 10,
                      'adaptive_adv_train': False,
-                     'adv_generator_epoch': 0.1,
-                     'adv_discriminator_epoch': 1.,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'gen_lambda_step': [50, 100],
+                     'gen_lambda': [0.05, 0.075, 0.1],
                      'lambda_gp': 10,
                      }
         with open(config_path, 'w') as f:
@@ -3292,6 +3417,7 @@ def train_cganv7_within_batch_whole_seq(setting_name='cganv7_within_batch_whole_
                        'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
                        }, f)
         train_with_config(config_path, folds=1, format_config=True)
+
 
 
 if __name__ == '__main__':

@@ -22,6 +22,7 @@ from nn.dataset import collate_fn
 from nn.metrics import default_metrices
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
 from util.plt_util import plot_loss
+from util.train_util import MultiStepScheduler
 
 np.set_printoptions(suppress=True)
 
@@ -182,6 +183,8 @@ class Train:
                 optimizer = self.optimizer[optimizer_index]
             if scheduler_type == 'StepLR':
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+            elif scheduler_type == 'MultiStepLR':
+                scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **kwargs)
             else:
                 scheduler = dynamic_import(scheduler_type)(optimizer, **kwargs)
         return scheduler
@@ -850,8 +853,8 @@ class TrainWGAN(TrainGAN):
             # if fake loss value is too large, generator training will be difficult
             win_avg_loss = win_avg_loss + (fake_loss - last_few_batch_loss.popleft()) / win_len
             last_few_batch_loss.append(fake_loss)
-            if win_avg_loss < -100:
-                break
+            # if win_avg_loss < -100:
+            #     break
 
             loss.backward()
 
@@ -892,21 +895,34 @@ class TrainWGANWithinBatch(TrainWGAN):
         print('self.lambda_gp')
         print(self.lambda_gp)
 
+    def run_train(self):
+        self.epoch_gp_loss = []
+
+        super(TrainWGANWithinBatch, self).run_train()
+
+        log_dir = self.config_dict['output_arg']['log_dir']
+        plot_loss(self.gen_loss_list, 'generator loss',
+                  save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
+
     def run_adv_training(self):
         # # ADVERSARIAL TRAINING
         self.logger.info('\nStarting Adversarial Training...')
 
-        adv_generator_epoch, adv_discriminator_epoch =\
-            self.config_dict['train_arg']['adv_generator_epoch'], self.config_dict['train_arg']['adv_discriminator_epoch']
-        print(adv_generator_epoch)
-        print(adv_discriminator_epoch)
+        train_arg = self.config_dict['train_arg']
+        init_adv_generator_epoch, init_adv_discriminator_epoch =\
+            train_arg['adv_generator_epoch'], train_arg['adv_discriminator_epoch']
+        # decrease generator's probability of getting trained
+        gen_lambda = train_arg['gen_lambda']
+        gen_lambda_step = train_arg['gen_lambda_step']
 
         gen, dis = self.model
         gen_sched, dis_sched = self.scheduler
 
+        adv_generator_epoch_sched = MultiStepScheduler(train_arg['gen_lambda_step'], train_arg['gen_lambda'])
+
         for epoch in range(self.epoch):
             self.logger.info('\n--------\nEPOCH %d\n--------' % (epoch + 1))
-            self.logger.info('lr %.8f' % self.optimizer[0]['lr'])
+            self.logger.info('lr %.8f' % self.optimizer[0].param_groups[0]['lr'])
             epoch_gen_loss = 0
             total_loss = 0
             total_sample_num = 0
@@ -915,8 +931,22 @@ class TrainWGANWithinBatch(TrainWGAN):
             epoch_real_loss = 0
             epoch_gp_loss = 0
             win_len = 10
-            last_few_batch_loss = collections.deque([0 for _ in range(win_len)])
-            win_avg_loss = 0
+            last_few_batch_fake_loss = collections.deque([0 for _ in range(win_len)])
+            last_few_batch_real_loss = collections.deque([0 for _ in range(win_len)])
+            win_avg_fake_loss = 0
+            win_avg_real_loss = 0
+
+            adv_generator_epoch = init_adv_generator_epoch * adv_generator_epoch_sched.cur_milestone_output()
+            self.logger.info('adv_generator_epoch %.8f' % adv_generator_epoch)
+
+            epoch_num_batches = len(self.train_iter)
+            batch_idx_list = list(range(epoch_num_batches))
+            train_gen_num_batches = round(adv_generator_epoch * epoch_num_batches)
+            train_dis_num_batches = round(init_adv_discriminator_epoch * epoch_num_batches)
+            random.shuffle(batch_idx_list)
+            train_gen_batches = set(batch_idx_list[:train_gen_num_batches])
+            random.shuffle(batch_idx_list)
+            train_dis_batches = set(batch_idx_list[:train_dis_num_batches])
 
             for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
                 batch_size = cond_data.shape[0]
@@ -925,20 +955,22 @@ class TrainWGANWithinBatch(TrainWGAN):
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
 
                 # train generator batch
-                if random.random() < adv_generator_epoch or (epoch_gen_loss / total_sample_num) > 10:
+                if batch in train_gen_batches or (epoch_gen_loss / total_sample_num) > 5:
                     gen_loss = self.train_generator_batch(batch, cond_data, real_gen_output, other)
                     epoch_gen_loss += gen_loss * batch_size
 
                 # train discriminator batch
-                if random.random() < adv_discriminator_epoch:
+                if batch in train_dis_batches:
+                    # if abs(win_avg_fake_loss) > 100 or abs(win_avg_real_loss) > 100 or (epoch_gen_loss / total_sample_num) > 10:
+                    #     continue
                     loss, fake_loss, real_loss, gp_loss = self.train_discriminator_batch(batch, cond_data, real_gen_output, other)
 
                     # we only concern fake loss value
                     # if fake loss value is too large, generator training will be difficult
-                    win_avg_loss = win_avg_loss + (fake_loss - last_few_batch_loss.popleft()) / win_len
-                    last_few_batch_loss.append(fake_loss)
-                    if np.abs(win_avg_loss) > 100:
-                        continue
+                    win_avg_fake_loss = win_avg_fake_loss + (fake_loss - last_few_batch_fake_loss.popleft()) / win_len
+                    last_few_batch_fake_loss.append(fake_loss)
+                    win_avg_real_loss = win_avg_real_loss + (real_loss - last_few_batch_real_loss.popleft()) / win_len
+                    last_few_batch_real_loss.append(real_loss)
 
                     total_loss += loss * batch_size
                     epoch_fake_loss += fake_loss * batch_size
@@ -947,6 +979,7 @@ class TrainWGANWithinBatch(TrainWGAN):
 
             gen_sched.step()
             dis_sched.step()
+            adv_generator_epoch_sched.step()
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)

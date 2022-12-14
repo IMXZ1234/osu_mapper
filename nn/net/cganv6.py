@@ -3,8 +3,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), normalize='LN', act=True):
-    layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, padding=[k // 2 for k in kernel_size])]
+def conv_block2d(in_feat, out_feat, dims, kernel_size=(3, 3), stride=(1, 1), normalize='LN', act=True):
+    layers = [nn.Conv2d(in_feat, out_feat, kernel_size=kernel_size, stride=stride, padding=[k // 2 for k in kernel_size])]
+    if normalize is not None:
+        if normalize == 'BN':
+            layers.append(nn.BatchNorm2d(out_feat))
+        elif normalize == 'LN':
+            layers.append(nn.LayerNorm([out_feat] + dims))
+        else:
+            raise ValueError('unknown normalization layer')
+    if act:
+        layers.append(nn.LeakyReLU(0.2, inplace=True))
+    return layers
+
+
+def upconv_block2d(in_feat, out_feat, dims, kernel_size=None, stride=(2, 2), normalize='LN', act=True):
+    if kernel_size is None:
+        # keep out size same
+        kernel_size = stride
+    layers = [nn.ConvTranspose2d(in_feat, out_feat, kernel_size=kernel_size, stride=stride)]
     if normalize is not None:
         if normalize == 'BN':
             layers.append(nn.BatchNorm2d(out_feat))
@@ -39,7 +56,7 @@ class ContextExtractor(nn.Module):
 class Generator(nn.Module):
     def __init__(self, seq_len, label_dim, noise_dim,
                  cond_data_feature_dim,
-                 fold_len=16, **kwargs):
+                 fold_len=12 * 4, **kwargs):
         """
         output_snaps = output_feature_num // num_classes
         """
@@ -63,14 +80,14 @@ class Generator(nn.Module):
             *conv_block2d(self.label_dim * 16, self.label_dim * 16, dims, kernel_size=(3, 3)),
         )
         self.ho_pos_pred = nn.Sequential(
-            nn.Linear(self.label_dim * 16, self.label_dim * 8),
+            nn.Linear(64, 32),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(self.label_dim * 8, self.label_dim // 2),
+            nn.Linear(32, self.label_dim // 2),
         )
         self.type_label_pred = nn.Sequential(
-            nn.Linear(self.label_dim * 16, self.label_dim * 8),
+            nn.Linear(64, 32),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(self.label_dim * 8, self.label_dim // 2),
+            nn.Linear(32, self.label_dim // 2),
         )
 
     def forward(self, cond_data):
@@ -125,7 +142,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, seq_len, label_dim, cond_data_feature_dim,
-                 fold_len=16, **kwargs):
+                 fold_len=12 * 4, **kwargs):
         """
         output_feature_num = num_classes(density map) + 2(x, y)
         """
