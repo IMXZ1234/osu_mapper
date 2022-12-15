@@ -100,9 +100,9 @@ class Generator(nn.Module):
 
         self.middle_conv = double_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 64, normalize=normalize)
 
-        self.up_cat_conv_1 = single_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 32, normalize=normalize)
+        self.up_cat_conv_1 = single_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 32, normalize=normalize)
         self.up_cat_conv_2 = single_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 16, normalize=normalize)
-        self.up_cat_conv_3 = single_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 8, normalize=normalize)
+        self.up_cat_conv_3 = single_conv1d_bn(32, 32, kernel_size=5, dim=seq_len // 8, normalize=normalize)
         self.up_cat_conv_4 = single_conv1d_bn(64, 32, kernel_size=5, dim=seq_len // 4, normalize=normalize)
 
         self.up_conv_1 = upconv1d_bn(32, 32, kernel_size=2, strides=2, dim=seq_len // 32, normalize=normalize)

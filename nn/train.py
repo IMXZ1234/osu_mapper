@@ -22,7 +22,7 @@ from nn.dataset import collate_fn
 from nn.metrics import default_metrices
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, try_format_dict_with_path
 from util.plt_util import plot_loss
-from util.train_util import MultiStepScheduler
+from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv
 
 np.set_printoptions(suppress=True)
 
@@ -940,13 +940,10 @@ class TrainWGANWithinBatch(TrainWGAN):
             self.logger.info('adv_generator_epoch %.8f' % adv_generator_epoch)
 
             epoch_num_batches = len(self.train_iter)
-            batch_idx_list = list(range(epoch_num_batches))
             train_gen_num_batches = round(adv_generator_epoch * epoch_num_batches)
             train_dis_num_batches = round(init_adv_discriminator_epoch * epoch_num_batches)
-            random.shuffle(batch_idx_list)
-            train_gen_batches = set(batch_idx_list[:train_gen_num_batches])
-            random.shuffle(batch_idx_list)
-            train_dis_batches = set(batch_idx_list[:train_dis_num_batches])
+            train_gen_batches = idx_set_with_uniform_itv(epoch_num_batches, train_gen_num_batches)
+            train_dis_batches = idx_set_with_uniform_itv(epoch_num_batches, train_dis_num_batches)
 
             for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
                 batch_size = cond_data.shape[0]

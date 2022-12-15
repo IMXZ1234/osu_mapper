@@ -3330,7 +3330,7 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.01, 0.01]]:
+    for gen_lr, dis_lr in [[0.003, 0.003]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -3360,8 +3360,8 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
         scheduler_arg = {
             'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
             'params': [
-                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
-                {'milestones': [25, 50, 350, 800], 'gamma': 0.3},
+                {'milestones': [100, 350, 800], 'gamma': 0.3},
+                {'milestones': [100, 350, 800], 'gamma': 0.3},
             ]
         }
         data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separate.SubseqFeeder',
@@ -3397,8 +3397,8 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 1,
-                     'gen_lambda_step': [50, 100],
-                     'gen_lambda': [0.05, 0.075, 0.1],
+                     'gen_lambda_step': [50, 100, 200, 500],
+                     'gen_lambda': [0.05, 0.04, 0.03, 0.02, 0.01],
                      'lambda_gp': 10,
                      }
         with open(config_path, 'w') as f:
@@ -3421,7 +3421,7 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
 
 
 if __name__ == '__main__':
-    train_cganv7_within_batch()
+    train_cganv8_within_batch()
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

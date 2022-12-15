@@ -28,3 +28,9 @@ class MultiStepScheduler:
 
     def cur_milestone_output(self):
         return self.milestone_output[self.cur_milestone_idx]
+
+
+def idx_set_with_uniform_itv(length, num, offset=0):
+    itv = length / num
+    idx_offset = offset % round(itv)
+    return set([round(itv * i) + idx_offset for i in range(num)])
