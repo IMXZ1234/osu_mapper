@@ -1,22 +1,48 @@
+import json
 import logging
+import math
 import os
+import time
+import traceback
 
 import requests
 from requests_oauthlib import OAuth2Session
+from tqdm import tqdm
+
 import account
+import lxml
+from lxml import etree
+import multiprocessing
+import threading
+
+
+def get_csrf_token(text):
+    html_ = lxml.etree.HTML(text)
+    head = html_.find('head')
+    for child in head:
+        name = child.attrib.get('name')
+        if name == 'csrf-token':
+            return child.attrib['content']
+
+            # get csrf
+            # r = self.session.get(BeatmapDownloader.beatmapset_home, headers=headers)
+            # csrf_token = get_csrf_token(r.text)
+            # print(csrf_token)
 
 
 class BeatmapDownloader:
     osu_home = r'https://osu.ppy.sh/home'
     osu_login = r'https://osu.ppy.sh/forum/ucp.php?mode=login'
+    osu_login_new = r'https://osu.ppy.sh/session'
     osu_api = r'https://osu.ppy.sh/api/v2'
     osu_oauth = r'https://osu.ppy.sh/oauth/token'
     osu_beatmap_lookup = r'https://osu.ppy.sh/api/v2/beatmaps/lookup'
     osu_get_beatmaps = r'https://osu.ppy.sh/api/v2/beatmaps/'
     osu_get_beatmap = r'https://osu.ppy.sh/api/v2/beatmaps/%d'
     osu_beatmap_getmeta = r'https://osu.ppy.sh/api/get_beatmaps'
-    # beatmap_dl = r'https://osu.ppy.sh/beatmapsets/%d/download'
-    beatmap_dl = r'https://osu.ppy.sh/d/%d'
+    beatmap_dl = r'https://osu.ppy.sh/beatmapsets/%d/download'
+    beatmapset_home = r'https://osu.ppy.sh/beatmapsets'
+    # beatmap_dl = r'https://osu.ppy.sh/d/%d'
     metadata_file = 'beatmap_metadata.json'
 
     def __init__(self, logger=None,
@@ -32,11 +58,23 @@ class BeatmapDownloader:
             logger.setLevel(logging.DEBUG)
             logger.addHandler(logging.StreamHandler())
         self.logger = logger
+        self.already_login = False
+        self.downloading_threads = 0
+        self.downloaded_beatmapset_id = set()
+        self.failed_beatmapset_id = set()
+        self.wait_time_reached = False
+        self.batch_beatmapset_id = []
 
         # for osu! api v2
         self.client_id = client_id_v2
         self.client_secret = client_secret_v2
         self.access_token = ''
+
+        # osu! basic auth
+        # we use basic auth to retrieve beatmap .osz
+        self.username = username
+        self.password = password
+
         self.refresh_essen = {
             'client_id': self.client_id,
             'client_secret': self.client_secret,
@@ -48,16 +86,24 @@ class BeatmapDownloader:
             "expires_in": 86400,
             "token_type": "Bearer",
         }
+        self.token_login = {
+            # '_token': 'CP8vykDWcBP2RO1rvnI1tTk13VMVWqdFs8itL9mI',
+            'username': self.username,
+            'password': self.password,
+        }
+        self.token_login_old = {
+            'username': self.username,
+            'password': self.password,
+            'redirect': 'index.php',
+            'sid': '',
+            'login': 'Login',
+        }
         self.oath2_client = OAuth2Session(self.client_id,
                                           token=self.access_token,
                                           auto_refresh_url=BeatmapDownloader.osu_oauth,
                                           auto_refresh_kwargs=self.refresh_essen,
                                           token_updater=self.token_saver)
 
-        # osu! basic auth
-        # we use basic auth to retrieve beatmap .osz
-        self.username = username
-        self.password = password
         self.auth_essen = {
             "username": self.username,
             "password": self.password,
@@ -74,6 +120,8 @@ class BeatmapDownloader:
         self.app_url = app_url_v1
         self.api_key = api_key_v1
         self.default_meta_path = r'../resources/data/meta.json'
+
+        self.session = requests.Session()
 
         # self.expired = True
         # self.timer = None
@@ -145,51 +193,192 @@ class BeatmapDownloader:
             f.write(r.text)
         return r.json()
 
-    def download_beatmapset(self, beatmapset_id, osz_dir=None):
+    def login(self):
+        self.logger.debug('logging in...')
+        r = self.session.get(BeatmapDownloader.osu_home)
+        csrf_token = get_csrf_token(r.text)
+        print(csrf_token)
+        headers = {
+            'Accept-Encoding': 'gzip, deflate, br',
+            'X-CSRF-Token': csrf_token,
+            'Referer': self.osu_home,
+            'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0'
+        }
+        token_login = self.token_login.copy()
+        token_login['_token'] = csrf_token
+        r = self.session.post(
+            self.osu_login_new,
+            token_login,
+            headers=headers,
+        )
+        print(r.status_code)
+        print(r.content)
+        print(r.headers)
+        # r = s.post(BeatmapDownloader.osu_login, data=self.auth_essen)
+        # print(r.request.headers)
+        # # print(r.content)
+        # print(s.cookies)
+
+    def login_old(self):
+        self.logger.debug('logging in...')
+        r = self.session.get(BeatmapDownloader.osu_login)
+        # csrf_token = get_csrf_token(r.text)
+        # print(csrf_token)
+        referer = self.osu_login
+        headers = {
+            'Accept-Encoding': 'gzip, deflate, br',
+            # 'X-CSRF-Token': csrf_token,
+            'Referer': referer,
+            'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'Host': 'osu.ppy.sh',
+        }
+        r = self.session.post(
+            self.osu_login,
+            self.token_login_old,
+            headers=headers,
+        )
+        # print(r.status_code)
+        with open(os.path.join(self.default_osz_dir, 'old_login.html'), 'wb') as f:
+            f.write(r.content)
+        # print(r.content)
+        # print(r.headers)
+        while r.status_code == 302:
+            # print('redirected')
+            # print(r.headers['location'])
+            r = self.session.get(r.headers['location'], headers=headers)
+            referer = r.headers['location']
+            headers['Referer'] = referer
+        if r.status_code == 200:
+            self.logger.debug('login success!')
+        # print(r.request.headers)
+        # # print(r.content)
+        # print(s.cookies)
+
+    def download_beatmapset(self, beatmapset_id, file_path, tqdm_pos=0):
+        try:
+            headers = {
+                'Accept-Encoding': 'gzip, deflate, br',
+                # 'X-CSRF-Token': csrf_token,
+                'Referer': BeatmapDownloader.beatmapset_home,
+                'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+                'Host': 'osu.ppy.sh',
+            }
+            # self.logger.debug('downloading beatmapset...')
+            r = self.session.get(BeatmapDownloader.beatmap_dl % int(beatmapset_id), headers=headers)
+            if os.path.exists(file_path):
+                temp_size = os.path.getsize(file_path)
+                print(r.headers)
+                if int(r.headers['Content-Length']) == temp_size:
+                    print('skipped %d %s' % (beatmapset_id, time.asctime(time.localtime())))
+                    self.downloaded_beatmapset_id.add(beatmapset_id)
+                    return
+                headers['Range'] = 'bytes=%d-' % temp_size
+            else:
+                temp_size = 0
+
+            # https://osu.ppy.sh/d will try to redirect us to download location
+            r = self.session.get(BeatmapDownloader.beatmap_dl % int(beatmapset_id), headers=headers)
+            # print('%d' % beatmapset_id)
+            # bar = tqdm(total=int(r.headers['Content-Length']), position=tqdm_pos, initial=temp_size,
+            #            desc=str(beatmapset_id) + '\t' + time.asctime(time.localtime()), unit='byte')
+            with open(file_path, "ab") as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    temp_size += len(chunk)
+                    f.write(chunk)
+                    f.flush()
+
+                    # bar.update(len(chunk))
+            print('finished %d %s' % (beatmapset_id, time.asctime(time.localtime())))
+            self.downloaded_beatmapset_id.add(beatmapset_id)
+        except Exception:
+            traceback.print_exc()
+            print('failed %d %s' % (beatmapset_id, time.asctime(time.localtime())))
+            self.failed_beatmapset_id.add(beatmapset_id)
+
+    def time_up(self):
+        self.wait_time_reached = True
+
+    def download_beatmapsets_in_meta_file(self, meta_path=None, osz_dir=None):
         if osz_dir is None:
             osz_dir = self.default_osz_dir
-        s = requests.Session()
-        # s.get(BeatmapDownloader.osu_home, auth=self.basic_auth_essen)
-        # headers['Authorization']
-        self.logger.debug('logging in...')
-        r = s.post(BeatmapDownloader.osu_login, data=self.auth_essen)
-        print(r.request.headers)
-        print(r.content)
-        print(s.cookies)
-        headers = {
-            'Accept-Encoding': 'gzip, deflate, br'
-        }
-        self.logger.debug('downloading beatmapset...')
-        # https://osu.ppy.sh/d will try to redirect us to download location
-        r = s.get(BeatmapDownloader.beatmap_dl % beatmapset_id, headers=headers)
-        print(r.request.headers)
-        print(r.content)
-        print(s.cookies)
-        with open(os.path.join(osz_dir, 'temp.html'), 'w') as f:
-            f.write(r.text)
-        if r.status_code != 302:
-            self.logger.error('download failed!')
-        #
-        # print(r.status_code)
-        # print(r.content)
-        print(r.headers)
-        r = s.get(r.headers['Location'], headers=headers)
-        print(r.status_code)
-        with open(os.path.join(osz_dir, '%d.osz' % beatmapset_id), 'wb') as f:
-            f.write(r.content)
+        if meta_path is None:
+            meta_path = self.default_meta_path
+        with open(meta_path, 'r') as f:
+            meta_dict = json.load(f)
+        # print(meta_dict[0])
+        print('totally %d meta' % len(meta_dict))
+        # thread_pool = threading.current_thread()
+        batch_size = 30
+        i = 0
+        while i < len(meta_dict):
+            # print(time.asctime(time.localtime()))
+            self.batch_beatmapset_id.clear()
+            batch_num = 0
+            while batch_num < batch_size and i < len(meta_dict):
+                beatmapset_id = int(meta_dict[i]['beatmapset_id'])
+                if beatmapset_id in self.downloaded_beatmapset_id:
+                    i += 1
+                    continue
+                self.downloaded_beatmapset_id.add(beatmapset_id)
+                self.batch_beatmapset_id.append(beatmapset_id)
+                batch_num += 1
+                i += 1
+                # download at most one beatmapset every second
+                file_path = os.path.join(osz_dir, '%d.osz' % beatmapset_id)
+                thread = threading.Thread(target=self.download_beatmapset, args=(beatmapset_id, file_path, i))
+                timer = threading.Timer(20, thread.start)
+                timer.start()
+                timer.join()
 
 
 if __name__ == '__main__':
     downloader = BeatmapDownloader()
-    # meta = downloader.retrieve_meta_v1(**{
-    #     'since': '2022-03-20',
-    # })
-    # print(len(meta))
-    # print(meta[0])
-    #
-    # beatmapset_id = int(meta[0]['beatmapset_id'])
-    # downloader.retrieve_meta_v2(
-    #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\meta_v2.json',
-    #     id=beatmapset_id,
-    # )
-    downloader.download_beatmapset(1590176)
+    downloader.login_old()
+
+    osz_dir = r'F:\beatmapsets'
+    total_downloaded = 0
+    total_failed = 0
+    with open('../resources/data/osz/all_downloaded', 'w') as f:
+        pass
+    with open('../resources/data/osz/all_failed', 'w') as f:
+        pass
+
+    for year in range(2010, 2022):
+        for month in range(1, 13):
+            since_date = '%d-%02d-%02d' % (year, month, 1)
+            print(since_date)
+            meta_file_path = r'../resources/data/osz/meta_%s.json' % since_date
+            meta = downloader.retrieve_meta_v1(
+                meta_file_path,
+                **{
+                    'since': since_date,
+                    'mode': 0,
+                }
+            )
+            print(meta[-1]['approved_date'])
+        # print(len(meta))
+        # print(meta[0])
+        #
+        # beatmapset_id = int(meta[0]['beatmapset_id'])
+        # downloader.retrieve_meta_v2(
+        #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\meta_v2.json',
+        #     id=beatmapset_id,
+        # )
+            downloader.download_beatmapsets_in_meta_file(
+                meta_file_path,
+                osz_dir=osz_dir,
+            )
+        print('%d downloaded' % len(downloader.downloaded_beatmapset_id))
+        print('%d failed' % len(downloader.failed_beatmapset_id))
+
+    with open('../resources/data/osz/all_downloaded', 'a') as f:
+        for beatmapsetid in downloader.downloaded_beatmapset_id:
+            f.write(str(beatmapsetid) + '\n')
+    with open('../resources/data/osz/all_failed', 'a') as f:
+        for beatmapsetid in downloader.failed_beatmapset_id:
+            f.write(str(beatmapsetid) + '\n')
+        # downloader.download_beatmapset(1590176)
