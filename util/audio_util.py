@@ -137,18 +137,23 @@ def audioread_get_audio_data(audio_file_path, ret_tensor=True):
 
     If ret_tensor return pytorch tensor, else return ndarray.
     """
-    with audioread.audio_open(audio_file_path) as f:
+    if isinstance(audio_file_path, str):
+        f = audioread.audio_open(audio_file_path)
+    else:
+        f = audio_file_path
         # channel, sample_rate, duration can be obtained by f.channels, f.samplerate, f.duration
-        audio_cs = []
-        buf_num = 0
-        total_len = 0
-        for buf_i, buf in enumerate(f):
-            data = np.frombuffer(buf, np.int16)
-            audio_cs.append(np.stack([data[ci::f.channels] for ci in range(f.channels)], axis=0))
-            total_len += len(data)
-            buf_num += 1
-        # normalize to (-1, 1)
-        audio_cs = np.concatenate(audio_cs, axis=1, dtype=float) / (2 ** 15)
+    audio_cs = []
+    buf_num = 0
+    total_len = 0
+    for buf_i, buf in enumerate(f):
+        data = np.frombuffer(buf, np.int16)
+        audio_cs.append(np.stack([data[ci::f.channels] for ci in range(f.channels)], axis=0))
+        total_len += len(data)
+        buf_num += 1
+    # normalize to (-1, 1)
+    audio_cs = np.concatenate(audio_cs, axis=1, dtype=float) / (2 ** 15)
+    if isinstance(audio_file_path, str):
+        f.close()
     if ret_tensor:
         return torch.tensor(audio_cs, dtype=torch.float), f.samplerate
     return audio_cs, f.samplerate

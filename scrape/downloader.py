@@ -4,6 +4,7 @@ import math
 import os
 import time
 import traceback
+import zipfile
 
 import requests
 from requests_oauthlib import OAuth2Session
@@ -260,38 +261,25 @@ class BeatmapDownloader:
         try:
             headers = {
                 'Accept-Encoding': 'gzip, deflate, br',
-                # 'X-CSRF-Token': csrf_token,
                 'Referer': BeatmapDownloader.beatmapset_home,
                 'User-Agent': r'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
                 'Host': 'osu.ppy.sh',
             }
-            # self.logger.debug('downloading beatmapset...')
             r = self.session.get(BeatmapDownloader.beatmap_dl % int(beatmapset_id), headers=headers)
-            if os.path.exists(file_path):
-                temp_size = os.path.getsize(file_path)
-                print(r.headers)
-                if int(r.headers['Content-Length']) == temp_size:
-                    print('skipped %d %s' % (beatmapset_id, time.asctime(time.localtime())))
-                    self.downloaded_beatmapset_id.add(beatmapset_id)
-                    return
-                headers['Range'] = 'bytes=%d-' % temp_size
-            else:
-                temp_size = 0
-
-            # https://osu.ppy.sh/d will try to redirect us to download location
-            r = self.session.get(BeatmapDownloader.beatmap_dl % int(beatmapset_id), headers=headers)
-            # print('%d' % beatmapset_id)
-            # bar = tqdm(total=int(r.headers['Content-Length']), position=tqdm_pos, initial=temp_size,
-            #            desc=str(beatmapset_id) + '\t' + time.asctime(time.localtime()), unit='byte')
-            with open(file_path, "ab") as f:
-                for chunk in r.iter_content(chunk_size=1024):
-                    temp_size += len(chunk)
-                    f.write(chunk)
-                    f.flush()
-
-                    # bar.update(len(chunk))
+            if r.headers['content-type'] != 'application/x-osu-beatmap-archive':
+                print('%d not downloadable!' % beatmapset_id)
+                self.failed_beatmapset_id.add(beatmapset_id)
+            # if os.path.exists(file_path):
+            #     temp_size = os.path.getsize(file_path)
+            #     print(r.headers)
+            #     if int(r.headers['Content-Length']) == temp_size:
+            #         print('skipped %d %s' % (beatmapset_id, time.asctime(time.localtime())))
+            #         self.downloaded_beatmapset_id.add(beatmapset_id)
+            #         return
+            with open(file_path, "wb") as f:
+                f.write(r.content)
             print('finished %d %s' % (beatmapset_id, time.asctime(time.localtime())))
             self.downloaded_beatmapset_id.add(beatmapset_id)
         except Exception:
@@ -302,7 +290,8 @@ class BeatmapDownloader:
     def time_up(self):
         self.wait_time_reached = True
 
-    def download_beatmapsets_in_meta_file(self, meta_path=None, osz_dir=None):
+    def download_beatmapsets_in_meta_file(self, meta_path=None, osz_dir=None, skip=set()):
+        self.downloaded_beatmapset_id.update(skip)
         if osz_dir is None:
             osz_dir = self.default_osz_dir
         if meta_path is None:
@@ -335,50 +324,74 @@ class BeatmapDownloader:
                 timer.join()
 
 
+def check_integrity(file_path):
+    try:
+        # check if downloaded beatmapsets are corrupted
+        f = zipfile.ZipFile(file_path, 'r', )
+        # print(f.namelist())
+        for fn in f.namelist():
+            f.read(fn)
+    except Exception:
+        return False
+    return True
+
+
 if __name__ == '__main__':
     downloader = BeatmapDownloader()
     downloader.login_old()
 
     osz_dir = r'F:\beatmapsets'
-    total_downloaded = 0
-    total_failed = 0
-    with open('../resources/data/osz/all_downloaded', 'w') as f:
-        pass
-    with open('../resources/data/osz/all_failed', 'w') as f:
-        pass
+    for filename in os.listdir(osz_dir):
+        if not check_integrity(os.path.join(osz_dir, filename)):
+            print('corrupted %s' % filename)
+            continue
+        downloader.downloaded_beatmapset_id.add(
+            int(os.path.splitext(filename)[0])
+        )
 
     for year in range(2010, 2022):
         for month in range(1, 13):
-            since_date = '%d-%02d-%02d' % (year, month, 1)
-            print(since_date)
-            meta_file_path = r'../resources/data/osz/meta_%s.json' % since_date
-            meta = downloader.retrieve_meta_v1(
-                meta_file_path,
-                **{
-                    'since': since_date,
-                    'mode': 0,
-                }
-            )
-            print(meta[-1]['approved_date'])
-        # print(len(meta))
-        # print(meta[0])
-        #
-        # beatmapset_id = int(meta[0]['beatmapset_id'])
-        # downloader.retrieve_meta_v2(
-        #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\meta_v2.json',
-        #     id=beatmapset_id,
-        # )
-            downloader.download_beatmapsets_in_meta_file(
-                meta_file_path,
-                osz_dir=osz_dir,
-            )
-        print('%d downloaded' % len(downloader.downloaded_beatmapset_id))
-        print('%d failed' % len(downloader.failed_beatmapset_id))
+            for date in [1, 10, 20]:
+                since_date = '%d-%02d-%02d' % (year, month, date)
+                print(since_date)
 
-    with open('../resources/data/osz/all_downloaded', 'a') as f:
-        for beatmapsetid in downloader.downloaded_beatmapset_id:
-            f.write(str(beatmapsetid) + '\n')
-    with open('../resources/data/osz/all_failed', 'a') as f:
-        for beatmapsetid in downloader.failed_beatmapset_id:
-            f.write(str(beatmapsetid) + '\n')
-        # downloader.download_beatmapset(1590176)
+                # downloaded_record_path = '../resources/data/osz/all_downloaded_%s' % since_date
+                # failed_record_path = '../resources/data/osz/all_failed_%s' % since_date
+
+                # downloaded_set = set()
+                # if os.path.exists(downloaded_record_path):
+                #     with open(downloaded_record_path, 'r') as f:
+                #         for beatmapsetid in f.readlines():
+                #             downloaded_set.add(int(beatmapsetid))
+
+                meta_file_path = r'../resources/data/osz/meta_%s.json' % since_date
+                meta = downloader.retrieve_meta_v1(
+                    meta_file_path,
+                    **{
+                        'since': since_date,
+                        'mode': 0,
+                    }
+                )
+                print('latest approved_date in meta: ', meta[-1]['approved_date'])
+            # print(len(meta))
+            # print(meta[0])
+            #
+            # beatmapset_id = int(meta[0]['beatmapset_id'])
+            # downloader.retrieve_meta_v2(
+            #     r'C:\Users\asus\coding\python\osu_auto_mapper\resources\cond_data\meta_v2.json',
+            #     id=beatmapset_id,
+            # )
+                downloader.download_beatmapsets_in_meta_file(
+                    meta_file_path,
+                    osz_dir=osz_dir,
+                    # skip=downloaded_set,
+                )
+                print('%d downloaded' % len(downloader.downloaded_beatmapset_id))
+                print('%d failed' % len(downloader.failed_beatmapset_id))
+
+                # with open(downloaded_record_path, 'w') as f:
+                #     for beatmapsetid in downloader.downloaded_beatmapset_id:
+                #         f.write(str(beatmapsetid) + '\n')
+                # with open(failed_record_path, 'w') as f:
+                #     for beatmapsetid in downloader.failed_beatmapset_id:
+                #         f.write(str(beatmapsetid) + '\n')

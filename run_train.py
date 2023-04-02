@@ -1,4 +1,5 @@
 import yaml
+import numpy as np
 
 from nn.train import train_with_config
 
@@ -3313,7 +3314,7 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
         else:
             num_classes = 3
             weight = None
-    epoch = 2048
+    epoch = 20480
     scheduler_step_size = 64
 
     # mel features 4 * 128 + bpm 1 + speed_star 1
@@ -3330,7 +3331,7 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.003, 0.003]]:
+    for gen_lr, dis_lr in [[0.0003, 0.001]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -3360,8 +3361,8 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
         scheduler_arg = {
             'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
             'params': [
-                {'milestones': [100, 350, 800], 'gamma': 0.3},
-                {'milestones': [100, 350, 800], 'gamma': 0.3},
+                {'milestones': [120], 'gamma': 1},
+                {'milestones': [120], 'gamma': 1},
             ]
         }
         data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separate.SubseqFeeder',
@@ -3377,7 +3378,7 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
                          },
                     'batch_size': batch_size,
                     'shuffle': False,
-                    'num_workers': 4,
+                    'num_workers': 2,
                     'drop_last': False}
         loss_arg = {'loss_type': [
             # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
@@ -3393,12 +3394,14 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
                       'model_save_dir': './resources/result/' + setting_name + '/%d',
                       'model_save_step': 8}
         train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
-                     'discriminator_pretrain_epoch': 10,
+                     'discriminator_pretrain_epoch': 20,
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 1,
-                     'gen_lambda_step': [50, 100, 200, 500],
-                     'gen_lambda': [0.05, 0.04, 0.03, 0.02, 0.01],
+                     'log_exp_replay_prob': 0.03,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [200],
+                     'gen_lambda': [0.1, 0.1],
                      'lambda_gp': 10,
                      }
         with open(config_path, 'w') as f:
@@ -3406,6 +3409,10 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
                        'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
                        'train_arg': train_arg,
                        'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
                        'train_type': 'wganwb',
                        'num_classes': num_classes,
                        'random_seed': random_seed,
@@ -3419,9 +3426,1333 @@ def train_cganv8_within_batch(setting_name='cganv8_within_batch'):
         train_with_config(config_path, folds=1, format_config=True)
 
 
+def train_cganv9_within_batch(setting_name='cganv9_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.0003, 0.001]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv9.Generator', 'nn.net.cganv9.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'normalize': 'BN',
+                    'middle_dim': 64,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'normalize': 'LN',
+                    'middle_dim': 64,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                {'milestones': [25, 100, 150, 200, 250], 'gamma': 0.3},
+                {'milestones': [25, 100, 150, 200, 250], 'gamma': 0.3},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 48,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 10,
+                     'generator_pretrain_epoch': 20,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [200],
+                     'gen_lambda': [0.2, 0.2],
+                     'noise_level_step': [100, 150, 200, 250],
+                     'noise_level': [1, 0.7, 0.4, 0.2, 0.1],
+                     'lambda_gp': 10,
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv10_within_batch(setting_name='cganv10_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.001, 0.01]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv10.Generator', 'nn.net.cganv10.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 128,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 64,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                {'milestones': [100, 200, 300], 'gamma': 0.3},
+                {'milestones': [100, 200, 300], 'gamma': 0.3},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 64,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 15,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [200],
+                     'gen_lambda': [0.2, 0.2],
+                     'noise_level_step': [(100 + 25 * i) for i in range(9)],
+                     'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'lambda_gp': 10,
+                     'last_epoch': 95,
+                     'last_phase': 'adversarial',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv11_within_batch(setting_name='cganv11_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.001, 0.01]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv11.Generator', 'nn.net.cganv11.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 128,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 64,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                {'milestones': [50, 100, 150], 'gamma': 0.3},
+                {'milestones': [100, 200, 300], 'gamma': 1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 64,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 25,
+                     'generator_pretrain_epoch': 10,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [200],
+                     'gen_lambda': [0.2, 0.2],
+                     'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'lambda_gp': 10,
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv12_within_batch(setting_name='cganv12_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.0001, 0.0001]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv12.Generator', 'nn.net.cganv12.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 128,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 64,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                {'milestones': [50, 100, 150], 'gamma': 0.3},
+                {'milestones': [50, 100, 150], 'gamma': 0.3},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 64,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 50,
+                     'generator_pretrain_epoch': 10,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [200],
+                     'gen_lambda': [0.1, 0.1],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50],
+                     'noise_level': [0, 0],
+                     'lambda_gp': 10,
+                     # 'last_epoch': 23,
+                     # 'last_phase': 'adversarial',
+                     # 'last_epoch': -1,
+                     # 'last_phase': 'pretrain_generator',
+                     'last_epoch': 9,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv13_within_batch(setting_name='cganv13_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.00001, 0.00003]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv13.Generator', 'nn.net.cganv13.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 16,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                {'milestones': [50], 'gamma': 0.3},
+                {'milestones': [50], 'gamma': 0.3},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 64,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 25,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [1000],
+                     'gen_lambda': [0.2, 0.2],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50, 100],
+                     'noise_level': [1, 1, 1],
+                     'lambda_gp': 10,
+                     # 'last_epoch': 199,
+                     # 'last_phase': 'adversarial',
+                     # 'last_epoch': 1,
+                     # 'last_phase': 'pretrain_generator',
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv14_within_batch(setting_name='cganv13_within_batch'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    # mel features 4 * 128 + bpm 1 + speed_star 1
+    # snap_feature = 517
+    snap_feature = 69
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    snap_data_len = 16
+
+    batch_size = 8
+
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.0001, 0.0001]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv14.Generator', 'nn.net.cganv14.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 16,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                {'milestones': [50], 'gamma': 1},
+                {'milestones': [50], 'gamma': 1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.subseq_heatmap_feeder_separatev3.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/label_pos_v5',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'data_process_dim': 64,  # do some preprocessing to data
+                         'coeff_data_len': 1,
+                         'coeff_label_len': 1,
+                         'take_first': None,
+                         'pad': False,
+                         'level_coeff': 0,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 8,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 10,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [1000],
+                     'gen_lambda': [1, 1],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50, 100],
+                     'noise_level': [1, 1, 1],
+                     'lambda_gp': 10,
+                     # 'last_epoch': 63,
+                     # 'last_phase': 'adversarial',
+                     # 'last_epoch': 1,
+                     # 'last_phase': 'pretrain_generator',
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv14_within_batch_heatmapv1(setting_name='cganv14_heatmapv1'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    num_meta = 11
+    snap_feature = 64 + num_meta
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    # 166 frames/s
+    snap_data_len = 16
+
+    batch_size = 8
+
+    # ~56s per subseq
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.00003, 0.00003]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv14.Generator', 'nn.net.cganv14.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 16,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 16,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.feeder_heatmapv1.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/heatmapv1',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'take_first': None,
+                         'pad': False,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 1,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 1,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [1000],
+                     'gen_lambda': [1, 1],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50, 100],
+                     'noise_level': [1, 1, 1],
+                     'lambda_gp': 10,
+                     'last_epoch': 30,
+                     'last_phase': 'adversarial',
+                     # 'last_epoch': 3,
+                     # 'last_phase': 'pretrain_discriminator',
+                     # 'last_epoch': -1,
+                     # 'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv15_within_batch_heatmapv1(setting_name='cganv15_heatmapv1'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    num_meta = 11
+    snap_feature = 64 + num_meta
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    # 166 frames/s
+    snap_data_len = 16
+
+    batch_size = 8
+
+    # ~56s per subseq
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.00003, 0.00003]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv15.Generator', 'nn.net.cganv15.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 32,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 32,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 32,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.feeder_heatmapv1.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/heatmapv1',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'take_first': None,
+                         'pad': False,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 1,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 1,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 0.2,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [1000],
+                     'gen_lambda': [1, 1],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50, 100],
+                     'noise_level': [1, 1, 1],
+                     'lambda_gp': 10,
+                     # 'last_epoch': 51,
+                     # 'last_phase': 'adversarial',
+                     # 'last_epoch': 3,
+                     # 'last_phase': 'pretrain_discriminator',
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
+
+def train_cganv16_within_batch_heatmapv1(setting_name='cganv15_heatmapv1'):
+    random_seed = 404
+
+    switch_label = False
+    binary = False
+
+    if switch_label:
+        num_classes = 4
+        weight = [1, 1, 1, 1]
+    else:
+        if binary:
+            num_classes = 2
+            weight = None
+        else:
+            num_classes = 3
+            weight = None
+    epoch = 20480
+    scheduler_step_size = 64
+
+    num_meta = 11
+    snap_feature = 64 + num_meta
+    snap_divisor = 8
+    sample_beats = 72
+    sample_snaps = sample_beats * snap_divisor
+    # 166 frames/s
+    snap_data_len = 16
+
+    batch_size = 8
+
+    # ~56s per subseq
+    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+
+    compressed_channels = 16
+
+    for gen_lr, dis_lr in [[0.00001, 0.00001]]:
+        print('init lr %s' % str(gen_lr))
+        config_path = './resources/config/train/%s.yaml' % setting_name
+        model_arg = {
+            'model_type': ['nn.net.cganv16.Generator', 'nn.net.cganv16.Discriminator'],
+            'params': [
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    'noise_dim': 32,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 32,
+                },
+                {
+                    'seq_len': subseq_len,
+                    'label_dim': 5,
+                    # 'noise_dim': 64,
+                    'cond_data_feature_dim': snap_feature,
+                    'norm': 'LN',
+                    'middle_dim': 256,
+                    'preprocess_dim': 32,
+                },
+            ]
+        }  # , 'num_block': [1, 1, 1, 1]
+        optimizer_arg = {
+            'optimizer_type': ['RMSprop', 'RMSprop'],
+            'params': [
+                {'lr': gen_lr,},
+                {'lr': dis_lr,},
+            ]
+        }
+        scheduler_arg = {
+            'scheduler_type': ['MultiStepLR', 'MultiStepLR'],
+            'params': [
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                # {'milestones': [150, 300, 450], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+                {'milestones': [30], 'gamma': 1},
+            ]
+        }
+        data_arg = {'dataset': 'nn.dataset.feeder_heatmapv1.SubseqFeeder',
+                    'train_dataset_arg':
+                        {'save_dir': r'./resources/data/fit/heatmapv1',
+                         'subseq_len': subseq_len,
+                         'random_seed': random_seed,
+                         'use_random_iter': True,
+                         'take_first': None,
+                         'pad': False,
+                         },
+                    'batch_size': batch_size,
+                    'shuffle': False,
+                    'num_workers': 2,
+                    'drop_last': False}
+        loss_arg = {'loss_type': [
+            # 'nn.loss.multi_pred_loss.MultiPredNLLLoss',
+            'CrossEntropyLoss',
+            'CrossEntropyLoss',
+        ],
+            'params': [
+                {'weight': weight},
+                {'weight': weight},
+            ]}
+        pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
+        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+                      'model_save_step': 8,
+                      'train_state_save_step': 1,
+                      }
+        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 1,
+                     'generator_pretrain_epoch': 1,
+                     'adaptive_adv_train': False,
+                     'adv_generator_epoch': 1,
+                     'adv_discriminator_epoch': 1,
+                     'log_exp_replay_prob': 0.02,
+                     'exp_replay_wait': 5,
+                     'gen_lambda_step': [1000],
+                     'gen_lambda': [1, 1],
+                     # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
+                     # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
+                     'noise_level_step': [50, 100],
+                     'noise_level': [1, 1, 1],
+                     'lambda_gp': 10,
+                     # 'last_epoch': 12,
+                     # 'last_phase': 'adversarial',
+                     # 'last_epoch': 3,
+                     # 'last_phase': 'pretrain_discriminator',
+                     'last_epoch': -1,
+                     'last_phase': 'pretrain_generator',
+                     'num_models': 2,
+                     }
+        with open(config_path, 'w') as f:
+            yaml.dump({'model_arg': model_arg, 'optimizer_arg': optimizer_arg, 'scheduler_arg': scheduler_arg,
+                       'data_arg': data_arg, 'loss_arg': loss_arg, 'pred_arg': pred_arg, 'output_arg': output_arg,
+                       'train_arg': train_arg,
+                       'output_device': 0,
+                       # 'weights_path': [
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
+                       #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
+                       # ],
+                       'train_type': 'wganwb',
+                       'num_classes': num_classes,
+                       'random_seed': random_seed,
+                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'grad_alter_fn': None,
+                       # 'grad_alter_fn': 'norm',
+                       # 'grad_alter_fn_arg': {'max_norm': 10},
+                       'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
+                       'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
+                       }, f)
+        train_with_config(config_path, folds=1, format_config=True)
+
 
 if __name__ == '__main__':
-    train_cganv8_within_batch()
+    train_cganv16_within_batch_heatmapv1('cganv16_heatmapv1_20230401_g0.00001_d0.00001_11')
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'
