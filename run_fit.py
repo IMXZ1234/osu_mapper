@@ -12,14 +12,6 @@ DEFAULT_MODEL_SAVE_DIR = r'./resources/data/fit/model'
 DEFAULT_RANDOM_SEED = 404
 
 
-class Train:
-    def __init__(self):
-        pass
-
-    def run_train(self, model_args):
-        pass
-
-
 def count_labels(labels):
     train_label_counter = Counter(labels)
     for k, v in train_label_counter.items():
