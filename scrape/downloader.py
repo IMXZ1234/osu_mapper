@@ -5,6 +5,7 @@ import os
 import time
 import traceback
 import zipfile
+import multiprocessing
 
 import requests
 from requests_oauthlib import OAuth2Session
@@ -268,6 +269,7 @@ class BeatmapDownloader:
                 'Host': 'osu.ppy.sh',
             }
             r = self.session.get(BeatmapDownloader.beatmap_dl % int(beatmapset_id), headers=headers)
+            # print(r.text)
             if r.headers['content-type'] != 'application/x-osu-beatmap-archive':
                 print('%d not downloadable!' % beatmapset_id)
                 self.failed_beatmapset_id.add(beatmapset_id)
@@ -294,6 +296,7 @@ class BeatmapDownloader:
         self.downloaded_beatmapset_id.update(skip)
         if osz_dir is None:
             osz_dir = self.default_osz_dir
+        os.makedirs(osz_dir, exist_ok=True)
         if meta_path is None:
             meta_path = self.default_meta_path
         with open(meta_path, 'r') as f:
@@ -336,22 +339,58 @@ def check_integrity(file_path):
     return True
 
 
+def check_integrity_multiprocess(file_path):
+    global queue
+    try:
+        # check if downloaded beatmapsets are corrupted
+        f = zipfile.ZipFile(file_path, 'r', )
+        # print(f.namelist())
+        for fn in f.namelist():
+            f.read(fn)
+    except Exception:
+        queue.put(int(os.path.splitext(filename)[0]))
+
+
+def init(q):
+    global queue
+    queue = q
+
+
 if __name__ == '__main__':
     downloader = BeatmapDownloader()
-    downloader.login_old()
+    downloader.login()
+    # downloader.login_old()
 
     osz_dir = r'F:\beatmapsets'
-    for filename in os.listdir(osz_dir):
-        if not check_integrity(os.path.join(osz_dir, filename)):
-            print('corrupted %s' % filename)
-            continue
-        downloader.downloaded_beatmapset_id.add(
-            int(os.path.splitext(filename)[0])
-        )
+    queue = multiprocessing.Queue()
+    pool = multiprocessing.Pool(initializer=init, initargs=(queue,))
 
-    for year in range(2010, 2022):
-        for month in range(1, 13):
-            for date in [1, 10, 20]:
+    for filename in os.listdir(osz_dir):
+        pool.apply_async(
+            check_integrity_multiprocess,
+            (filename, queue)
+        )
+    pool.close()
+    pool.join()
+    for i in range(queue.qsize()):
+        downloader.downloaded_beatmapset_id.add(
+            queue.get()
+        )
+        # if not check_integrity(os.path.join(osz_dir, filename)):
+        #     print('corrupted %s' % filename)
+        #     continue
+        # downloader.downloaded_beatmapset_id.add(
+        #     int(os.path.splitext(filename)[0])
+        # )
+
+    dates = [1, 10, 20]
+    year = 2013
+    month = 3
+    date_i = 20
+    while year < 2022:
+        while month < 13:
+            while date_i < len(dates):
+                date = dates[date_i]
                 since_date = '%d-%02d-%02d' % (year, month, date)
                 print(since_date)
 
@@ -395,3 +434,8 @@ if __name__ == '__main__':
                 # with open(failed_record_path, 'w') as f:
                 #     for beatmapsetid in downloader.failed_beatmapset_id:
                 #         f.write(str(beatmapsetid) + '\n')
+                date_i += 1
+            date_i = 0
+            month += 1
+        month = 1
+        year += 1

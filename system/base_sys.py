@@ -106,7 +106,7 @@ class Train:
 
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else None
 
-        self.start_epoch = 0
+        self.start_epoch = self.config_dict.get('start_epoch', 0)
         self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
             **output_arg)
         self.model = self.load_model(**model_arg)
@@ -254,25 +254,6 @@ class Train:
         else:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
-
-    def inspect_control(self, epoch):
-        try:
-            with open(self.control_file_path, 'r') as f:
-                control_dict = yaml.load(f, Loader=yaml.FullLoader)
-            if 'save_model_next_epoch' in control_dict:
-                if control_dict['save_model_next_epoch']:
-                    torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
-                    print('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
-            control_dict['save_model_next_epoch'] = False
-            if 'save_train_state' in control_dict:
-                if control_dict['save_train_state']:
-                    self.save_train_state(epoch)
-                    print('saved train state of epoch %d under %s' % (epoch, self.model_save_dir))
-            control_dict['save_train_state'] = False
-            with open(self.control_file_path, 'w') as f:
-                yaml.dump(control_dict, f)
-        except:
-            self.logger.error('fail to react to control!')
 
     def save_model(self, epoch=-1, model_index=None):
         if not isinstance(self.model, (list, tuple)):
@@ -482,6 +463,285 @@ class Train:
         epoch_properties['epoch_output_list'] = epoch_output_list
 
         # self.save_epoch_properties(epoch_properties, epoch, True)
+
+    def save_epoch_properties(self, out_dict, epoch, is_test=True):
+        for k, v in out_dict.items():
+            file_name = 'test' + k + '_epoch%d.pkl' if is_test else 'train' + k + '_epoch%d.pkl'
+            with open(os.path.join(self.log_dir, file_name % epoch), 'wb') as f:
+                pickle.dump(v, f)
+
+    def save_properties(self):
+        if self.task_type == 'classification':
+            with open(os.path.join(self.model_save_dir, 'train_pred_list.pkl'), 'wb') as f:
+                pickle.dump(self.train_pred_list, f)
+            with open(os.path.join(self.model_save_dir, 'test_pred_list.pkl'), 'wb') as f:
+                pickle.dump(self.test_pred_list, f)
+            with open(os.path.join(self.model_save_dir, 'train_accuracy_list.pkl'), 'wb') as f:
+                pickle.dump(self.train_accuracy_list, f)
+            with open(os.path.join(self.model_save_dir, 'eval_accuracy_list.pkl'), 'wb') as f:
+                pickle.dump(self.eval_accuracy_list, f)
+            print('train_accuracy_list\n', self.train_accuracy_list)
+            print('eval_accuracy_list\n', self.eval_accuracy_list)
+
+        with open(os.path.join(self.model_save_dir, 'train_loss_list.pkl'), 'wb') as f:
+            pickle.dump(self.train_loss_list, f)
+        with open(os.path.join(self.model_save_dir, 'eva_loss_list.pkl'), 'wb') as f:
+            pickle.dump(self.eva_loss_list, f)
+        with open(os.path.join(self.model_save_dir, 'learning_rate_list.pkl'), 'wb') as f:
+            pickle.dump(self.learning_rate_list, f)
+        print('train_loss_list\n', self.train_loss_list)
+        print('eva_loss_list\n', self.eva_loss_list)
+        print('learning_rate_list\n', self.learning_rate_list)
+
+    def save_train_state(self, model, optimizer, epoch, index=None):
+        state = {'epoch': epoch,
+                 'model': model.state_dict(),
+                 'optimizer': optimizer.state_dict()}
+        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+        filename = os.path.join(self.train_state_dir, pt_filename)
+        torch.save(state, filename)
+
+    def from_train_state(self, model, optimizer, index=None):
+        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+        filename = os.path.join(self.train_state_dir, pt_filename)
+        state = torch.load(filename)
+        model.load_state_dict(state['model'])
+        optimizer.load_state_dict(state['model'])
+        start_epoch = state['epoch']
+        return start_epoch
+
+
+class Train1:
+    def __init__(self,
+                 config_dict,
+                 task_type='classification',
+                 **kwargs):
+        self.task_type = task_type
+        self.config_dict = config_dict
+        model_arg, optimizer_arg, scheduler_arg, data_arg, loss_arg, pred_arg, output_arg, train_arg = \
+            config_dict['model_arg'], config_dict['optimizer_arg'], config_dict['scheduler_arg'], config_dict['data_arg'], \
+            config_dict['loss_arg'], config_dict['pred_arg'], config_dict['output_arg'], config_dict['train_arg']
+
+        if 'output_device' in config_dict and config_dict['output_device'] is not None:
+            self.output_device = config_dict['output_device']
+        else:
+            self.output_device = 'cpu'
+
+        self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else None
+
+        self.start_phase, self.start_epoch, self.phases, self.phase_epochs = \
+            train_arg['start_phase'], train_arg['start_epoch'], train_arg['phases'], train_arg['phase_epochs']
+        self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.init_output(
+            **output_arg)
+        self.model = self.load_model(**model_arg)
+        self.optimizer = self.load_optimizer(**optimizer_arg)
+        self.scheduler = self.load_scheduler(**scheduler_arg)
+        self.train_iter, self.test_iter = self.load_data(**data_arg)
+        self.loss = self.load_loss(**loss_arg)
+
+        self.epoch = train_arg['epoch']
+        self.eval_step = train_arg['eval_step']
+
+        self.control_file_path = os.path.join(self.log_dir, 'control.yaml')
+        self.train_loss_list = []
+        self.eva_loss_list = []
+        self.learning_rate_list = []
+        self.save_model_flag = False
+
+    def init_output(self, log_dir, model_save_dir, model_save_step, **kwargs):
+        writer = SummaryWriter(logdir=log_dir + '/run')
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(fmt="[ %(asctime)s ] %(message)s",
+                                      datefmt="%a %b %d %H:%M:%S %Y")
+
+        sHandler = logging.StreamHandler()
+        sHandler.setFormatter(formatter)
+        logger.addHandler(sHandler)
+
+        fHandler = logging.FileHandler(log_dir + '/log.txt', mode='w')
+        fHandler.setLevel(logging.DEBUG)
+        fHandler.setFormatter(formatter)
+        logger.addHandler(fHandler)
+        return writer, logger, log_dir, model_save_dir, model_save_step
+
+    def load_model(self, model_type, **kwargs):
+        if isinstance(model_type, (list, tuple)):
+            net = [
+                self.load_model(mt, **kwargs['params'][i])
+                for i, mt in enumerate(model_type)
+            ]
+        else:
+            net = dynamic_import(model_type)(**kwargs)
+        self.logger.info('loaded model: %s' % model_type)
+        return net
+
+    def load_optimizer(self, optimizer_type, model_index=None, **kwargs):
+        if isinstance(optimizer_type, (list, tuple)):
+            if 'models_index' in kwargs:
+                models_index = kwargs['models_index']
+            else:
+                assert len(optimizer_type) == len(self.model)
+                models_index = list(range(len(self.model)))
+            optimizer = [
+                self.load_optimizer(ot, i, **kwargs['params'][i])
+                for i, ot in zip(models_index, optimizer_type)
+            ]
+        else:
+            if model_index is None:
+                model = self.model
+            else:
+                model = self.model[model_index]
+            if optimizer_type == 'SGD':
+                optimizer = torch.optim.SGD(model.parameters(), **kwargs)
+            elif optimizer_type == 'Adam':
+                optimizer = torch.optim.Adam(model.parameters(), **kwargs)
+            elif optimizer_type == 'RMSprop':
+                optimizer = torch.optim.RMSprop(model.parameters(), **kwargs)
+            else:
+                optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
+        return optimizer
+
+    def load_scheduler(self, scheduler_type, optimizer_index=None, **kwargs):
+        if isinstance(scheduler_type, (list, tuple)):
+            scheduler = [
+                self.load_scheduler(st, i, **kwargs['params'][i])
+                for i, st in enumerate(scheduler_type)
+            ]
+        else:
+            if optimizer_index is None:
+                optimizer = self.optimizer
+            else:
+                optimizer = self.optimizer[optimizer_index]
+            if scheduler_type == 'StepLR':
+                scheduler = torch.optim.lr_scheduler.StepLR(optimizer, **kwargs)
+            elif scheduler_type == 'MultiStepLR':
+                scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **kwargs)
+            else:
+                scheduler = dynamic_import(scheduler_type)(optimizer, **kwargs)
+        return scheduler
+
+    def load_data(self,
+                  dataset,
+                  train_dataset_arg,
+                  test_dataset_arg=None,
+                  collate_func=None,
+                  batch_size=8,
+                  shuffle=True,
+                  num_workers=1,
+                  drop_last=False,
+                  **kwargs):
+
+        if collate_func is not None:
+            self.collate_fn = dynamic_import(collate_func)
+        else:
+            self.collate_fn = None
+        train_iter = torch.utils.data.DataLoader(
+            dataset=dynamic_import(dataset)(**train_dataset_arg),
+            batch_size=batch_size,
+            shuffle=shuffle,
+            collate_fn=self.collate_fn,
+            num_workers=num_workers,
+            drop_last=drop_last)
+        if test_dataset_arg is not None:
+            test_iter = torch.utils.data.DataLoader(
+                dataset=dynamic_import(dataset)(**test_dataset_arg),
+                batch_size=batch_size,
+                shuffle=False,
+                collate_fn=self.collate_fn,
+                num_workers=num_workers,
+                drop_last=False)
+        else:
+            test_iter = None
+        return train_iter, test_iter
+
+    def load_loss(self, loss_type, **kwargs):
+        if isinstance(loss_type, (list, tuple)):
+            loss = [
+                self.load_loss(lt, **kwargs['params'][i])
+                for i, lt in enumerate(loss_type)
+            ]
+        else:
+            if loss_type == 'MSELoss':
+                loss = nn.MSELoss(**kwargs)
+            elif loss_type == 'BCELoss':
+                loss = nn.BCELoss(**kwargs)
+            elif loss_type == 'NLLLoss':
+                loss = nn.NLLLoss(**kwargs)
+            elif loss_type == 'CrossEntropyLoss':
+                if 'weight' in kwargs and kwargs['weight'] is not None:
+                    kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
+                loss = nn.CrossEntropyLoss(**kwargs)
+            else:
+                loss = dynamic_import(loss_type)(**kwargs)
+        return loss
+
+    def load_pred(self, pred_type, **kwargs):
+        if pred_type is None or pred_type == 'argmax':
+            pred = functools.partial(torch.argmax, dim=1)
+        elif pred_type == 'Identity':
+            pred = lambda x: x
+        else:
+            pred = dynamic_import(pred_type)(**kwargs)
+        return pred
+
+    def save_model(self, epoch=-1, model_index=None):
+        if not isinstance(self.model, (list, tuple)):
+            models = [self.model]
+        else:
+            models = self.model
+        if model_index is None:
+            model_index = list(range(len(models)))
+        pt_filename = 'model_%d_epoch_{}.pt'.format(epoch)
+        for index in model_index:
+            model = models[index]
+            torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
+        self.logger.info('saved model of epoch %d under %s' % (epoch, self.model_save_dir))
+
+    def init_train_state(self):
+        if not isinstance(self.model, (list, tuple)):
+            models = [self.model]
+            optimizers = [self.optimizer]
+        else:
+            models = self.model
+            optimizers = self.optimizer
+        for index, (optimizer, model) in enumerate(zip(optimizers, models)):
+            if self.train_state_dir is not None:
+                self.start_epoch = self.from_train_state(model, optimizer, index)
+            else:
+                model.apply(init_weights)
+                self.start_epoch = 0
+            if isinstance(self.output_device, int):
+                model.cuda(self.output_device)
+
+    def run_train(self):
+        self.init_train_state()
+        for epoch in range(self.start_epoch, self.epoch):
+            if isinstance(self.model, (list, tuple)):
+                for model in self.model:
+                    model.train()
+            else:
+                self.model.train()
+            self.train_epoch(epoch)
+            if (epoch + 1) % self.eval_step == 0:
+                with torch.no_grad():
+                    if isinstance(self.model, (list, tuple)):
+                        for model in self.model:
+                            model.eval()
+                    else:
+                        self.model.eval()
+                    self.eval_epoch(epoch)
+            if (epoch + 1) % self.model_save_step == 0:
+                self.save_model(epoch)
+            # self.inspect_control(epoch)
+        # if self.save_model_flag:
+        #     torch.save(self.model.state_dict(), os.path.join(self.model_save_dir, 'model_epoch%d.pt' % epoch))
+        #     self.save_model_flag = False
+        # if epoch == num_epoch - 1:
+        #     plot_difference_distribution(epoch_output_list, epoch_label_list, 100)
+        # finally save the model
+        self.save_model(-1)
+        self.save_properties()
 
     def save_epoch_properties(self, out_dict, epoch, is_test=True):
         for k, v in out_dict.items():
