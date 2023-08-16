@@ -115,6 +115,7 @@ class BeatmapDownloader:
         }
         # self.basic_auth_essen = HTTPBasicAuth(self.username, self.password)
         self.default_osz_dir = r'../resources/data/osz'
+        os.makedirs(self.default_osz_dir, exist_ok=True)
 
         # for osu! api v1
         # we use api v1 to retrieve beatmapset metadata
@@ -122,6 +123,8 @@ class BeatmapDownloader:
         self.app_url = app_url_v1
         self.api_key = api_key_v1
         self.default_meta_path = r'../resources/data/meta.json'
+        if not os.path.exists(self.default_meta_path):
+            open(self.default_meta_path, 'w')
 
         self.session = requests.Session()
 
@@ -191,6 +194,7 @@ class BeatmapDownloader:
         self.logger.debug('meta retrieved')
         if meta_path is None:
             meta_path = self.default_meta_path
+        os.makedirs(os.path.dirname(meta_path), exist_ok=True)
         with open(meta_path, 'w') as f:
             f.write(r.text)
         return r.json()
@@ -304,14 +308,17 @@ class BeatmapDownloader:
         # print(meta_dict[0])
         print('totally %d meta' % len(meta_dict))
         # thread_pool = threading.current_thread()
+        self.batch_download([int(beatmapset_meta['beatmapset_id']) for beatmapset_meta in meta_dict], osz_dir)
+
+    def batch_download(self, beatmapset_id_list, osz_dir=None):
         batch_size = 30
         i = 0
-        while i < len(meta_dict):
+        while i < len(beatmapset_id_list):
             # print(time.asctime(time.localtime()))
             self.batch_beatmapset_id.clear()
             batch_num = 0
-            while batch_num < batch_size and i < len(meta_dict):
-                beatmapset_id = int(meta_dict[i]['beatmapset_id'])
+            while batch_num < batch_size and i < len(beatmapset_id_list):
+                beatmapset_id = beatmapset_id_list[i]
                 if beatmapset_id in self.downloaded_beatmapset_id:
                     i += 1
                     continue
@@ -361,7 +368,8 @@ if __name__ == '__main__':
     downloader.login()
     # downloader.login_old()
 
-    osz_dir = r'F:\beatmapsets'
+    # osz_dir = r'F:\beatmapsets'
+    osz_dir = r'/home/data1/xiezheng/osu_mapper/beatmapsets'
     queue = multiprocessing.Queue()
     pool = multiprocessing.Pool(initializer=init, initargs=(queue,))
 
@@ -383,11 +391,12 @@ if __name__ == '__main__':
         #     int(os.path.splitext(filename)[0])
         # )
 
-    dates = [1, 10, 20]
-    year = 2013
-    month = 3
-    date_i = 20
-    while year < 2022:
+    # dates = [1, 10, 20]
+    dates = list(range(1, 30, 5))
+    year = 2010
+    month = 1
+    date_i = 0
+    while year < 2023:
         while month < 13:
             while date_i < len(dates):
                 date = dates[date_i]
