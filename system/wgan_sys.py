@@ -11,7 +11,7 @@ from tqdm import tqdm
 from system.gan_sys import TrainGAN
 from util.general_util import recursive_wrap_data
 from util.plt_util import plot_loss
-from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv
+from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger
 
 
 class TrainWGAN(TrainGAN):
@@ -360,11 +360,11 @@ class TrainWGANWithinBatch(TrainWGAN):
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return gradient_penalty
 
-    def train_generator_batch(self, batch):
+    def train_generator_batch(self, batch_items):
         """
         Using Wesserstein GAN Loss
         """
-        cond_data = batch[0]
+        cond_data, = batch_items
 
         optimizer_G, optimizer_D = self.optimizer[0], self.optimizer[1]
         # loss_G, loss_D = self.loss
@@ -389,12 +389,12 @@ class TrainWGANWithinBatch(TrainWGAN):
 
         return gen_loss.item()
 
-    def train_discriminator_batch(self, batch):
+    def train_discriminator_batch(self, batch_items):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for 'epochs' epochs.
         """
-        cond_data, real_gen_output = batch
+        cond_data, real_gen_output = batch_items
 
         optimizer_D = self.optimizer[1]
         # loss_D = self.loss[1]
@@ -441,12 +441,12 @@ class TrainWGANWithinBatch(TrainWGAN):
 
         return loss.item(), fake_loss.item(), real_loss.item(), gp_loss.item()
 
-    def train_discriminator_batch_exp_replay(self, batch, fake):
+    def train_discriminator_batch_exp_replay(self, batch_items):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for 'epochs' epochs.
         """
-        cond_data, real_gen_output = batch
+        cond_data, real_gen_output, fake = batch_items
 
         optimizer_D = self.optimizer[1]
         # loss_D = self.loss[1]
@@ -497,10 +497,16 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.lambda_gp = self.config_dict['train_arg']['lambda_gp']
         else:
             self.lambda_gp = None
+        self.lambda_cls = self.config_dict['train_arg']['lambda_cls']
 
     def run_train(self):
-        pass
+        self.epoch_gp_loss = []
 
+        super(TrainWGANWithinBatch, self).run_train()
+
+        log_dir = self.config_dict['output_arg']['log_dir']
+        plot_loss(self.gen_loss_list, 'generator loss',
+                  save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
 
     def run_adv_training(self):
         # # ADVERSARIAL TRAINING
@@ -536,11 +542,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             epoch_fake_loss = 0
             epoch_real_loss = 0
             epoch_gp_loss = 0
-            win_len = 10
-            last_few_batch_fake_loss = collections.deque([0 for _ in range(win_len)])
-            last_few_batch_real_loss = collections.deque([0 for _ in range(win_len)])
-            win_avg_fake_loss = 0
-            win_avg_real_loss = 0
+            epoch_cls_loss = 0
 
             adv_generator_epoch = init_adv_generator_epoch * adv_generator_epoch_sched.cur_milestone_output()
             self.logger.info('adv_generator_epoch %.8f' % adv_generator_epoch)
@@ -555,22 +557,26 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             train_gen_batches = idx_set_with_uniform_itv(epoch_num_batches, train_gen_num_batches)
             train_dis_batches = idx_set_with_uniform_itv(epoch_num_batches, train_dis_num_batches)
 
-            for batch, (cond_data, real_gen_output, other) in enumerate(tqdm(self.train_iter)):
+            last_few_batch_fake_loss = AvgLossLogger(10)
+            last_few_batch_real_loss = AvgLossLogger(10)
+
+            for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter)):
                 batch_size = cond_data.shape[0]
                 total_sample_num += batch_size
                 cond_data = recursive_wrap_data(cond_data, self.output_device)
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
+                cls_label = recursive_wrap_data(cls_label, self.output_device)
 
                 # train generator batch
                 if batch in train_gen_batches or (epoch_gen_loss / total_sample_num) > 5:
-                    gen_loss = self.train_generator_batch(batch, cond_data, real_gen_output, other)
+                    gen_loss = self.train_generator_batch((cond_data, real_gen_output, cls_label))
                     epoch_gen_loss += gen_loss * batch_size
 
                 if len(self.exp_replay_buffer) > 0:
                     if self.exp_replay_buffer[0][-1] == 0:
-                        exp_replay_cond_data, exp_replay_real_gen_output, exp_replay_fake, _ = self.exp_replay_buffer.popleft()
+                        exp_replay_cond_data, exp_replay_real_gen_output, exp_replay_fake, exp_replay_cls_label, _ = self.exp_replay_buffer.popleft()
                         loss, fake_loss, real_loss, gp_loss = self.train_discriminator_batch_exp_replay(
-                            batch, exp_replay_cond_data, exp_replay_real_gen_output, exp_replay_fake, other
+                            (exp_replay_cond_data, exp_replay_real_gen_output, exp_replay_fake, exp_replay_cls_label)
                         )
                         # self.logger.info('exp replay batch: ')
                         # self.logger.info('loss = %.8f' % loss)
@@ -585,19 +591,18 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 if batch in train_dis_batches:
                     # if abs(win_avg_fake_loss) > 100 or abs(win_avg_real_loss) > 100 or (epoch_gen_loss / total_sample_num) > 10:
                     #     continue
-                    loss, fake_loss, real_loss, gp_loss = self.train_discriminator_batch(batch, cond_data, real_gen_output, other)
+                    loss, fake_loss, real_loss, gp_loss, cls_loss = self.train_discriminator_batch((cond_data, real_gen_output, cls_label))
 
                     # we only concern fake loss value
                     # if fake loss value is too large, generator training will be difficult
-                    win_avg_fake_loss = win_avg_fake_loss + (fake_loss - last_few_batch_fake_loss.popleft()) / win_len
                     last_few_batch_fake_loss.append(fake_loss)
-                    win_avg_real_loss = win_avg_real_loss + (real_loss - last_few_batch_real_loss.popleft()) / win_len
                     last_few_batch_real_loss.append(real_loss)
 
                     total_loss += loss * batch_size
                     epoch_fake_loss += fake_loss * batch_size
                     epoch_real_loss += real_loss * batch_size
                     epoch_gp_loss += gp_loss * batch_size
+                    epoch_cls_loss += cls_loss * batch_size
 
             gen_sched.step()
             dis_sched.step()
@@ -613,11 +618,13 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             avg_loss = total_loss / total_sample_num
             avg_fake_loss = epoch_fake_loss / total_sample_num
             avg_real_loss = epoch_real_loss / total_sample_num
+            avg_cls_loss = epoch_cls_loss / total_sample_num
             self.dis_loss_list.append(avg_loss)
 
             self.logger.info('avg_loss = %.8f' % avg_loss)
             self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
             self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
+            self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
             if self.lambda_gp is not None:
                 self.logger.info('avg_gp_loss = %.8f' % (epoch_gp_loss / len(self.train_iter)))
 
@@ -627,12 +634,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             if (epoch + 1) % self.train_state_save_step == 0:
                 self.save_train_state(epoch, 'adversarial')
 
-    def train_discriminator_batch(self, batch):
+    def train_discriminator_batch(self, batch_items):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for 'epochs' epochs.
         """
-        cond_data, real_gen_output = batch
+        cond_data, real_gen_output, cls_label = batch_items
 
         optimizer_D = self.optimizer[1]
         # loss_D = self.loss[1]
@@ -641,20 +648,24 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
         optimizer_D.zero_grad()
         # real
-        dis_real_cls_out = dis(cond_data, real_gen_output)
+        dis_real_validity_out, dis_real_cls_out = dis(cond_data, real_gen_output)
         with torch.no_grad():
-            fake = gen(cond_data)
+            fake = gen(cond_data, cls_label)
             if random.random() < self.log_exp_replay_prob:
-                self.exp_replay_buffer.append([cond_data, fake, real_gen_output, self.exp_replay_wait])
+                self.exp_replay_buffer.append([cond_data, fake, real_gen_output, cls_label, self.exp_replay_wait])
 
         # print('fake')
-        dis_fake_cls_out = dis(cond_data, fake)
+        dis_fake_validity_out, dis_fake_cls_out = dis(cond_data, fake)
         # optimization direction: larger score for real samples, smaller score for fake samples
         # smaller the loss, better the discriminator performance
-        real_loss = -torch.mean(dis_real_cls_out)
-        fake_loss = torch.mean(dis_fake_cls_out)
+        real_loss = -torch.mean(dis_real_validity_out)
+        fake_loss = torch.mean(dis_fake_validity_out)
+        cls_loss = torch.nn.functional.mse_loss(
+            torch.cat([dis_real_cls_out, dis_fake_cls_out], dim=0),
+            torch.cat([cls_label, cls_label], dim=0)
+        )
         # best both be negative
-        loss = real_loss + fake_loss
+        loss = real_loss + fake_loss + cls_loss
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
@@ -677,14 +688,14 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             for p in dis.parameters():
                 p.data.clamp_(-clip_value, clip_value)
 
-        return loss.item(), fake_loss.item(), real_loss.item(), gp_loss.item()
+        return loss.item(), fake_loss.item(), real_loss.item(), gp_loss.item(), cls_loss.item()
 
-    def train_discriminator_batch_exp_replay(self, batch, fake):
+    def train_discriminator_batch_exp_replay(self, batch_items):
         """
         Training the discriminator on real_data_samples (positive) and generated samples from generator (negative).
         Samples are drawn d_steps times, and the discriminator is trained for 'epochs' epochs.
         """
-        cond_data, real_gen_output = batch
+        cond_data, real_gen_output, fake, cls_label = batch_items
 
         optimizer_D = self.optimizer[1]
         # loss_D = self.loss[1]
@@ -693,13 +704,13 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
         optimizer_D.zero_grad()
         # real
-        dis_real_cls_out = dis(cond_data, real_gen_output)
-        dis_fake_cls_out = dis(cond_data, fake)
+        dis_real_validity_out, _ = dis(cond_data, real_gen_output)
+        dis_fake_validity_out, _ = dis(cond_data, fake)
 
         # optimization direction: larger score for real samples, smaller score for fake samples
         # smaller the loss, better the discriminator performance
-        real_loss = -torch.mean(dis_real_cls_out)
-        fake_loss = torch.mean(dis_fake_cls_out)
+        real_loss = -torch.mean(dis_real_validity_out)
+        fake_loss = torch.mean(dis_fake_validity_out)
         # best both be negative
         loss = real_loss + fake_loss
 
@@ -725,3 +736,32 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 p.data.clamp_(-clip_value, clip_value)
 
         return loss.item(), fake_loss.item(), real_loss.item(), gp_loss.item()
+
+    def train_generator_batch(self, batch_items):
+        """
+        Using Wesserstein GAN Loss
+        """
+        cond_data, = batch_items
+
+        optimizer_G, optimizer_D = self.optimizer[0], self.optimizer[1]
+        # loss_G, loss_D = self.loss
+        gen, dis = self.model
+
+        sys.stdout.flush()
+
+        fake = gen(cond_data)
+        dis_validity_out, dis_cls_out = dis(cond_data, fake)
+
+        optimizer_G.zero_grad()
+
+        # smaller the loss, better the generator performance
+        gen_loss = -torch.mean(dis_validity_out)
+
+        gen_loss.backward()
+
+        if self.grad_alter_fn is not None:
+            self.grad_alter_fn(gen.parameters())
+
+        optimizer_G.step()
+
+        return gen_loss.item()

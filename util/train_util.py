@@ -1,3 +1,6 @@
+import collections
+
+
 class MultiStepScheduler:
     def __init__(self, milestones, milestone_output):
         """
@@ -34,3 +37,25 @@ def idx_set_with_uniform_itv(length, num, offset=0):
     itv = length / num
     idx_offset = offset % round(itv)
     return set([round(itv * i) + idx_offset for i in range(num)])
+
+
+class AvgLossLogger:
+    def __init__(self, win_len=10):
+        self.win_len = win_len
+        self.loss_value_history = collections.deque()
+        self.avg = 0
+
+    def clear(self):
+        self.avg = 0
+        self.loss_value_history.clear()
+
+    def append(self, value_in):
+        if self.win_len < 0 or len(self.loss_value_history) < self.win_len:
+            self.avg = self.avg * len(self.loss_value_history) / (len(self.loss_value_history) + 1) + value_in / (len(self.loss_value_history) + 1)
+        else:
+            value_out = self.loss_value_history.popleft()
+            self.avg += (value_in - value_out) / self.win_len
+        self.loss_value_history.append(value_in)
+
+    def __str__(self):
+        return str(self.avg)
