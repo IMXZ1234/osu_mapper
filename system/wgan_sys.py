@@ -529,8 +529,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         adv_generator_epoch_sched = MultiStepScheduler(train_arg['gen_lambda_step'], train_arg['gen_lambda'])
         noise_level_sched = MultiStepScheduler(train_arg['noise_level_step'], train_arg['noise_level'])
 
-        adv_generator_epoch_sched.set_epoch(self.current_epoch-1)
-        noise_level_sched.set_epoch(self.current_epoch-1)
+        adv_generator_epoch_sched.set_current_step(self.current_epoch-1)
+        noise_level_sched.set_current_step(self.current_epoch-1)
 
         for epoch in range(self.current_epoch, self.epoch):
             self.logger.info('\n--------\nEPOCH %d\n--------' % epoch)

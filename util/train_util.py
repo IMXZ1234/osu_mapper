@@ -25,6 +25,13 @@ class MultiStepScheduler:
             if self.current_step > self.milestones[self.cur_milestone_idx]:
                 self.cur_milestone_idx += 1
 
+    def set_current_step(self, step):
+        self.current_step = step
+        self.cur_milestone_idx = 0
+        if self.cur_milestone_idx < len(self.milestones):
+            if self.current_step > self.milestones[self.cur_milestone_idx]:
+                self.cur_milestone_idx += 1
+
     def reset(self):
         self.cur_milestone_idx = 0
         self.current_step = 0
