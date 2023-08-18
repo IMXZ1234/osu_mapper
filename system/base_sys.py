@@ -2,6 +2,7 @@ import functools
 import logging
 import os
 import pickle
+import re
 
 import numpy as np
 import torch
@@ -106,7 +107,7 @@ class Train:
 
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else None
 
-        self.start_epoch = self.config_dict.get('start_epoch', 0)
+        self.start_epoch = self.config_dict.get('start_epoch', -1)
         self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
             **output_arg)
         self.model = self.load_model(**model_arg)
@@ -277,7 +278,7 @@ class Train:
             optimizers = self.optimizer
         for index, (optimizer, model) in enumerate(zip(optimizers, models)):
             if self.train_state_dir is not None:
-                self.start_epoch = self.from_train_state(model, optimizer, index)
+                self.start_epoch = self.from_train_state(model, optimizer, epoch=self.start_epoch, index=index)
             else:
                 model.apply(init_weights)
                 self.start_epoch = 0
@@ -493,16 +494,29 @@ class Train:
         print('eva_loss_list\n', self.eva_loss_list)
         print('learning_rate_list\n', self.learning_rate_list)
 
-    def save_train_state(self, model, optimizer, epoch, index=None):
+    def save_train_state(self, model, optimizer, epoch=None, index=None):
         state = {'epoch': epoch,
                  'model': model.state_dict(),
                  'optimizer': optimizer.state_dict()}
-        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+        if epoch is None:
+            epoch = -1
+        pt_filename = 'epoch%d_state%d.pt' % (epoch, index) if index is not None else 'epoch%d_state.pt' % epoch
         filename = os.path.join(self.train_state_dir, pt_filename)
         torch.save(state, filename)
 
-    def from_train_state(self, model, optimizer, index=None):
-        pt_filename = 'train_state_%d.pt' % index if index is not None else 'train_state.pt'
+    def from_train_state(self, model, optimizer, epoch=None, index=None):
+        if epoch is None:
+            last_epoch = -1
+            for fn in os.listdir(self.train_state_dir):
+                if fn.startswith('epoch-1'):
+                    last_epoch = -1
+                    break
+                else:
+                    m = re.match(r'epoch(\d+)_state.*\.pt', fn)
+                    if m is not None:
+                        last_epoch = max(last_epoch, int(m.groups()[0]))
+            self.logger.info('found latest state at epoch %d' % last_epoch)
+        pt_filename = 'epoch%d_state%d.pt' % (epoch, index) if index is not None else 'epoch%d_state.pt' % epoch
         filename = os.path.join(self.train_state_dir, pt_filename)
         state = torch.load(filename)
         model.load_state_dict(state['model'])

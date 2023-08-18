@@ -12,6 +12,7 @@ from system.gan_sys import TrainGAN
 from util.general_util import recursive_wrap_data
 from util.plt_util import plot_loss
 from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger
+import tensorboardX
 
 
 class TrainWGAN(TrainGAN):
@@ -24,6 +25,8 @@ class TrainWGAN(TrainGAN):
             self.lambda_gp = None
         print('self.lambda_gp')
         print(self.lambda_gp)
+        log_dir = self.config_dict['output_arg']['log_dir']
+        self.tensorboard_writer = tensorboardX.SummaryWriter(log_dir)
 
     def run_adv_training(self):
         # # ADVERSARIAL TRAINING
@@ -610,6 +613,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
+            self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss)
             self.gen_loss_list.append(avg_gen_loss)
 
             sample = gen(cond_data)[0].cpu().detach().numpy()
@@ -622,17 +626,24 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.dis_loss_list.append(avg_loss)
 
             self.logger.info('avg_loss = %.8f' % avg_loss)
+            self.tensorboard_writer.add_scalar('avg_loss', avg_loss)
             self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
+            self.tensorboard_writer.add_scalar('avg_fake_loss', avg_fake_loss)
             self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
+            self.tensorboard_writer.add_scalar('avg_real_loss', avg_real_loss)
             self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
+            self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss)
             if self.lambda_gp is not None:
-                self.logger.info('avg_gp_loss = %.8f' % (epoch_gp_loss / len(self.train_iter)))
+                avg_gp_loss = epoch_gp_loss / len(self.train_iter)
+                self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
+                self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss)
 
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
 
-            if (epoch + 1) % self.train_state_save_step == 0:
-                self.save_train_state(epoch, 'adversarial')
+            if (epoch + 1) % self.save_train_state_itv == 0:
+                self.save_train_state(self.model[0], self.optimizer[0], epoch, 0)
+                self.save_train_state(self.model[1], self.optimizer[1], epoch, 1)
 
     def train_discriminator_batch(self, batch_items):
         """
