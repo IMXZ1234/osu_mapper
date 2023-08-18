@@ -220,6 +220,46 @@ def calculate_meta(beatmap: slider.Beatmap, frame_times):
     return ms_per_beat, ho_density, occupied_proportion, beatmap.beat_divisor
 
 
+def calculate_hitobject_meta(beatmap: slider.Beatmap, frame_times):
+    """
+    meta information of hit objects
+    """
+    total_frames = len(frame_times)
+    # hit_object count within each mel frame
+    # sliders or spinners are counted only once in the closest mel frame
+    # circle count, slider count, spinner count, slider occupied, spinner occupied
+    ho_meta = np.zeros([3, total_frames])
+    frame_bounds = (frame_times[:-1] + frame_times[1:]) / 2
+    itv = np.diff(frame_bounds)
+    itv = np.concatenate(np.array([frame_bounds[0]]), itv, itv[-1:])
+    frame_idx = 0
+    for ho in beatmap._hit_objects:
+        time_start = ho.time // timedelta(milliseconds=1)
+        while frame_idx < len(frame_bounds) and time_start > frame_bounds[frame_idx]:
+            frame_idx += 1
+        start_frame_idx = frame_idx
+        if isinstance(ho, slider.beatmap.Circle):
+            ho_meta[0, start_frame_idx] += 1
+        else:
+            time_end = ho.end_time // timedelta(milliseconds=1)
+            duration = time_end - time_start
+            if isinstance(ho, slider.beatmap.Slider):
+                ho_meta[1, start_frame_idx] += 1
+                i = 4
+            elif isinstance(ho, slider.beatmap.Spinner):
+                ho_meta[2, start_frame_idx] += 1
+                i = 5
+            accumulate_start = time_start
+            while frame_idx < len(frame_bounds) and duration > frame_bounds[frame_idx]:
+                ho_meta[i, frame_idx] += frame_bounds[frame_idx] - accumulate_start
+                accumulate_start = frame_bounds[frame_idx]
+                frame_idx += 1
+            ho_meta[i, frame_idx] += time_end - frame_bounds[frame_idx]
+    ho_meta[4] /= itv
+    ho_meta[5] /= itv
+    return ho_meta
+
+
 def plot_label(label):
     for signal, name in zip(
             label.T,
@@ -232,6 +272,23 @@ def plot_label(label):
             label.T,
             [
                 'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+            ]
+    ):
+        plot_signal(signal[:5120], name)
+        
+        
+def plot_meta(meta_data):
+    for signal, name in zip(
+            meta_data,
+            [
+                'circle_count', 'slider_count', 'spinner_count', 'slider_occupy', 'spinner_occupy'
+            ]
+    ):
+        plot_signal(signal, name)
+    for signal, name in zip(
+            meta_data,
+            [
+                'circle_count', 'slider_count', 'spinner_count', 'slider_occupy', 'spinner_occupy'
             ]
     ):
         plot_signal(signal[:5120], name)
@@ -276,6 +333,8 @@ class HeatmapDatasetv1:
             n_mels=self.n_mels,
             mel_scale="htk",
         )
+        # time duration of a single mel frame, in ms
+        self.frame_duration = 1000 * self.n_fft // self.sample_rate
 
     def process_sample(self, audio_data, sr, beatmap=None, meta_dict=None):
         mel_spec = self.process_audio(audio_data, sr)
@@ -289,16 +348,8 @@ class HeatmapDatasetv1:
 
     def process_meta(self, beatmap, mel_spec, meta_dict):
         frame_times = frames_to_time(mel_spec.shape[0], self.sample_rate, self.hop_length, self.n_fft)
-        ms_per_beat, ho_density, occupied_proportion, snap_divisor = calculate_meta(beatmap, frame_times)
-        diff_size = float(meta_dict['diff_size'])
-        diff_overall = float(meta_dict['diff_overall'])
-        diff_approach = float(meta_dict['diff_approach'])
-        diff_drain = float(meta_dict['diff_drain'])
-        diff_aim = float(meta_dict['diff_aim'])
-        diff_speed = float(meta_dict['diff_speed'])
-        difficultyrating = float(meta_dict['difficultyrating'])
-        return ms_per_beat, ho_density, occupied_proportion, snap_divisor,\
-               diff_size, diff_overall, diff_approach, diff_drain, diff_aim, diff_speed, difficultyrating
+        ho_meta = calculate_hitobject_meta(beatmap, frame_times)
+        return ho_meta
 
     def process_label(self, beatmap, mel_spec):
         frame_times = frames_to_time(mel_spec.shape[0], self.sample_rate, self.hop_length, self.n_fft)
@@ -413,13 +464,13 @@ class HeatmapDatasetv1:
                     pickle.dump(sample_label, f)
 
                 # vis
-                if sample_idx in range(10):
-                    # for signal, name in zip(
-                    #         [ms_per_beat, ho_density, occupied_proportion],
-                    #         ['ms_per_beat', 'ho_density', 'blank_proportion']
-                    # ):
-                    #     plot_signal(signal, name)
-                    plot_label(sample_label)
+                # if sample_idx in range(10):
+                #     # for signal, name in zip(
+                #     #         [ms_per_beat, ho_density, occupied_proportion],
+                #     #         ['ms_per_beat', 'ho_density', 'blank_proportion']
+                #     # ):
+                #     #     plot_signal(signal, name)
+                plot_label(sample_label)
                 # # process data from mel
                 # sample_data = self.process_data(beatmap, mel_spec)
                 # with open(data_path, 'wb') as f:
@@ -427,13 +478,14 @@ class HeatmapDatasetv1:
                 # process meta from mel
             if not meta_processed:
                 try:
-                    sample_data = self.process_meta(beatmap, mel_spec, beatmap_meta_dict)
+                    meta_data = self.process_meta(beatmap, mel_spec, beatmap_meta_dict)
                 except Exception:
                     traceback.print_exc()
                     print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
                     continue
                 with open(meta_path, 'wb') as f:
-                    pickle.dump(sample_data, f)
+                    pickle.dump(meta_data, f)
+                plot_meta(meta_data)
 
             if not info_processed:
                 try:
@@ -448,8 +500,13 @@ class HeatmapDatasetv1:
 
 if __name__ == '__main__':
     ds = HeatmapDatasetv1({}, {})
+    # ds.from_meta_file(
+    #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\heatmapv1',
+    #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230320.json',
+    #     r'F:\beatmapsets',
+    # )
     ds.from_meta_file(
-        r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\heatmapv1',
-        r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230320.json',
-        r'F:\beatmapsets',
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed',
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\osz\meta_2010-04-01.json',
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\beatmapsets',
     )
