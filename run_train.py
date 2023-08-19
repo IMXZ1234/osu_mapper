@@ -4751,63 +4751,48 @@ def train_cganv16_within_batch_heatmapv1(setting_name='cganv15_heatmapv1'):
         train_with_config(config_path, folds=1, format_config=True)
 
 
-def train_cganv16_within_batch_heatmapv2(setting_name='simple_cganv1_heatmapv2'):
+def train_simple_acganv1_heatmapv2(setting_name='simple_acganv1_heatmapv2'):
     random_seed = 404
+    #
+    # mel_args = {
+    #     'sample_rate': 22000,
+    #     'n_fft': 512,
+    #     'hop_length': 220,  # 10 ms
+    #     'n_mels': 40,
+    # }
+    # epoch = 20480
 
-    switch_label = False
-    binary = False
-
-    if switch_label:
-        num_classes = 4
-        weight = [1, 1, 1, 1]
-    else:
-        if binary:
-            num_classes = 2
-            weight = None
-        else:
-            num_classes = 3
-            weight = None
-    epoch = 20480
-    scheduler_step_size = 64
-
-    num_meta = 11
-    snap_feature = 64 + num_meta
-    snap_divisor = 8
-    sample_beats = 72
-    sample_snaps = sample_beats * snap_divisor
-    # 166 frames/s
-    snap_data_len = 16
-
-    batch_size = 8
-
-    # ~56s per subseq
-    subseq_len = snap_data_len * sample_snaps  # 72 * 8 * 16
+    # 25.6 s per subseq
+    subseq_len = 2560
+    snap_feature = 40
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.00001, 0.00001]]:
+    for gen_lr, dis_lr in [[0.0001, 0.0001]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
-            'model_type': ['nn.net.cganv16.Generator', 'nn.net.cganv16.Discriminator'],
+            'model_type': ['nn.net.simple_acganv1.Generator', 'nn.net.simple_acganv1.Discriminator'],
             'params': [
                 {
                     'seq_len': subseq_len,
-                    'label_dim': 5,
-                    'noise_dim': 32,
-                    'cond_data_feature_dim': snap_feature,
+                    'tgt_dim': 5,
+                    'noise_dim': 16,
+                    'audio_feature_dim': snap_feature,
                     'norm': 'LN',
-                    'middle_dim': 256,
-                    'preprocess_dim': 32,
+                    'middle_dim': 128,
+                    'preprocess_dim': 16,
+                    'cls_label_dim': 3,
                 },
                 {
                     'seq_len': subseq_len,
-                    'label_dim': 5,
+                    'tgt_dim': 1,
                     # 'noise_dim': 64,
-                    'cond_data_feature_dim': snap_feature,
+                    'audio_feature_dim': snap_feature,
                     'norm': 'LN',
-                    'middle_dim': 256,
-                    'preprocess_dim': 32,
+                    'middle_dim': 128,
+                    'preprocess_dim': 16,
+                    'cls_label_dim': 3,
                 },
             ]
         }  # , 'num_block': [1, 1, 1, 1]
@@ -4827,16 +4812,16 @@ def train_cganv16_within_batch_heatmapv2(setting_name='simple_cganv1_heatmapv2')
                 {'milestones': [30], 'gamma': 1},
             ]
         }
-        data_arg = {'dataset': 'nn.dataset.feeder_heatmapv1.SubseqFeeder',
+        data_arg = {'dataset': 'nn.dataset.feeder_heatmapv2_meta.SubseqFeeder',
                     'train_dataset_arg':
-                        {'save_dir': r'./resources/data/fit/heatmapv1',
+                        {'save_dir': r'/home/data1/xiezheng/osu_mapper/preprocessed',
                          'subseq_len': subseq_len,
                          'random_seed': random_seed,
                          'use_random_iter': True,
                          'take_first': None,
                          'pad': False,
                          },
-                    'batch_size': batch_size,
+                    'batch_size': 128,
                     'shuffle': False,
                     'num_workers': 2,
                     'drop_last': False}
@@ -4846,22 +4831,26 @@ def train_cganv16_within_batch_heatmapv2(setting_name='simple_cganv1_heatmapv2')
             'CrossEntropyLoss',
         ],
             'params': [
-                {'weight': weight},
-                {'weight': weight},
+                {'weight': None},
+                {'weight': None},
             ]}
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
-        output_arg = {'log_dir': './resources/result/' + setting_name + '/%d',
-                      'model_save_dir': './resources/result/' + setting_name + '/%d',
+        output_arg = {'log_dir': '/home/data1/xiezheng/osu_mapper/result/' + setting_name,
+                      'model_save_dir': '/home/data1/xiezheng/osu_mapper/result/' + setting_name,
                       'model_save_step': 8,
                       'train_state_save_step': 1,
                       }
-        train_arg = {'epoch': epoch, 'eval_step': 1, 'use_ext_cond_data': False,
-                     'discriminator_pretrain_epoch': 1,
-                     'generator_pretrain_epoch': 1,
+        train_arg = {'epoch': 20480,
+                     'eval_step': 1,
+                     'phases': ['pre_gen', 'pre_dis', 'adv', ],
+                     'phase_epochs': [0, 0, 20480],
+                     'use_ext_cond_data': False,
+                     'discriminator_pretrain_epoch': 0,
+                     'generator_pretrain_epoch': 0,
                      'adaptive_adv_train': False,
                      'adv_generator_epoch': 1,
                      'adv_discriminator_epoch': 1,
-                     'log_exp_replay_prob': 0.02,
+                     'log_exp_replay_prob': 0,
                      'exp_replay_wait': 5,
                      'gen_lambda_step': [1000],
                      'gen_lambda': [1, 1],
@@ -4870,12 +4859,14 @@ def train_cganv16_within_batch_heatmapv2(setting_name='simple_cganv1_heatmapv2')
                      'noise_level_step': [50, 100],
                      'noise_level': [1, 1, 1],
                      'lambda_gp': 10,
+                     'lambda_cls': 1.,
                      # 'last_epoch': 12,
                      # 'last_phase': 'adversarial',
                      # 'last_epoch': 3,
                      # 'last_phase': 'pretrain_discriminator',
-                     'last_epoch': -1,
-                     'last_phase': 'pretrain_generator',
+                     'start_epoch': 0,
+                     # 'last_phase': 'pretrain_generator',
+                     'start_phase': 'adv',
                      'num_models': 2,
                      }
         with open(config_path, 'w') as f:
@@ -4887,21 +4878,21 @@ def train_cganv16_within_batch_heatmapv2(setting_name='simple_cganv1_heatmapv2')
                        #     r'resources/result/cganv8_with_batch_20221220/1/model_0_epoch_-1.pt',
                        #     r'resources/result/cganv8_with_batch_20221220/1/model_1_epoch_-1.pt',
                        # ],
-                       'train_type': 'wganwb',
-                       'num_classes': num_classes,
+                       'train_type': 'acwganwb',
+                       'num_classes': 5,
                        'random_seed': random_seed,
-                       'collate_fn': 'nn.dataset.collate_fn.default_collate',
+                       'collate_fn': 'nn.dataset.collate_fn.tensor_list_recursive_stack',
                        'grad_alter_fn': None,
                        # 'grad_alter_fn': 'norm',
                        # 'grad_alter_fn_arg': {'max_norm': 10},
                        'cal_acc_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_acc_func',
                        'cal_cm_func': 'nn.metrics.multi_pred_metrics.multi_pred_cal_cm_func',
                        }, f)
-        train_with_config(config_path, folds=1, format_config=True)
+        train_with_config(config_path, folds=None, format_config=False)
 
 
 if __name__ == '__main__':
-    train_cganv16_within_batch_heatmapv1('cganv16_heatmapv1_20230401_g0.00001_d0.00001_11')
+    train_simple_acganv1_heatmapv2('simple_acganv1_heatmapv2_20230818_g0.0001_d0.0001')
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

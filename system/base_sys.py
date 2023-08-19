@@ -14,26 +14,7 @@ from tqdm import tqdm
 
 from nn.dataset import collate_fn
 from nn.metrics import default_metrices
-from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data
-
-
-def recursive_detach(items):
-    if isinstance(items, torch.Tensor):
-        return items.detach()
-    elif isinstance(items, list):
-        for i, item in enumerate(items):
-            items[i] = recursive_detach(item)
-    else:
-        return items
-
-
-def init_weights(m):
-    if type(m) == nn.Linear:
-        torch.nn.init.normal_(m.weight, std=0.01)
-        torch.nn.init.normal_(m.bias, std=0.01)
-    elif type(m) == nn.Conv1d:
-        torch.nn.init.normal_(m.weight, std=0.01)
-        torch.nn.init.normal_(m.bias, std=0.01)
+from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, recursive_detach, init_weights
 
 
 class Train:
@@ -78,38 +59,44 @@ class Train:
             self.train_accuracy_list = []
             self.eval_accuracy_list = []
 
-        if 'collate_fn' in config_dict and config_dict['collate_fn'] is not None:
-            self.collate_fn = dynamic_import(config_dict['collate_fn'])
-        else:
+        collate_func = config_dict.get('collate_fn', None)
+        if collate_func is None:
             self.collate_fn = None
-        if 'output_collate_fn' in config_dict and config_dict['output_collate_fn'] is not None:
-            self.output_collate_fn = dynamic_import(config_dict['output_collate_fn'])
         else:
+            self.collate_fn = dynamic_import(config_dict['collate_fn'])
+        print(self.collate_fn)
+        output_collate_fn = config_dict.get('output_collate_fn', None)
+        if output_collate_fn is None:
             self.output_collate_fn = collate_fn.output_collate_fn
-        if 'grad_alter_fn' in config_dict and config_dict['grad_alter_fn'] is not None:
-            if config_dict['grad_alter_fn'] == 'value':
-                self.grad_alter_fn = functools.partial(nn.utils.clip_grad_value_, **config_dict['grad_alter_fn_arg'])
-            elif config_dict['grad_alter_fn'] == 'norm':
-                self.grad_alter_fn = functools.partial(nn.utils.clip_grad_norm_, **config_dict['grad_alter_fn_arg'])
-            else:
-                self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
-                self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
         else:
+            self.output_collate_fn = dynamic_import(config_dict['output_collate_fn'])
+        grad_alter_fn = config_dict.get('grad_alter_fn', None)
+        if grad_alter_fn is None:
             self.grad_alter_fn = None
-        if 'train_extra' in config_dict and config_dict['train_extra'] is not None:
-            self.train_extra = config_dict['train_extra']
+        elif grad_alter_fn == 'value':
+            self.grad_alter_fn = functools.partial(nn.utils.clip_grad_value_, **config_dict['grad_alter_fn_arg'])
+        elif grad_alter_fn == 'norm':
+            self.grad_alter_fn = functools.partial(nn.utils.clip_grad_norm_, **config_dict['grad_alter_fn_arg'])
         else:
-            self.train_extra = dict()
-        if 'test_extra' in config_dict and config_dict['test_extra'] is not None:
-            self.test_extra = config_dict['test_extra']
-        else:
-            self.test_extra = dict()
+            self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
+            self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
+        self.train_extra = config_dict.get('train_extra', dict())
+        self.test_extra = config_dict.get('test_extra', dict())
 
-        self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else None
+        self.continue_training = config_dict.get('continue_training', True)
+        custom_init_weight = config_dict.get('custom_init_weight', None)
+
+        if custom_init_weight is None:
+            self.custom_init_weight = None
+        elif custom_init_weight == 'default':
+            self.custom_init_weight = init_weights
+        else:
+            self.custom_init_weight = dynamic_import(config_dict['custom_init_weight'])
 
         self.start_epoch = self.config_dict.get('start_epoch', -1)
         self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
             **output_arg)
+        self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else os.path.join(self.log_dir, 'train_state')
         self.model = self.load_model(**model_arg)
         self.optimizer = self.load_optimizer(**optimizer_arg)
         self.scheduler = self.load_scheduler(**scheduler_arg)
@@ -177,6 +164,7 @@ class Train:
                 optimizer = torch.optim.RMSprop(model.parameters(), **kwargs)
             else:
                 optimizer = dynamic_import(optimizer_type)(model.parameters(), **kwargs)
+        self.logger.info('loaded optimizer: %s' % str(optimizer_type))
         return optimizer
 
     def load_scheduler(self, scheduler_type, optimizer_index=None, **kwargs):
@@ -196,6 +184,7 @@ class Train:
                 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, **kwargs)
             else:
                 scheduler = dynamic_import(scheduler_type)(optimizer, **kwargs)
+        # self.logger.info('loaded scheduler: %s' % str(scheduler_type))
         return scheduler
 
     def load_data(self,
@@ -284,6 +273,7 @@ class Train:
                 self.start_epoch = 0
             if isinstance(self.output_device, int):
                 model.cuda(self.output_device)
+        self.logger.info('initialized train state, to cuda device %s' % str(self.output_device))
 
     def run_train(self):
         self.init_train_state()

@@ -105,6 +105,17 @@ class ConvNeXtBlock1D(nn.Module):
                  norm='LN', dropout=0, residual=True):
         super().__init__()
         self.residual = residual
+        if (not self.residual) or ((in_channels == out_channels) and (stride == 1)):
+            self.short_cut = nn.Identity()
+        else:
+            if norm is None:
+                norm_short_cut = nn.Identity()
+            else:
+                norm_short_cut = nn.BatchNorm1d(out_channels) if norm == 'BN' else nn.LayerNorm(seq_len // stride)
+            self.short_cut = nn.Sequential(
+                nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
+                norm_short_cut
+            )
         if bottleneck_channels is None:
             bottleneck_channels = 2 * in_channels
         if norm is None:
@@ -119,7 +130,7 @@ class ConvNeXtBlock1D(nn.Module):
 
     def forward(self, x):
         """x: n, c, l"""
-        res = x
+        res = self.short_cut(x)
         x = self.conv_in(x)
         x = self.norm_bottleneck(x)
         x = self.conv_bottleneck(x)
@@ -138,7 +149,7 @@ class ConvNeXtUpSampleBlock1D(nn.Module):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=stride)
         self.convnext = ConvNeXtBlock1D(
-            in_channels, out_channels, seq_len, bottleneck_channels,
+            in_channels, out_channels, seq_len * stride, bottleneck_channels,
             1, kernel_size,
             norm, dropout, residual
         )
@@ -354,7 +365,7 @@ class Generator(nn.Module):
         x = self.preprocess(audio_feature.permute(0, 2, 1))
         cls_label_feature = self.cls_label_preprocess(
             # N, cls_label_dim
-            F.one_hot(cls_label, num_classes=self.cls_label_dim).unsqueeze(dim=-1).expand(-1, -1, self.seq_len).permute(0, 2, 1)
+            cls_label.unsqueeze(dim=-1).expand(-1, -1, self.seq_len)
         )
         # -> n, c, l
         x = torch.cat([x, noise, cls_label_feature], dim=1)
@@ -366,7 +377,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, seq_len, tgt_dim, audio_feature_dim, norm='LN', middle_dim=256,
-                 preprocess_dim=16,
+                 preprocess_dim=16, cls_label_dim=5,
                  **kwargs):
         """
         output_feature_num = num_classes(density map) + 2(x, y)
@@ -407,20 +418,21 @@ class Discriminator(nn.Module):
         )
 
         self.validity_head = nn.Linear(middle_dim, 1)
-        self.cls_head = nn.Linear(middle_dim, 1)
+        self.cls_head = nn.Linear(middle_dim, cls_label_dim)
 
     def forward(self, cond_data, tgt):
         """
-        tgt: N, L, label_dim
-        cond_data: N, L, cond_data_feature_dim
+        tgt: N, L, tgt_dim
+        cond_data: N, L, audio_feature_dim
         """
         N, L, _ = cond_data.shape
         audio_feature = cond_data
-        # N, L, _ = gen_output.shape
+        # N, L, _ = gen_output.shape -> N, C, L
         x = self.preprocess(audio_feature.permute(0, 2, 1))
-
+        # N, L, C -> N, C, L
+        tgt = tgt.permute(0, 2, 1)
         x = torch.cat([x] + [
-            self.tgt_preprocess[i](tgt[:, i])
+            self.tgt_preprocess[i](tgt[:, i:i+1, :])
             for i in range(self.tgt_dim)
         ], dim=1)
         # Concatenate label embedding and image to produce input
@@ -430,7 +442,7 @@ class Discriminator(nn.Module):
         # -> n, 1, l
         x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)
         validity = self.validity_head(x)
-        cls_logits = self.cls_head(x)
+        cls_logits = torch.sigmoid(self.cls_head(x))
 
         # N, 1
         return validity, cls_logits

@@ -1,9 +1,8 @@
 import os
 from datetime import timedelta
-import numpy as np
 
+import numpy as np
 import slider
-from slider import Position
 
 from util import beatmap_util
 

@@ -11,7 +11,7 @@ from system.gan_sys import TrainGAN
 from system.rnngan_sys import TrainRNNGANPretrain, TrainSeqGANAdvLoss
 from system.seq2seq_sys import TrainSeq2Seq
 from system.vae_sys import TrainVAE
-from system.wgan_sys import TrainWGAN, TrainWGANWithinBatch
+from system.wgan_sys import TrainWGAN, TrainWGANWithinBatch, TrainACWGANWithinBatch
 from util.general_util import try_format_dict_with_path
 
 np.set_printoptions(suppress=True)
@@ -21,6 +21,7 @@ SYS_DICT = {
     'gan': TrainGAN,
     'wgan': TrainWGAN,
     'wganwb': TrainWGANWithinBatch,
+    'acwganwb': TrainACWGANWithinBatch,
     'vae': TrainVAE,
     'seq2seq': TrainSeq2Seq,
     'seqgan_adv_loss': TrainSeqGANAdvLoss,
@@ -50,14 +51,19 @@ def plot_difference_distribution(pred_list, target_list, difference_step):
 def train_with_config(config_path, format_config=False, folds=5):
     with open(config_path, 'r') as f:
         config_dict = yaml.load(f, Loader=yaml.FullLoader)
-    for fold in range(1, folds + 1):
-        print('Fold %d' % fold)
-        if format_config:
-            formatted_config_dict = get_fold_config(config_dict, fold)
-        else:
-            formatted_config_dict = config_dict
-        sys = SYS_DICT[formatted_config_dict.get('train_type', 'basic')](formatted_config_dict)
+    if folds is None:
+        print('train with no cross_val')
+        sys = SYS_DICT[config_dict.get('train_type', 'basic')](config_dict)
         sys.run_train()
+    else:
+        for fold in range(1, folds + 1):
+            print('Fold %d' % fold)
+            if format_config:
+                formatted_config_dict = get_fold_config(config_dict, fold)
+            else:
+                formatted_config_dict = config_dict
+            sys = SYS_DICT[formatted_config_dict.get('train_type', 'basic')](formatted_config_dict)
+            sys.run_train()
 
 
 def get_fold_config(config_dict, fold):

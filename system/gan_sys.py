@@ -1,10 +1,8 @@
 import os
-import os
 import random
 import sys
 
 import torch
-import yaml
 from tqdm import tqdm
 
 from system.base_sys import Train
@@ -16,19 +14,31 @@ class TrainGAN(Train):
     def __init__(self, config_dict, train_type):
         super(TrainGAN, self).__init__(config_dict, train_type)
 
-        self.phases = ['pre_gen', 'pre_dis', 'adv', ]
-        self.phase_epochs = self.config_dict('phase_epochs', [0 for _ in range(len(self.phases))])
-        self.start_phase = self.config_dict.get('start_phase', None)
+        self.phases = self.config_dict['train_arg'].get('phases', ['pre_gen', 'pre_dis', 'adv', ])
+        self.phase_epochs = self.config_dict['train_arg'].get('phase_epochs', [0 for _ in range(len(self.phases))])
+        assert len(self.phases) == len(self.phase_epochs)
+        self.start_phase = self.config_dict['train_arg'].get('start_phase', self.phases[0])
+        self.start_epoch = self.config_dict['train_arg'].get('start_epoch', 0)
+        print(self.phases, self.phase_epochs)
+        print('start phase %s' % self.start_phase, 'start epoch %d' % self.start_epoch)
 
-        self.save_train_state_itv = self.config_dict.get('save_train_state_itv', -1)
+        self.save_train_state_itv = self.config_dict['train_arg'].get('save_train_state_itv', -1)
 
-        self.phase_train_func = [
-            self.train_discriminator(),
-            self.train_generator(),
-            self.run_adv_training(),
-        ]
+        if 'phase_train_func' in self.config_dict['train_arg']:
+            func_names = self.config_dict['train_arg']['phase_train_func']
+            self.phase_train_func = [
+                getattr(self, fn)
+                for fn in func_names
+            ]
+        else:
+            self.phase_train_func = [
+                self.train_discriminator,
+                self.train_generator,
+                self.run_adv_training,
+            ]
+        assert len(self.phases) == len(self.phase_train_func)
 
-    def save_phase_train_state(self):
+    def save_phase_train_state(self, phase, epoch):
         state = {'model': {},
                  'optimizer': {}}
 
@@ -43,13 +53,15 @@ class TrainGAN(Train):
         for i, opt in enumerate(optimizer):
             state['optimizer'][i] = opt.state_dict()
 
-        pt_filename = '%s_%d.pt' % (self.current_phase, self.current_epoch)
+        pt_filename = '%s_%d.pt' % (phase, epoch)
         filename = os.path.join(self.train_state_dir, pt_filename)
         torch.save(state, filename)
 
-    def load_phase_train_state(self):
-        pt_filename = '%s_%d.pt' % (self.current_phase, self.current_epoch)
+    def load_phase_train_state(self, phase, epoch):
+        pt_filename = '%s_%d.pt' % (phase, epoch)
         filename = os.path.join(self.train_state_dir, pt_filename)
+        if not os.path.exists(filename):
+            return False
         state = torch.load(filename)
 
         model = self.model
@@ -64,15 +76,21 @@ class TrainGAN(Train):
             opt.load_state_dict(state['optimizer'][i])
 
     def init_train_state(self):
-        if self.start_phase is not None:
-            #
-            self.current_epoch = self.start_epoch
-            self.current_phase = self.start_phase
-            self.load_phase_train_state()
-        else:
-            # start from beginning
-            self.current_epoch = 0
-            self.start_phase = self.phases[0]
+        custom_init_weight = self.custom_init_weight
+        if self.continue_training:
+            load_success = self.load_phase_train_state(self.start_phase, self.start_epoch)
+            if load_success:
+                custom_init_weight = None
+
+        model = self.model
+        if not isinstance(model, (list, tuple)):
+            model = [self.model]
+        for i, m in enumerate(model):
+            if custom_init_weight is not None:
+                m.apply(custom_init_weight)
+            if isinstance(self.output_device, int):
+                m.cuda(self.output_device)
+        self.logger.info('initialized train state, to cuda device %s' % str(self.output_device))
 
     def save_model(self, epoch=-1, model_index=None):
         if not isinstance(self.model, (list, tuple)):
@@ -81,39 +99,35 @@ class TrainGAN(Train):
             models = self.model
         if model_index is None:
             model_index = list(range(len(models)))
-        pt_filename = 'model_%s_%d_epoch_{}.pt'.format(self.current_phase, epoch)
+        pt_filename = 'model_%s_%d_%d.pt'
         for index in model_index:
             model = models[index]
-            torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
+            torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % (self.current_phase, epoch, index)))
         self.logger.info('saved model of phase %s, epoch %d under %s' % (self.current_phase, epoch, self.model_save_dir))
 
     def run_train(self):
         self.init_train_state()
         self.dis_loss_list, self.gen_loss_list = [], []
-        start_phase_idx = self.phases.index(self.start_phase)
-        for phase_idx, phase in enumerate(self.phases[start_phase_idx:]):
-            self.current_phase = phase
-            self.current_phase_epochs = self.phase_epochs[self.current_phase]
+        self.current_phase_idx = self.phases.index(self.start_phase)
+        while self.current_phase_idx < len(self.phases):
+            self.current_phase = self.phases[self.current_phase_idx]
+            self.current_epoch = self.start_epoch
+            self.current_phase_epochs = self.phase_epochs[self.current_phase_idx]
+            self.current_phase_train_func = self.phase_train_func[self.current_phase_idx]
 
-            print('starting phase %s' % phase)
-            if phase == 'pre_gen':
-                self.train_generator()
-            elif phase == 'pre_dis':
-                self.train_discriminator()
-            elif phase == 'adv':
-                self.run_adv_training()
-            else:
-                raise ValueError('unknown phase %s' % phase)
-
-            self.save_phase_train_state()
+            print('starting phase %s, totally %d epochs' % (self.current_phase, self.current_phase_epochs))
+            if self.start_epoch < self.current_phase_epochs:
+                self.current_phase_train_func()
+                self.save_phase_train_state(self.current_phase, self.current_epoch)
             self.start_epoch = 0
+            self.current_phase_idx += 1
 
         self.save_model(-1)
-        log_dir = self.config_dict['output_arg']['log_dir']
-        plot_loss(self.dis_loss_list, 'discriminator loss',
-                  save_path=os.path.join(log_dir, 'discriminator_loss.png'), show=True)
-        plot_loss(self.gen_loss_list, 'generator loss',
-                  save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
+        # log_dir = self.config_dict['output_arg']['log_dir']
+        # plot_loss(self.dis_loss_list, 'discriminator loss',
+        #           save_path=os.path.join(log_dir, 'discriminator_loss.png'), show=True)
+        # plot_loss(self.gen_loss_list, 'generator loss',
+        #           save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
         # self.save_properties()
 
     def run_adv_training(self):
@@ -143,7 +157,7 @@ class TrainGAN(Train):
 
     def on_epoch_end(self):
         if self.save_train_state_itv > 0 and (self.current_epoch+1) % self.save_train_state_itv == 0:
-            self.save_phase_train_state()
+            self.save_phase_train_state(self.current_phase, self.current_epoch)
 
         if (self.current_epoch + 1) % self.model_save_step == 0:
             self.save_model(self.current_epoch, (0,))

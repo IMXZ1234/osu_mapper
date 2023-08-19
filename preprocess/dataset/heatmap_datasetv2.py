@@ -1,3 +1,6 @@
+import queue
+import sys
+sys.argv.append(r'/home/xiezheng/osu_mapper')
 import os
 import pickle
 import traceback
@@ -9,9 +12,13 @@ import numpy as np
 import slider
 import torch
 import torchaudio
+import multiprocessing
 
-from util import audio_util
-from util.plt_util import plot_signal
+import audio_util
+from plt_util import plot_signal
+import time
+# from util import audio_util
+# from util.plt_util import plot_signal
 
 
 def frames_to_time(length, sr, hop_length, n_fft):
@@ -228,35 +235,34 @@ def calculate_hitobject_meta(beatmap: slider.Beatmap, frame_times):
     # hit_object count within each mel frame
     # sliders or spinners are counted only once in the closest mel frame
     # circle count, slider count, spinner count, slider occupied, spinner occupied
-    ho_meta = np.zeros([3, total_frames])
+    ho_meta = np.zeros([5, total_frames])
     frame_bounds = (frame_times[:-1] + frame_times[1:]) / 2
     itv = np.diff(frame_bounds)
-    itv = np.concatenate(np.array([frame_bounds[0]]), itv, itv[-1:])
+    itv = np.concatenate([np.array([frame_bounds[0]]), itv, itv[-1:]])
     frame_idx = 0
     for ho in beatmap._hit_objects:
         time_start = ho.time // timedelta(milliseconds=1)
         while frame_idx < len(frame_bounds) and time_start > frame_bounds[frame_idx]:
             frame_idx += 1
-        start_frame_idx = frame_idx
         if isinstance(ho, slider.beatmap.Circle):
-            ho_meta[0, start_frame_idx] += 1
+            ho_meta[0, frame_idx] += 1
         else:
             time_end = ho.end_time // timedelta(milliseconds=1)
-            duration = time_end - time_start
             if isinstance(ho, slider.beatmap.Slider):
-                ho_meta[1, start_frame_idx] += 1
-                i = 4
+                ho_meta[1, frame_idx] += 1
+                i = 3
             elif isinstance(ho, slider.beatmap.Spinner):
-                ho_meta[2, start_frame_idx] += 1
-                i = 5
+                ho_meta[2, frame_idx] += 1
+                i = 4
             accumulate_start = time_start
-            while frame_idx < len(frame_bounds) and duration > frame_bounds[frame_idx]:
-                ho_meta[i, frame_idx] += frame_bounds[frame_idx] - accumulate_start
+            while frame_idx < len(frame_bounds) and time_end > frame_bounds[frame_idx]:
+                length_within_frame = frame_bounds[frame_idx] - accumulate_start
+                ho_meta[i, frame_idx] += length_within_frame
                 accumulate_start = frame_bounds[frame_idx]
                 frame_idx += 1
-            ho_meta[i, frame_idx] += time_end - frame_bounds[frame_idx]
-    ho_meta[4] /= itv
-    ho_meta[5] /= itv
+            ho_meta[i, frame_idx] += time_end - accumulate_start
+    ho_meta[3, :] = ho_meta[3, :] / itv
+    ho_meta[4, :] = ho_meta[4, :] / itv
     return ho_meta
 
 
@@ -268,13 +274,13 @@ def plot_label(label):
             ]
     ):
         plot_signal(signal, name)
-    for signal, name in zip(
-            label.T,
-            [
-                'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
-            ]
-    ):
-        plot_signal(signal[:5120], name)
+    # for signal, name in zip(
+    #         label.T,
+    #         [
+    #             'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+    #         ]
+    # ):
+    #     plot_signal(signal[:5120], name)
         
         
 def plot_meta(meta_data):
@@ -285,13 +291,13 @@ def plot_meta(meta_data):
             ]
     ):
         plot_signal(signal, name)
-    for signal, name in zip(
-            meta_data,
-            [
-                'circle_count', 'slider_count', 'spinner_count', 'slider_occupy', 'spinner_occupy'
-            ]
-    ):
-        plot_signal(signal[:5120], name)
+    # for signal, name in zip(
+    #         meta_data,
+    #         [
+    #             'circle_count', 'slider_count', 'spinner_count', 'slider_occupy', 'spinner_occupy'
+    #         ]
+    # ):
+    #     plot_signal(signal[:5120], name)
 
 
 def check_integrity(file_path):
@@ -312,8 +318,10 @@ class HeatmapDatasetv1:
         self.feature_args = feature_args
 
         self.sample_rate = mel_args.get('sample_rate', 22000)
-        self.n_fft = mel_args.get('n_fft', 2048)
-        self.hop_length = mel_args.get('hop_length', (self.sample_rate // 1000) * 6)
+        # 23.27 ms
+        self.n_fft = mel_args.get('n_fft', 512)
+        # 220 samples, 10 ms
+        self.hop_length = mel_args.get('hop_length', (self.sample_rate // 1000) * 10)
         self.n_mels = mel_args.get('n_mels', 64)
 
         self.coeff_approach_rate = feature_args.get('coeff_approach_rate', 0.25)
@@ -334,6 +342,7 @@ class HeatmapDatasetv1:
             mel_scale="htk",
         )
         # time duration of a single mel frame, in ms
+        # ~93 ms
         self.frame_duration = 1000 * self.n_fft // self.sample_rate
 
     def process_sample(self, audio_data, sr, beatmap=None, meta_dict=None):
@@ -375,6 +384,18 @@ class HeatmapDatasetv1:
         """
         will save processed label under data_dir
         """
+
+        with open(os.path.join(meta_filepath), 'r') as f:
+            meta_dict_list = json.load(f)
+        for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list):
+            self.process_beatmap_meta_dict(
+                beatmap_meta_dict, save_dir, osz_dir, temp_dir
+            )
+        # for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list.values()):
+            # str
+
+    def process_beatmap_meta_dict(self, beatmap_meta_dict, save_dir, osz_dir, temp_dir):
+        # print('in process')
         tgt_mel_dir = os.path.join(save_dir, 'mel')
         tgt_meta_dir = os.path.join(save_dir, 'meta')
         tgt_label_dir = os.path.join(save_dir, 'label')
@@ -383,130 +404,189 @@ class HeatmapDatasetv1:
         os.makedirs(tgt_label_dir, exist_ok=True)
         os.makedirs(tgt_meta_dir, exist_ok=True)
         os.makedirs(tgt_info_dir, exist_ok=True)
+        beatmap_id, beatmapset_id = beatmap_meta_dict['beatmap_id'], beatmap_meta_dict['beatmapset_id']
+        mel_path = os.path.join(tgt_mel_dir, beatmapset_id + '.pkl')
+        label_path = os.path.join(tgt_label_dir, beatmap_id + '.pkl')
+        meta_path = os.path.join(tgt_meta_dir, beatmap_id + '.pkl')
+        info_path = os.path.join(tgt_info_dir, beatmap_id + '.pkl')
 
-        with open(os.path.join(meta_filepath), 'r') as f:
-            meta_dict_list = json.load(f)
-        for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list.values()):
-            # str
-            beatmap_id, beatmapset_id = beatmap_meta_dict['beatmap_id'], beatmap_meta_dict['beatmapset_id']
-            mel_path = os.path.join(tgt_mel_dir, beatmapset_id + '.pkl')
-            label_path = os.path.join(tgt_label_dir, beatmap_id + '.pkl')
-            meta_path = os.path.join(tgt_meta_dir, beatmap_id + '.pkl')
-            info_path = os.path.join(tgt_info_dir, beatmap_id + '.pkl')
+        mel_processed = os.path.exists(mel_path)
+        label_processed = os.path.exists(label_path)
+        meta_processed = os.path.exists(meta_path)
+        info_processed = os.path.exists(info_path)
+        if mel_processed and label_processed and meta_processed and info_processed:
+            print('skipping %s' % beatmap_id)
+            return
 
-            mel_processed = os.path.exists(mel_path)
-            label_processed = os.path.exists(label_path)
-            meta_processed = os.path.exists(meta_path)
-            info_processed = os.path.exists(info_path)
-            if mel_processed and label_processed and meta_processed and info_processed:
-                print('skipping %s' % beatmap_id)
-                continue
+        osz_path = os.path.join(osz_dir, beatmapset_id + '.osz')
+        if not os.path.exists(osz_path):
+            print('osz not exist!')
+            return
+        if not check_integrity(osz_path):
+            print('osz corrupted %s' % beatmapset_id)
+            return
 
-            osz_path = os.path.join(osz_dir, beatmapset_id + '.osz')
-            if not check_integrity(osz_path):
-                print('osz corrupted %s' % beatmapset_id)
-                continue
+        osz_file = zipfile.ZipFile(osz_path, 'r')
+        try:
+            all_beatmaps = list(slider.Beatmap.from_osz_file(osz_file).values())
+        except Exception:
+            print('beatmap parse failed %s' % beatmapset_id)
+            return
+        # print([(bm.beatmap_id, bm.beatmap_set_id) for bm in all_beatmaps])
+        beatmap = None
+        for bm in all_beatmaps:
+            if bm.version == beatmap_meta_dict['version'] or bm.beatmap_id == int(beatmap_id):
+                beatmap = bm
+        if beatmap is None:
+            print('beatmap %s not found in osz %s' % (beatmap_id, osz_path))
+            return
+        print('processing beatmap %s' % beatmap_id)
+        if not os.path.exists(mel_path):
+            # process mel
+            audio_filename = all_beatmaps[0].audio_filename
 
-            osz_file = zipfile.ZipFile(osz_path, 'r')
+            for beatmap in all_beatmaps:
+                if beatmap.audio_filename != audio_filename:
+                    print('multiple audio file in same beatmapset!')
+                    continue
+
+            on_disk_audio_filepath = os.path.join(temp_dir, beatmapset_id + os.path.splitext(audio_filename)[1])
             try:
-                all_beatmaps = list(slider.Beatmap.from_osz_file(osz_file).values())
+                with open(on_disk_audio_filepath, 'wb') as f:
+                    f.write(osz_file.read(audio_filename))
             except Exception:
-                print('beatmap parse failed %s' % beatmapset_id)
-                continue
-            # print([(bm.beatmap_id, bm.beatmap_set_id) for bm in all_beatmaps])
-            beatmap = None
-            for bm in all_beatmaps:
-                if bm.version == beatmap_meta_dict['version'] or bm.beatmap_id == int(beatmap_id):
-                    beatmap = bm
-            if beatmap is None:
-                print('beatmap %s not found in osz %s' % (beatmap_id, osz_path))
-                continue
-            print('processing beatmap %s' % beatmap_id)
-            if not os.path.exists(mel_path):
-                # process mel
-                audio_filename = all_beatmaps[0].audio_filename
+                print('no audio %s' % audio_filename)
+                return
+            try:
+                audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath)
+            except Exception:
+                print('fail to load audio %s' % beatmapset_id)
+                return
+            os.remove(on_disk_audio_filepath)
 
-                for beatmap in all_beatmaps:
-                    if beatmap.audio_filename != audio_filename:
-                        print('multiple audio file in same beatmapset!')
-                        continue
+            mel_spec = self.process_audio(audio_data, sr)
+            with open(mel_path, 'wb') as f:
+                pickle.dump(mel_spec, f)
+        else:
+            with open(mel_path, 'rb') as f:
+                mel_spec = pickle.load(f)
 
-                on_disk_audio_filepath = os.path.join(temp_dir, beatmapset_id + os.path.splitext(audio_filename)[1])
+        if not label_processed:
+            try:
+                # process label
+                sample_label = self.process_label(beatmap, mel_spec)
+            except Exception:
+                traceback.print_exc()
+                print('failed process_label %s_%s' % (beatmapset_id, beatmap_id))
+                return
+            with open(label_path, 'wb') as f:
+                pickle.dump(sample_label, f)
+
+            # vis
+            # if sample_idx in range(1):
+            #     plot_label(sample_label)
+            # # process data from mel
+            # sample_data = self.process_data(beatmap, mel_spec)
+            # with open(data_path, 'wb') as f:
+            #     pickle.dump(sample_data, f)
+            # process meta from mel
+        if not meta_processed:
+            try:
+                meta_data = self.process_meta(beatmap, mel_spec, beatmap_meta_dict)
+            except Exception:
+                traceback.print_exc()
+                print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
+                return
+            with open(meta_path, 'wb') as f:
+                pickle.dump(meta_data, f)
+            # if sample_idx in range(1):
+            #     plot_meta(meta_data)
+
+        if not info_processed:
+            try:
+                sample_info = self.process_info(mel_spec, beatmapset_id)
+            except Exception:
+                traceback.print_exc()
+                print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
+                return
+            with open(info_path, 'wb') as f:
+                pickle.dump(sample_info, f)
+
+
+def multiprocessing_prepare_data(nproc=32):
+    meta_root = r'/home/xiezheng/osu_mapper/resources/data/osz'
+    all_meta = os.listdir(meta_root)
+    all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
+
+    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed'
+    os.makedirs(preprocessed_root, exist_ok=True)
+
+    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed/processed_ids.txt'
+    if not os.path.exists(processed_beatmapid_log_file):
+        open(processed_beatmapid_log_file, 'w')
+    processed_beatmapid = set()
+    with open(processed_beatmapid_log_file, 'r') as logf:
+        for line in logf.readlines():
+            processed_beatmapid.add(int(line))
+
+    q = multiprocessing.Queue(maxsize=256)
+    processes = [multiprocessing.Process(target=worker, args=(q, i)) for i in range(nproc)]
+
+    for process in processes:
+        process.start()
+
+    with open(processed_beatmapid_log_file, 'a') as logf:
+        for meta_filepath in all_meta_file_path:
+            with open(os.path.join(meta_filepath), 'r') as f:
                 try:
-                    with open(on_disk_audio_filepath, 'wb') as f:
-                        f.write(osz_file.read(audio_filename))
+                    meta_dict_list = json.load(f)
                 except Exception:
-                    print('no audio %s' % audio_filename)
                     continue
-                try:
-                    audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath)
-                except Exception:
-                    print('fail to load audio %s' % beatmapset_id)
-                    continue
-                os.remove(on_disk_audio_filepath)
+            for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list):
+                beatmap_id, beatmapset_id = int(beatmap_meta_dict['beatmap_id']), int(beatmap_meta_dict['beatmapset_id'])
+                if beatmap_id not in processed_beatmapid:
+                    processed_beatmapid.add(beatmap_id)
+                    logf.writelines([str(beatmap_id) + '\n'])
+                    # print('add task %d' % beatmap_id)
+                    q.put(beatmap_meta_dict, block=True, timeout=None)
 
-                mel_spec = self.process_audio(audio_data, sr)
-                with open(mel_path, 'wb') as f:
-                    pickle.dump(mel_spec, f)
-            else:
-                with open(mel_path, 'rb') as f:
-                    mel_spec = pickle.load(f)
+    for i in range(nproc):
+        q.put(None)
 
-            if not label_processed:
-                try:
-                    # process label
-                    sample_label = self.process_label(beatmap, mel_spec)
-                except Exception:
-                    traceback.print_exc()
-                    print('failed process_label %s_%s' % (beatmapset_id, beatmap_id))
-                    continue
-                with open(label_path, 'wb') as f:
-                    pickle.dump(sample_label, f)
 
-                # vis
-                # if sample_idx in range(10):
-                #     # for signal, name in zip(
-                #     #         [ms_per_beat, ho_density, occupied_proportion],
-                #     #         ['ms_per_beat', 'ho_density', 'blank_proportion']
-                #     # ):
-                #     #     plot_signal(signal, name)
-                plot_label(sample_label)
-                # # process data from mel
-                # sample_data = self.process_data(beatmap, mel_spec)
-                # with open(data_path, 'wb') as f:
-                #     pickle.dump(sample_data, f)
-                # process meta from mel
-            if not meta_processed:
-                try:
-                    meta_data = self.process_meta(beatmap, mel_spec, beatmap_meta_dict)
-                except Exception:
-                    traceback.print_exc()
-                    print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
-                    continue
-                with open(meta_path, 'wb') as f:
-                    pickle.dump(meta_data, f)
-                plot_meta(meta_data)
-
-            if not info_processed:
-                try:
-                    sample_info = self.process_info(mel_spec, beatmapset_id)
-                except Exception:
-                    traceback.print_exc()
-                    print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
-                    continue
-                with open(info_path, 'wb') as f:
-                    pickle.dump(sample_info, f)
+def worker(q: multiprocessing.Queue, i):
+    # print('worker!')
+    mel_args = {
+        'sample_rate': 22000,
+        'n_fft': 512,
+        'hop_length': 220,
+        'n_mels': 40,
+    }
+    ds = HeatmapDatasetv1(mel_args, {})
+    temp_dir = r'/home/data1/xiezheng/osu_mapper/temp/%d' % i
+    os.makedirs(temp_dir, exist_ok=True)
+    while True:
+        beatmap_meta_dict = q.get(block=True, timeout=None)
+        if beatmap_meta_dict is None:
+            # print('end msg')
+            return 0
+        ds.process_beatmap_meta_dict(
+            beatmap_meta_dict,
+            r'/home/data1/xiezheng/osu_mapper/preprocessed',
+            r'/home/data1/xiezheng/osu_mapper/beatmapsets',
+            temp_dir,
+        )
 
 
 if __name__ == '__main__':
-    ds = HeatmapDatasetv1({}, {})
+    multiprocessing_prepare_data(16)
     # ds.from_meta_file(
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\heatmapv1',
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230320.json',
     #     r'F:\beatmapsets',
     # )
-    ds.from_meta_file(
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed',
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\osz\meta_2010-04-01.json',
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\beatmapsets',
-    )
+    # ds.from_meta_file(
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed',
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\osz\meta_2010-04-01.json',
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\beatmapsets',
+    # )

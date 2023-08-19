@@ -1,13 +1,12 @@
+import itertools
 import math
 import os
 import time
 from datetime import timedelta
-import slider
 from zipfile import ZipFile
-import itertools
-import numpy as np
 
-from util import general_util
+import numpy as np
+import slider
 
 empty_beatmap = '''
 osu file format v14

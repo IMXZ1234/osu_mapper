@@ -342,3 +342,73 @@ def output_collate_fn_dfo(epoch_output_list):
             # concatenate tensors at sample dim(the first dim)
             collated[i] = torch.cat(collated[i])
     return collated
+
+
+def recursive_to_tensor(item, dtype):
+    if isinstance(item, np.ndarray):
+        item = torch.tensor(item, dtype=dtype)
+    elif isinstance(item, list):
+        for idx in range(len(item)):
+            item[idx] = recursive_to_tensor(item[idx], dtype)
+    return item
+
+
+def recursive_stack(item):
+    if isinstance(item, list):
+        for idx in range(len(item)):
+            if isinstance(item[idx], list):
+                if isinstance(item[idx][0], torch.Tensor):
+                    item[idx] = torch.stack(item[idx], dim=0)
+                else:
+                    recursive_stack(item[idx])
+    return item
+
+
+def recursive_zip(original, item=None, path=None):
+    """
+    Only zip the deepest iterable
+
+    :param original:
+    :param item:
+    :param path:
+    :return: hierarchical list structure
+    """
+    if item is None:
+        # a representative of the structure to be zipped
+        item = original[0]
+        # return if nothing can be zipped
+        if not isinstance(item, list):
+            return original
+        path = []
+    zipped_list = []
+    for pos, item_ in enumerate(item):
+        # print('pos')
+        # print(pos)
+        # print('item_')
+        # print(item_)
+        # tuples are viewd as a whole and are not recursively processed!
+        if isinstance(item_, list):
+            zipped_list.append(recursive_zip(original, item_, path + [pos]))
+        else:
+            inner_zip = []
+            for zip_input_idx in range(len(original)):
+                item__ = original[zip_input_idx]
+                for spec in path:
+                    item__ = item__[spec]
+                inner_zip.append(item__[pos])
+            zipped_list.append(inner_zip)
+    return zipped_list
+
+
+def tensor_list_recursive_stack(sample_list):
+    """
+    everything is tensor
+
+    :param sample_list:
+    :return:
+    """
+    collated = []
+    # batch_data, batch_label, batch_index
+    for i in range(len(sample_list[0])):
+        collated.append(torch.stack([torch.tensor(sample_data[i], dtype=torch.float32) for sample_data in sample_list]))
+    return collated

@@ -2,7 +2,9 @@ import json
 import os
 
 
-period_meta_dir = r'C:\Users\asus\coding\python\osu_mapper\resources\data\osz'
+# period_meta_dir = r'C:\Users\asus\coding\python\osu_mapper\resources\data\osz'
+# agg_meta_filepath = r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230530.json'
+period_meta_dir = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\osz'
 agg_meta_filepath = r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230530.json'
 agg_meta_dict = {}
 all_beatmapsetids = set()

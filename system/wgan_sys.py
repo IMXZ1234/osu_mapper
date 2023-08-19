@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from system.gan_sys import TrainGAN
 from util.general_util import recursive_wrap_data
-from util.plt_util import plot_loss
+from util.plt_util import plot_loss, plot_signal
 from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger
 import tensorboardX
 
@@ -23,8 +23,8 @@ class TrainWGAN(TrainGAN):
             self.lambda_gp = self.config_dict['train_arg']['lambda_gp']
         else:
             self.lambda_gp = None
-        print('self.lambda_gp')
-        print(self.lambda_gp)
+        # print('self.lambda_gp')
+        # print(self.lambda_gp)
         log_dir = self.config_dict['output_arg']['log_dir']
         self.tensorboard_writer = tensorboardX.SummaryWriter(log_dir)
 
@@ -125,9 +125,9 @@ class TrainWGAN(TrainGAN):
         sys.stdout.flush()
         # print('sample')
         sample = gen(cond_data)[0].cpu().detach().numpy()
-        self.logger.info(str(np.where(sample[:, 0] > 0.5, 1, 0)[:32]))
-        self.logger.info(str(np.where(sample[:, 1] > 0.5, 2, 0)[:32]))
-        self.logger.info(str(sample[:, 2:][:16]))
+        # self.logger.info(str(np.where(sample[:, 0] > 0.5, 1, 0)[:32]))
+        # self.logger.info(str(np.where(sample[:, 1] > 0.5, 2, 0)[:32]))
+        # self.logger.info(str(sample[:, 2:][:16]))
 
         return epoch_gen_loss
 
@@ -167,12 +167,6 @@ class TrainWGAN(TrainGAN):
             # print(fake.requires_grad)
             # fake
             dis_fake_cls_out = dis(cond_data, fake)
-            # print('dis_fake_cls_out')
-            # print(dis_fake_cls_out)
-            # total_acc += torch.sum(dis_fake_cls_out < 0.5).data.item()
-            # print('dis_real_cls_out')
-            # print(dis_real_cls_out)
-            # total_acc += torch.sum(dis_real_cls_out > 0.5).data.item()
             # optimization direction: larger score for real samples, smaller score for fake samples
             # smaller the loss, better the discriminator performance
             real_loss = -torch.mean(dis_real_cls_out)
@@ -234,8 +228,8 @@ class TrainWGANWithinBatch(TrainWGAN):
             self.lambda_gp = self.config_dict['train_arg']['lambda_gp']
         else:
             self.lambda_gp = None
-        print('self.lambda_gp')
-        print(self.lambda_gp)
+        # print('self.lambda_gp')
+        # print(self.lambda_gp)
 
     def run_train(self):
         self.epoch_gp_loss = []
@@ -348,11 +342,11 @@ class TrainWGANWithinBatch(TrainWGAN):
         alpha = torch.rand([batch_size] + list(real_samples.shape[1:]), device=real_samples.device)
         # Get random interpolation between real and fake samples
         interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
-        d_interpolates = dis(cond_data, interpolates)
-        fake = torch.ones([batch_size, 1], dtype=torch.float, device=real_samples.device)
+        interpolates_validity = dis(cond_data, interpolates)
+        fake = torch.ones([batch_size, 1], dtype=torch.float, device=real_samples.device, requires_grad=False)
         # Get gradient w.r.t. interpolates
         gradients = autograd.grad(
-            outputs=d_interpolates,
+            outputs=interpolates_validity,
             inputs=interpolates,
             grad_outputs=fake,
             create_graph=True,
@@ -503,13 +497,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         self.lambda_cls = self.config_dict['train_arg']['lambda_cls']
 
     def run_train(self):
-        self.epoch_gp_loss = []
+        print('Start Train...')
 
         super(TrainWGANWithinBatch, self).run_train()
 
-        log_dir = self.config_dict['output_arg']['log_dir']
-        plot_loss(self.gen_loss_list, 'generator loss',
-                  save_path=os.path.join(log_dir, 'generator_loss.png'), show=True)
+        # plot_loss(self.gen_loss_list, 'generator loss',
+        #           save_path=os.path.join(self.log_dir, 'generator_loss.png'), show=True)
 
     def run_adv_training(self):
         # # ADVERSARIAL TRAINING
@@ -518,9 +511,9 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         train_arg = self.config_dict['train_arg']
         init_adv_generator_epoch, init_adv_discriminator_epoch =\
             train_arg['adv_generator_epoch'], train_arg['adv_discriminator_epoch']
-        # decrease generator's probability of getting trained
-        gen_lambda = train_arg['gen_lambda']
-        gen_lambda_step = train_arg['gen_lambda_step']
+        # # decrease generator's probability of getting trained
+        # gen_lambda = train_arg['gen_lambda']
+        # gen_lambda_step = train_arg['gen_lambda_step']
         self.log_exp_replay_prob = train_arg['log_exp_replay_prob']
 
         self.exp_replay_buffer = collections.deque()
@@ -538,6 +531,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         for epoch in range(self.current_epoch, self.epoch):
             self.logger.info('\n--------\nEPOCH %d\n--------' % epoch)
             self.logger.info('lr %.8f' % self.optimizer[0].param_groups[0]['lr'])
+            self.tensorboard_writer.add_scalar('lr', self.optimizer[0].param_groups[0]['lr'], epoch)
             epoch_gen_loss = 0
             total_loss = 0
             total_sample_num = 0
@@ -549,8 +543,10 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
             adv_generator_epoch = init_adv_generator_epoch * adv_generator_epoch_sched.cur_milestone_output()
             self.logger.info('adv_generator_epoch %.8f' % adv_generator_epoch)
+            self.tensorboard_writer.add_scalar('adv_generator_epoch', adv_generator_epoch, epoch)
             noise_level = noise_level_sched.cur_milestone_output()
             self.logger.info('noise_level %.8f' % noise_level)
+            self.tensorboard_writer.add_scalar('noise_level', noise_level, epoch)
 
             self.train_iter.dataset.set_noise_level(noise_level)
 
@@ -569,6 +565,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 cond_data = recursive_wrap_data(cond_data, self.output_device)
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
                 cls_label = recursive_wrap_data(cls_label, self.output_device)
+                # print(cls_label.shape)
 
                 # train generator batch
                 if batch in train_gen_batches or (epoch_gen_loss / total_sample_num) > 5:
@@ -613,11 +610,11 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
-            self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss)
+            self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss, epoch)
             self.gen_loss_list.append(avg_gen_loss)
 
-            sample = gen(cond_data)[0].cpu().detach().numpy()
-            self.plot_gen_output(sample, epoch)
+            sample = gen((cond_data, cls_label))[0].cpu().detach().numpy()
+            self.log_gen_output(sample, epoch)
 
             avg_loss = total_loss / total_sample_num
             avg_fake_loss = epoch_fake_loss / total_sample_num
@@ -626,17 +623,17 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.dis_loss_list.append(avg_loss)
 
             self.logger.info('avg_loss = %.8f' % avg_loss)
-            self.tensorboard_writer.add_scalar('avg_loss', avg_loss)
+            self.tensorboard_writer.add_scalar('avg_loss', avg_loss, epoch)
             self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
-            self.tensorboard_writer.add_scalar('avg_fake_loss', avg_fake_loss)
+            self.tensorboard_writer.add_scalar('avg_fake_loss', avg_fake_loss, epoch)
             self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
-            self.tensorboard_writer.add_scalar('avg_real_loss', avg_real_loss)
+            self.tensorboard_writer.add_scalar('avg_real_loss', avg_real_loss, epoch)
             self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
-            self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss)
+            self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss, epoch)
             if self.lambda_gp is not None:
                 avg_gp_loss = epoch_gp_loss / len(self.train_iter)
                 self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
-                self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss)
+                self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, epoch)
 
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
@@ -661,9 +658,9 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # real
         dis_real_validity_out, dis_real_cls_out = dis(cond_data, real_gen_output)
         with torch.no_grad():
-            fake = gen(cond_data, cls_label)
+            fake = gen((cond_data, cls_label))
             if random.random() < self.log_exp_replay_prob:
-                self.exp_replay_buffer.append([cond_data, fake, real_gen_output, cls_label, self.exp_replay_wait])
+                self.exp_replay_buffer.append([cond_data, real_gen_output, fake, cls_label, self.exp_replay_wait])
 
         # print('fake')
         dis_fake_validity_out, dis_fake_cls_out = dis(cond_data, fake)
@@ -676,7 +673,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             torch.cat([cls_label, cls_label], dim=0)
         )
         # best both be negative
-        loss = real_loss + fake_loss + cls_loss
+        loss = real_loss + fake_loss + self.lambda_cls * cls_loss
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
@@ -715,15 +712,19 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # real_gen_output_as_input = torch.cat([torch.zeros([batch_size, 1]), real_gen_output[:, :-1]], dim=1)
         optimizer_D.zero_grad()
         # real
-        dis_real_validity_out, _ = dis(cond_data, real_gen_output)
-        dis_fake_validity_out, _ = dis(cond_data, fake)
+        dis_real_validity_out, dis_real_cls_out = dis(cond_data, real_gen_output)
+        dis_fake_validity_out, dis_fake_cls_out = dis(cond_data, fake)
 
         # optimization direction: larger score for real samples, smaller score for fake samples
         # smaller the loss, better the discriminator performance
         real_loss = -torch.mean(dis_real_validity_out)
         fake_loss = torch.mean(dis_fake_validity_out)
+        cls_loss = torch.nn.functional.mse_loss(
+            torch.cat([dis_real_cls_out, dis_fake_cls_out], dim=0),
+            torch.cat([cls_label, cls_label], dim=0)
+        )
         # best both be negative
-        loss = real_loss + fake_loss
+        loss = real_loss + fake_loss + self.lambda_cls * cls_loss
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
@@ -752,7 +753,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         """
         Using Wesserstein GAN Loss
         """
-        cond_data, = batch_items
+        cond_data, real_gen_output, cls_label = batch_items
 
         optimizer_G, optimizer_D = self.optimizer[0], self.optimizer[1]
         # loss_G, loss_D = self.loss
@@ -760,7 +761,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         sys.stdout.flush()
 
-        fake = gen(cond_data)
+        fake = gen((cond_data, cls_label))
         dis_validity_out, dis_cls_out = dis(cond_data, fake)
 
         optimizer_G.zero_grad()
@@ -768,6 +769,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # smaller the loss, better the generator performance
         gen_loss = -torch.mean(dis_validity_out)
 
+        cls_loss = torch.nn.functional.mse_loss(
+            dis_cls_out,
+            cls_label,
+        )
+        # best both be negative
+        gen_loss = gen_loss + self.lambda_cls * cls_loss
         gen_loss.backward()
 
         if self.grad_alter_fn is not None:
@@ -776,3 +783,37 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         optimizer_G.step()
 
         return gen_loss.item()
+
+    def log_gen_output(self, gen_output, epoch):
+        output_dir = os.path.join(self.log_dir, 'output', str(epoch))
+        os.makedirs(output_dir, exist_ok=True)
+        for signal, name in zip(
+            gen_output,
+            [
+                'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+            ]
+        ):
+            fig_array, fig = plot_signal(signal, name,
+                                         save_path=os.path.join(output_dir, name + '.jpg'),
+                                         show=False)
+            self.tensorboard_writer.add_figure(name, fig, epoch)
+
+    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
+        """Calculates the gradient penalty loss for WGAN GP"""
+        gen, dis = self.model
+        batch_size = real_samples.shape[0]
+        # Random weight term for interpolation between real and fake samples
+        alpha = torch.rand([batch_size] + list(real_samples.shape[1:]), device=real_samples.device)
+        # Get random interpolation between real and fake samples
+        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+        interpolates_validity, _ = dis(cond_data, interpolates)
+        fake = torch.ones([batch_size, 1], dtype=torch.float, device=real_samples.device, requires_grad=False)
+        # Get gradient w.r.t. interpolates
+        gradients = autograd.grad(
+            outputs=interpolates_validity,
+            inputs=interpolates,
+            grad_outputs=fake,
+        )[0]
+        gradients = gradients.reshape(batch_size, -1)
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty

@@ -3,6 +3,8 @@ import os
 import torch
 from torch.autograd import Variable
 
+from torch import nn
+
 
 def dynamic_import(path):
     components = path.split('.')
@@ -10,6 +12,25 @@ def dynamic_import(path):
     for comp in components[1:]:
         mod = getattr(mod, comp)
     return mod
+
+
+def recursive_detach(items):
+    if isinstance(items, torch.Tensor):
+        return items.detach()
+    elif isinstance(items, list):
+        for i, item in enumerate(items):
+            items[i] = recursive_detach(item)
+    else:
+        return items
+
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.normal_(m.weight, std=0.01)
+        torch.nn.init.normal_(m.bias, std=0.01)
+    elif type(m) == nn.Conv1d:
+        torch.nn.init.normal_(m.weight, std=0.01)
+        torch.nn.init.normal_(m.bias, std=0.01)
 
 
 def recursive_to_cpu(value):
