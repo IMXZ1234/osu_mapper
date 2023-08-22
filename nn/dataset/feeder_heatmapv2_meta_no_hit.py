@@ -1,10 +1,13 @@
 import math
-import os
-import pickle
+import random
+import itertools
 
 import numpy as np
+import pickle
 import torch
+import os
 from torch.utils import data
+from torch.nn import functional as F
 
 
 def normal_at(miu, sigma, length):
@@ -36,7 +39,7 @@ def preprocess_label(label, level_coeff):
     rescale hit signal to (0.1, 0.9) to avoid extreme value
     """
     label[:, :3] = 0.8 * label[:, :3] + 0.1
-    label[:, :3] += level_coeff * np.random.randn(*label[:, :3].shape) / 64
+    label[:, :3] += level_coeff * np.random.randn(*label[:, :3].shape) / 32
     label[:, 3:] += level_coeff * np.random.randn(*label[:, 3:].shape) / 4096
     return label
 
@@ -196,11 +199,11 @@ class SubseqFeeder(torch.utils.data.Dataset):
         subseq_index = 0
         # print('len(self.info)')
         # print(len(self.info))
-        for idx, (beatmapid, (sample_len, beatmapsetid, prelude_end_pos)) in enumerate(self.info.items()):
+        for idx, (beatmapid, (sample_len, beatmapsetid)) in enumerate(self.info.items()):
             if self.take_first is not None and idx > self.take_first:
                 break
             self.sample_subseq[beatmapid] = []
-            in_sample_subseq_num = (sample_len - prelude_end_pos) / self.subseq_len
+            in_sample_subseq_num = sample_len / self.subseq_len
 
             if self.pad:
                 in_sample_subseq_num = math.ceil(in_sample_subseq_num)
@@ -224,7 +227,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                     rand_end = sample_len - self.subseq_len
                     if rand_end <= 0:
                         continue
-                start_list = self.rand_inst.randint(prelude_end_pos, rand_end, size=[in_sample_subseq_num])
+                start_list = self.rand_inst.randint(rand_end, size=[in_sample_subseq_num])
                 for in_sample_subseq_idx in range(in_sample_subseq_num):
                     self.subseq_dict[subseq_index] = (beatmapid, beatmapsetid, start_list[in_sample_subseq_idx])
                     subseq_index += 1
@@ -280,6 +283,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # if subseq_idx == 0:
         #     print('np.max(data), np.min(data)')
         #     print(np.max(data), np.min(data))
+        label = label[:, 3:]
         return data, label, meta
 
     def __len__(self):

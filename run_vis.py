@@ -1,21 +1,18 @@
 import os
+import pickle
 from datetime import timedelta
-from typing import Generator
 
-import librosa
-import audioread
-
-from vis import vis_model
-
+import numpy as np
+import slider
 import torch
 import torchaudio
 from matplotlib import pyplot as plt
-import pickle
-import numpy as np
-import slider
+from tqdm import tqdm
+
 from nn.dataset import dataset_util
-from util import beatmap_util, audio_util
 from preprocess import db, filter
+from util import beatmap_util, audio_util, plt_util
+
 np.set_printoptions(threshold=np.inf)
 
 
@@ -393,15 +390,117 @@ def process_label(label):
     return np.concatenate([heat_value, x[:, np.newaxis], y[:, np.newaxis]], axis=1)
 
 
+def view_ho_meta_subseq():
+    root_dir = r'/home/data1/xiezheng/osu_mapper/preprocessed/meta'
+    info_root_dir = r'/home/data1/xiezheng/osu_mapper/preprocessed/info'
+    subseq_len = 2560
+    num_subseq = 0
+
+    idx_low_slider_occupy = set()
+    slider_occupy_thresh = 0.001
+    idx_low_circle_count = set()
+    circle_count_thresh = 0.0001
+    idx_bad = set()
+
+    all_sample_len = []
+    all_circle_count = []
+    all_slider_occupy = []
+
+    rand_inst = np.random.RandomState(404)
+
+    for sample_ho_meta_filename in tqdm(os.listdir(root_dir)):
+        filepath = os.path.join(root_dir, sample_ho_meta_filename)
+        with open(filepath, 'rb') as f:
+            sample_ho_meta = pickle.load(f)
+        info_filepath = os.path.join(info_root_dir, sample_ho_meta_filename)
+        with open(info_filepath, 'rb') as f:
+            sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
+        sample_len = sample_ho_meta.shape[1]
+        all_sample_len.append(sample_len)
+        in_sample_subseq_num = sample_len // subseq_len
+        rand_end = sample_len - subseq_len
+        start_list = rand_inst.randint(prelude_end_pos, rand_end, size=[in_sample_subseq_num])
+        for i, start_pos in enumerate(start_list):
+            subseq_idx = i + num_subseq
+            subseq_ho_meta = sample_ho_meta[:, start_pos:start_pos+subseq_len]
+
+            # circle count, slider count, spinner count, slider occupied, spinner occupied
+            subseq_circle_count = np.mean(subseq_ho_meta[0])
+            subseq_slider_occupy = np.mean(subseq_ho_meta[3])
+
+            all_circle_count.append(subseq_circle_count)
+            all_slider_occupy.append(subseq_slider_occupy)
+
+            if subseq_circle_count < circle_count_thresh:
+                idx_low_circle_count.add(subseq_idx)
+
+            if subseq_slider_occupy < slider_occupy_thresh:
+                idx_low_slider_occupy.add(subseq_idx)
+
+            if subseq_slider_occupy < slider_occupy_thresh and subseq_circle_count < circle_count_thresh:
+                idx_bad.add(subseq_idx)
+
+        num_subseq += len(start_list)
+
+    save_hist(all_sample_len, 'all_sample_len')
+    save_hist(all_slider_occupy, 'all_slider_occupy', (0, 0.7))
+    save_hist(all_circle_count, 'all_circle_count', (0, 0.1))
+
+    # 3d
+    fig = plt.figure()
+    plt.hist2d(all_circle_count, all_slider_occupy, bins=200, range=((0, 0.1), (0, 0.7)))
+    plt.title('hist2d')
+    plt.savefig(
+        os.path.join(
+            r'/home/data1/xiezheng/osu_mapper/vis',
+            'hist2d.jpg'
+        )
+    )
+
+    print(num_subseq)
+    print(len(idx_low_circle_count))
+    print(len(idx_low_slider_occupy))
+    print(len(idx_bad))
+
+
+def save_hist(values, title, rg=None):
+    fig = plt.figure()
+    plt.hist(values, bins=200, range=rg)
+    plt.title(title)
+    plt.savefig(
+        os.path.join(
+            r'/home/data1/xiezheng/osu_mapper/vis',
+            title + '.jpg'
+        )
+    )
+
+
 if __name__ == '__main__':
-    with open(
-        r'D:\osu_mapper\resources\data\fit\label_pos_v2\label.pkl',
-        'rb'
-    ) as f:
-        label_list = pickle.load(f)
-    print(label_list[0])
-    processed = process_label(label_list[0])
-    print(processed)
+    view_ho_meta_subseq()
+    # with open(
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\label\40285.pkl',
+    #     'rb'
+    # ) as f:
+    #     label = pickle.load(f)
+    # with open(
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\info\40285.pkl',
+    #     'rb'
+    # ) as f:
+    #     sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
+    # print(prelude_end_pos)
+    # label = label[prelude_end_pos:prelude_end_pos + 200]
+    # for signal, name in zip(
+    #         label.T,
+    #         [
+    #             'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+    #         ]
+    # ):
+    #     print(np.min(signal), np.max(signal), np.mean(signal))
+    #     fig_array, fig = plt_util.plot_signal(signal, name,
+    #                                  save_path=None,
+    #                                  show=True)
+    # processed = process_label(label_list[0])
+    # print(processed)
     # mel_from_audio()
         # assert isinstance(beatmap, slider.Beatmap)
         # try:

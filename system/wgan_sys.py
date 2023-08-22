@@ -631,7 +631,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
             self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss, epoch)
             if self.lambda_gp is not None:
-                avg_gp_loss = epoch_gp_loss / len(self.train_iter)
+                avg_gp_loss = epoch_gp_loss / total_sample_num
                 self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
                 self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, epoch)
 
@@ -788,7 +788,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         output_dir = os.path.join(self.log_dir, 'output', str(epoch))
         os.makedirs(output_dir, exist_ok=True)
         for signal, name in zip(
-            gen_output,
+            gen_output.T,
             [
                 'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
             ]

@@ -3,6 +3,7 @@ import random
 import sys
 
 import torch
+from torch import nn
 from tqdm import tqdm
 
 from system.base_sys import Train
@@ -90,6 +91,23 @@ class TrainGAN(Train):
                 m.apply(custom_init_weight)
             if isinstance(self.output_device, int):
                 m.cuda(self.output_device)
+
+        # DataParallel
+        # self.logger.info('try to use data parallel on %s' % str(self.data_parallel_devices))
+        if self.data_parallel_devices is not None:
+            self.logger.info('using data parallel on %s' % str(self.data_parallel_devices))
+            if isinstance(self.model, (list, tuple)):
+                self.model = [nn.DataParallel(
+                    m,
+                    device_ids=self.data_parallel_devices,
+                    output_device=self.output_device
+                ) for m in self.model]
+            else:
+                self.model = nn.DataParallel(
+                    self.model,
+                    device_ids=self.data_parallel_devices,
+                    output_device=self.output_device
+                )
         self.logger.info('initialized train state, to cuda device %s' % str(self.output_device))
 
     def save_model(self, epoch=-1, model_index=None):

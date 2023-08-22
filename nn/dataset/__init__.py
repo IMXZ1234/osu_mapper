@@ -21,4 +21,5 @@ from . import (
     #
     # feeder_heatmapv1,
     feeder_heatmapv2_meta,
+    feeder_heatmapv2_meta_no_hit,
 )

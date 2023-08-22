@@ -10,6 +10,8 @@ import shutil
 from util import audio_util, beatmap_util
 
 USER_PROFILE = os.getenv('USERPROFILE')
+if USER_PROFILE is None:
+    USER_PROFILE = ''
 
 
 class OsuSongsDir:

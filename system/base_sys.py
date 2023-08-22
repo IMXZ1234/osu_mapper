@@ -16,6 +16,8 @@ from nn.dataset import collate_fn
 from nn.metrics import default_metrices
 from util.general_util import dynamic_import, recursive_to_cpu, recursive_wrap_data, recursive_detach, init_weights
 
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
 
 class Train:
     def __init__(self,
@@ -32,15 +34,8 @@ class Train:
             self.output_device = config_dict['output_device']
         else:
             self.output_device = 'cpu'
-
-        if 'train_type' in config_dict:
-            self.train_type = config_dict['train_type']
-            if self.train_type == 'gan':
-                self.use_ext_cond_data = train_arg['use_ext_cond_data'] if 'use_ext_cond_data' in train_arg else False
-                print(self.use_ext_cond_data)
-            # self.use_random_iter = kwargs['use_random_iter']
-        else:
-            self.train_type = 'default'
+        self.data_parallel_devices = config_dict.get('data_parallel_devices', None)
+        # print('self.data_parallel_devices', self.data_parallel_devices)
 
         if self.task_type == 'classification':
             if 'num_classes' in config_dict and config_dict['num_classes'] is not None:
@@ -64,7 +59,7 @@ class Train:
             self.collate_fn = None
         else:
             self.collate_fn = dynamic_import(config_dict['collate_fn'])
-        print(self.collate_fn)
+        # print(self.collate_fn)
         output_collate_fn = config_dict.get('output_collate_fn', None)
         if output_collate_fn is None:
             self.output_collate_fn = collate_fn.output_collate_fn
@@ -97,6 +92,7 @@ class Train:
         self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
             **output_arg)
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else os.path.join(self.log_dir, 'train_state')
+        os.makedirs(self.train_state_dir, exist_ok=True)
         self.model = self.load_model(**model_arg)
         self.optimizer = self.load_optimizer(**optimizer_arg)
         self.scheduler = self.load_scheduler(**scheduler_arg)
@@ -271,8 +267,23 @@ class Train:
             else:
                 model.apply(init_weights)
                 self.start_epoch = 0
-            if isinstance(self.output_device, int):
-                model.cuda(self.output_device)
+            model.cuda(self.output_device)
+        # DataParallel
+        # self.logger.info('try to use data parallel on %s' % str(self.data_parallel_devices))
+        if self.data_parallel_devices is not None:
+            self.logger.info('using data parallel on %s' % str(self.data_parallel_devices))
+            if isinstance(self.model, (list, tuple)):
+                self.model = [nn.DataParallel(
+                    m,
+                    device_ids=self.data_parallel_devices,
+                    output_device=self.output_device
+                ) for m in self.model]
+            else:
+                self.model = nn.DataParallel(
+                    self.model,
+                    device_ids=self.data_parallel_devices,
+                    output_device=self.output_device
+                )
         self.logger.info('initialized train state, to cuda device %s' % str(self.output_device))
 
     def run_train(self):

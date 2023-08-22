@@ -17,7 +17,6 @@ def plot_loss(loss_list, title=None, save_path=None, show=True):
         plt.savefig(save_path)
     if show:
         plt.show()
-    plt.clf()
     return fig_array, fig
 
 
@@ -36,7 +35,6 @@ def plot_signal(signal, title=None, save_path=None, show=True):
         plt.savefig(save_path)
     if show:
         plt.show()
-    plt.clf()
     return fig_array, fig
 
 

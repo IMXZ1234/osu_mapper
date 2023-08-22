@@ -1,4 +1,3 @@
-import queue
 import sys
 sys.argv.append(r'/home/xiezheng/osu_mapper')
 import os
@@ -16,17 +15,30 @@ import multiprocessing
 
 import audio_util
 from plt_util import plot_signal
-import time
+
+
 # from util import audio_util
 # from util.plt_util import plot_signal
 
 
-def frames_to_time(length, sr, hop_length, n_fft):
+def frames_to_time(length, sr, hop_length, n_fft, centered=True):
     """
     output is in ms
     """
-    frame_samples = np.arange(length) * hop_length + n_fft // 2
+    frame_samples = np.arange(length) * hop_length
+    if not centered:
+        frame_samples += n_fft // 2
     return frame_samples / sr * 1000
+
+
+def time_to_frame(time_ms, sr, hop_length, n_fft, centered=True):
+    """
+    output is in ms
+    """
+    sample_pos = time_ms / 1000 * sr
+    if not centered:
+        sample_pos -= n_fft // 2
+    return round(sample_pos / hop_length)
 
 
 def smooth_hit(x: np.ndarray, mu: "float | [float, float]", sigma: float = 5):
@@ -229,6 +241,7 @@ def calculate_meta(beatmap: slider.Beatmap, frame_times):
 
 def calculate_hitobject_meta(beatmap: slider.Beatmap, frame_times):
     """
+    -> 5, L
     meta information of hit objects
     """
     total_frames = len(frame_times)
@@ -372,9 +385,10 @@ class HeatmapDatasetv1:
         # print(mel_spec.shape)
         return mel_spec
 
-    def process_info(self, mel_spec, beatmapsetid):
+    def process_info(self, beatmap, mel_spec, beatmapsetid):
         # (total frames, beatmapsetid)
-        return mel_spec.shape[0], beatmapsetid
+        first_ho_time = beatmap._hit_objects[0].time // timedelta(milliseconds=1)
+        return mel_spec.shape[0], beatmapsetid, time_to_frame(first_ho_time, self.sample_rate, self.hop_length, self.n_fft)
 
     def from_meta_file(self, save_dir, meta_filepath, osz_dir,
                        # tgt_mel_dir=None, ref_mel_dir=None,
@@ -504,7 +518,7 @@ class HeatmapDatasetv1:
 
         if not info_processed:
             try:
-                sample_info = self.process_info(mel_spec, beatmapset_id)
+                sample_info = self.process_info(beatmap, mel_spec, beatmapset_id)
             except Exception:
                 traceback.print_exc()
                 print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
@@ -515,6 +529,9 @@ class HeatmapDatasetv1:
 
 def multiprocessing_prepare_data(nproc=32):
     meta_root = r'/home/xiezheng/osu_mapper/resources/data/osz'
+    update_exist = True
+    all = True
+    print('updating exist data')
     all_meta = os.listdir(meta_root)
     all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
 
@@ -544,11 +561,22 @@ def multiprocessing_prepare_data(nproc=32):
                     continue
             for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list):
                 beatmap_id, beatmapset_id = int(beatmap_meta_dict['beatmap_id']), int(beatmap_meta_dict['beatmapset_id'])
-                if beatmap_id not in processed_beatmapid:
-                    processed_beatmapid.add(beatmap_id)
-                    logf.writelines([str(beatmap_id) + '\n'])
+                if all:
+                    if beatmap_id not in processed_beatmapid:
+                        processed_beatmapid.add(beatmap_id)
+                        logf.writelines([str(beatmap_id) + '\n'])
                     # print('add task %d' % beatmap_id)
                     q.put(beatmap_meta_dict, block=True, timeout=None)
+                else:
+                    if not update_exist:
+                        if beatmap_id not in processed_beatmapid:
+                            processed_beatmapid.add(beatmap_id)
+                            logf.writelines([str(beatmap_id) + '\n'])
+                            # print('add task %d' % beatmap_id)
+                            q.put(beatmap_meta_dict, block=True, timeout=None)
+                    else:
+                        if beatmap_id in processed_beatmapid:
+                            q.put(beatmap_meta_dict, block=True, timeout=None)
 
     for i in range(nproc):
         q.put(None)

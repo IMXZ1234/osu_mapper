@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 """
-gives out sensible cursor signal, but not hit signal
+shrink layers
 """
 
 class PosEncoding(nn.Module):
@@ -351,23 +351,23 @@ class Generator(nn.Module):
         self.body = CNNExtractor(
             preprocess_dim * 3,
             seq_len,
-            stride_list=(2, 2, 2),
-            out_channels_list=(middle_dim // 2, middle_dim // 2, middle_dim),
-            kernel_size_list=(7, 5, 5),
+            stride_list=(2, 2),
+            out_channels_list=(middle_dim // 2, middle_dim),
+            kernel_size_list=(7, 7),
             norm=norm,
         )
         self.decoders = nn.ModuleList([nn.Sequential(
             DecoderUpsample(
                 middle_dim,
-                seq_len // (2 ** 3),
-                stride_list=(1, 2, 2, 2),
-                out_channels_list=(middle_dim // 2, middle_dim // 4, middle_dim // 8, middle_dim // 16),
-                kernel_size_list=(5, 5, 3, 3),
+                seq_len // (2 ** 2),
+                stride_list=(1, 2, 1, 2, 1),
+                out_channels_list=(middle_dim // 2, middle_dim // 2, middle_dim // 4, middle_dim // 4, middle_dim // 8),
+                kernel_size_list=(5, 5, 3, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
-            nn.Conv1d(middle_dim // 16, 1, kernel_size=1),
-            nn.Sigmoid(),
+            nn.Conv1d(middle_dim // 8, 1, kernel_size=1),
+            # nn.Sigmoid(),
         ) for _ in range(self.tgt_dim)])
 
     def forward(self, cond_data):
@@ -421,13 +421,12 @@ class Discriminator(nn.Module):
         self.body = CNNExtractor(
             preprocess_dim * (self.tgt_dim + 1),
             seq_len,
-            stride_list=(1, 2, 2, 2,
-                         2, 2, 2, 2),
-            out_channels_list=(middle_dim // 8, middle_dim // 4, middle_dim // 2, middle_dim,
-                               middle_dim, middle_dim, middle_dim, middle_dim,
+            stride_list=(1, 2, 2,
+                         2, 2, 2, 2, 2),
+            out_channels_list=(middle_dim // 8, middle_dim // 4, middle_dim // 2,
+                               middle_dim, middle_dim, middle_dim, middle_dim, middle_dim,
                                ),
-            kernel_size_list=(1, 3, 3, 5,
-                              5, 5, 5, 7),
+            kernel_size_list=(7, 7, 7, 5, 5, 5, 3, 3),
             norm=norm,
         )
 
