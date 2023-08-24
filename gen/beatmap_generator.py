@@ -17,10 +17,11 @@ class BeatmapGenerator:
         Initialize DataPreparer and Inference.
         """
         self.inference_config_path = inference_config_path
-        self.prepare_data_config_path = prepare_data_config_path
-        with open(prepare_data_config_path, 'rt', encoding='utf-8') as f:
-            self.prepare_data_config = yaml.load(f, Loader=yaml.FullLoader)
-        self.data_preparer = prepare_data.DataPreparer(**self.prepare_data_config)
+        if prepare_data_config_path is not None:
+            self.prepare_data_config_path = prepare_data_config_path
+            with open(prepare_data_config_path, 'rt', encoding='utf-8') as f:
+                self.prepare_data_config = yaml.load(f, Loader=yaml.FullLoader)
+            self.data_preparer = prepare_data.DataPreparer(**self.prepare_data_config)
         with open(inference_config_path, 'rt', encoding='utf-8') as f:
             self.config_dict = yaml.load(f, Loader=yaml.FullLoader)
         self.inference = inference.Inference(**self.config_dict)

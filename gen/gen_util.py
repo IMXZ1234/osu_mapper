@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import slider
 from BeatNet.BeatNet import BeatNet
 from slider import curve
@@ -363,7 +364,8 @@ def extract_bpm(audio_file_path):
     """
     returns bpm, first beat millisecond, last beat millisecond
     """
-    estimator = BeatNet(1, mode='online', inference_model='PF', plot=[], thread=False)
+    estimator = BeatNet(1, mode='online', inference_model='PF', plot=[], thread=False,
+                        device='cuda:0' if torch.cuda.is_available() else 'cpu')
     output = estimator.process(audio_file_path)
     itv = np.diff(output[:, 0])
     bpm = 60 / thresh_bin_mean(itv, 0.02)

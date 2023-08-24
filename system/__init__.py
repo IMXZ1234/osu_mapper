@@ -6,3 +6,5 @@ from . import (
     seq2seq_sys,
     vae_sys
 )
+
+from . import inference

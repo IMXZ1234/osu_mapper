@@ -1,23 +1,10 @@
 import argparse
 import os
+
 import yaml
 
-from gen.seg_multi_pred_mlp_generator import SegMultiLabelGenerator
-from gen.mel_mlp_generator import MelGenerator
-from gen.mlpv2_generator import MLPv2Generator
-# from gen.rnnv1_generator import RNNv1Generator
-from gen.rnnv1_generator_test import RNNv1Generator
-# from gen.rnnv3_generator import RNNGenerator
-# from gen.rnnv4_generator import RNNGenerator
-# from gen.cgan_generator import CGANGenerator
-# from gen.seqganv1_generator import SeqGANv1Generator
-from gen.seqganv2_generator import SeqGANv2Generator
-# from gen.seq2seq_generator import Seq2SeqGenerator
-from gen.vae_generator import VAEGenerator
-from gen.vaev3_generator import VAEGenerator
 from gen.cganv5_generator import CGANGenerator
-# from gen.rnnv3_generator_test import RNNGenerator
-
+from gen.simple_acganv2_generator import SimpleACGANGenerator
 from util import general_util
 
 
@@ -370,6 +357,39 @@ def test_gen_5(generator):
                                    audio_info_path_list=[audio_info_path])
 
 
+def test_gen_6(generator):
+    audio_file_path = \
+        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄.mp3"
+
+    audio_info_path = \
+        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄yaml"
+
+    meta_list = [
+        {
+            'audio_filename': os.path.basename(audio_file_path),  # indispensable
+            'artist_unicode': 'Yuiko',
+            'artist': 'Yuiko',  # indispensable
+            'title_unicode': '遠くの子守の唄',
+            'title': 'tooku no komamo no uta',  # indispensable
+            'version': '8',  # indispensable
+            'creator': 'IMXZ123',
+            'circle_size': 3,
+            'approach_rate': 8,
+            'slider_tick_rate': 2,
+        },
+    ]
+    # for meta in meta_list:
+    #     save_meta(meta)
+    generator.generate_beatmapset(
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\osz\test6.osz',
+        audio_file_path,
+        meta_list,
+        audio_info_path=audio_info_path,
+        title='遠くの子守の唄',
+        osu_dir=r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\osu',
+    )
+
+
 if __name__ == '__main__':
-    generator = CGANGenerator()
-    test_gen_5(generator)
+    generator = SimpleACGANGenerator()
+    test_gen_6(generator)

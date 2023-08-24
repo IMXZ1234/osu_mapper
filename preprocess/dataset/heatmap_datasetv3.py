@@ -1,4 +1,5 @@
 import sys
+
 sys.argv.append(r'/home/xiezheng/osu_mapper')
 import os
 import pickle
@@ -15,6 +16,8 @@ import multiprocessing
 
 # import audio_util
 # from plt_util import plot_signal
+
+
 from util import audio_util
 from util.plt_util import plot_signal
 
@@ -292,8 +295,8 @@ def plot_label(label):
     #         ]
     # ):
     #     plot_signal(signal[:5120], name)
-        
-        
+
+
 def plot_meta(meta_data):
     for signal, name in zip(
             meta_data,
@@ -393,7 +396,7 @@ class HeatmapDatasetv1:
         return mel_spec.shape[0], beatmapsetid, \
                time_to_frame(first_ho_time, self.sample_rate, self.hop_length, self.n_fft), \
                time_to_frame(last_ho_time, self.sample_rate, self.hop_length, self.n_fft), \
-                tp_start_frame
+               tp_start_frame
 
     def from_meta_file(self, save_dir, meta_filepath, osz_dir,
                        # tgt_mel_dir=None, ref_mel_dir=None,
@@ -411,7 +414,7 @@ class HeatmapDatasetv1:
                 beatmap_meta_dict, save_dir, osz_dir, temp_dir
             )
         # for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list.values()):
-            # str
+        # str
 
     def process_beatmap_meta_dict(self, beatmap_meta_dict, save_dir, osz_dir, temp_dir):
         # print('in process')
@@ -565,7 +568,8 @@ def multiprocessing_prepare_data(nproc=32):
                 except Exception:
                     continue
             for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list):
-                beatmap_id, beatmapset_id = int(beatmap_meta_dict['beatmap_id']), int(beatmap_meta_dict['beatmapset_id'])
+                beatmap_id, beatmapset_id = int(beatmap_meta_dict['beatmap_id']), int(
+                    beatmap_meta_dict['beatmapset_id'])
                 if all:
                     if beatmap_id not in processed_beatmapid:
                         processed_beatmapid.add(beatmap_id)

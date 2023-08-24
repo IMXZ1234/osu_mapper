@@ -607,6 +607,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             gen_sched.step()
             dis_sched.step()
             adv_generator_epoch_sched.step()
+            noise_level_sched.step()
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)

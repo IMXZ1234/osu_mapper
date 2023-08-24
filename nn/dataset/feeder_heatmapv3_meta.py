@@ -148,10 +148,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         """
         self.rand_inst = np.random.RandomState(random_seed)
         self.save_dir = save_dir
-        self.mel_dir = os.path.join(save_dir, 'melv2')
-        self.meta_dir = os.path.join(save_dir, 'metav2')
-        self.label_dir = os.path.join(save_dir, 'labelv2')
-        self.info_dir = os.path.join(save_dir, 'infov2')
+        self.mel_dir = os.path.join(save_dir, 'mel')
+        self.meta_dir = os.path.join(save_dir, 'meta')
+        self.label_dir = os.path.join(save_dir, 'label')
+        self.info_dir = os.path.join(save_dir, 'info')
 
         self.all_beatmapids = [
             # str

@@ -4913,7 +4913,7 @@ def train_simple_acganv2_heatmapv2(setting_name='simple_acganv2_heatmapv2'):
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.00003, 0.00003]]:
+    for gen_lr, dis_lr in [[0.0001, 0.0001]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -4953,8 +4953,8 @@ def train_simple_acganv2_heatmapv2(setting_name='simple_acganv2_heatmapv2'):
             'params': [
                 # {'milestones': [150, 300, 450], 'gamma': 1},
                 # {'milestones': [150, 300, 450], 'gamma': 1},
-                {'milestones': [30], 'gamma': 0.3},
-                {'milestones': [30], 'gamma': 0.3},
+                {'milestones': [50], 'gamma': 1.},
+                {'milestones': [50], 'gamma': 1.},
             ]
         }
         data_arg = {'dataset': 'nn.dataset.feeder_heatmapv2_meta.SubseqFeeder',
@@ -4963,7 +4963,7 @@ def train_simple_acganv2_heatmapv2(setting_name='simple_acganv2_heatmapv2'):
                          'subseq_len': subseq_len,
                          'random_seed': random_seed,
                          'use_random_iter': True,
-                         'take_first': 10240,
+                         'take_first': 20480,
                          'pad': False,
                          },
                     'batch_size': 256 * 8,
@@ -5001,8 +5001,11 @@ def train_simple_acganv2_heatmapv2(setting_name='simple_acganv2_heatmapv2'):
                      'gen_lambda': [1, 1],
                      # 'noise_level_step': [(50 + 25 * i) for i in range(9)],
                      # 'noise_level': [(1 - 0.1 * i) for i in range(10)],
-                     'noise_level_step': [20, 75],
-                     'noise_level': [0.5, 0.3, 0.1],
+                     # 'noise_level_step': [30, 60, 90, 120],
+                     # 'noise_level': [0.5, 0.5, 0.5, 0.5, 0.5],
+                     'noise_level_step': [30],
+                     'noise_level': [0.3, 0.3],
+                     # 'noise_level': [0.5, 0.3, 0.1, 0.05, 0.],
                      'lambda_gp': 10,
                      'lambda_cls': 5.,
                      # 'last_epoch': 12,
@@ -5040,7 +5043,7 @@ def train_simple_acganv2_heatmapv2(setting_name='simple_acganv2_heatmapv2'):
 if __name__ == '__main__':
     # train_simple_acganv1_heatmapv2('simple_acganv1_heatmapv2_20230818_g0.0001_d0.0001')
     # train_simple_acganv1_heatmapv2('simple_acganv1_heatmapv2_20230821_g0.00003_d0.00003_rev1')
-    train_simple_acganv2_heatmapv2('simple_acganv2_heatmapv2_20230822_g0.00003_d0.00003')
+    train_simple_acganv2_heatmapv2('simple_acganv2_heatmapv2_20230823_g0.0001_d0.0001_constlr')
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'
