@@ -119,7 +119,7 @@ def preprocess_pred_meta(meta, mel_spec):
                                   ho_density[:, np.newaxis],
                                   occupied_proportion[:, np.newaxis],
                                   snap_divisor[:, np.newaxis] * 0.1,
-                                 *expanded_diff], axis=1)
+                                *expanded_diff], axis=1)
     return pred_meta
 
 
@@ -198,11 +198,11 @@ class SubseqFeeder(torch.utils.data.Dataset):
         subseq_index = 0
         # print('len(self.info)')
         # print(len(self.info))
-        for idx, (beatmapid, (sample_len, beatmapsetid, prelude_end_pos)) in enumerate(self.info.items()):
+        for idx, (beatmapid, (sample_len, beatmapsetid, start_frame, end_frame, tp_start_frame)) in enumerate(self.info.items()):
             # if self.take_first is not None and idx > self.take_first:
             #     break
             self.sample_subseq[beatmapid] = []
-            in_sample_subseq_num = (sample_len - prelude_end_pos) / self.subseq_len
+            in_sample_subseq_num = sample_len / self.subseq_len
 
             if self.pad:
                 in_sample_subseq_num = math.ceil(in_sample_subseq_num)
@@ -226,14 +226,14 @@ class SubseqFeeder(torch.utils.data.Dataset):
                     rand_end = sample_len - self.subseq_len
                     if rand_end <= 0:
                         continue
-                start_list = self.rand_inst.randint(prelude_end_pos, rand_end, size=[in_sample_subseq_num])
+                start_list = self.rand_inst.randint(0, rand_end, size=[in_sample_subseq_num])
                 for in_sample_subseq_idx in range(in_sample_subseq_num):
-                    self.subseq_dict[subseq_index] = (beatmapid, beatmapsetid, start_list[in_sample_subseq_idx])
+                    self.subseq_dict[subseq_index] = (beatmapid, beatmapsetid, start_list[in_sample_subseq_idx], start_frame, end_frame)
                     subseq_index += 1
                     self.sample_subseq[beatmapid].append(subseq_index)
 
     def load_subseq(self, subseq_idx):
-        beatmapid, beatmapsetid, start = self.subseq_dict[subseq_idx]
+        beatmapid, beatmapsetid, start, start_frame, end_frame = self.subseq_dict[subseq_idx]
         end = start + self.subseq_len
 
         mel_path = os.path.join(self.mel_dir, '%s.pkl' % beatmapsetid)
@@ -244,7 +244,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
         with open(mel_path, 'rb') as f:
             mel_spec = pickle.load(f)
         with open(meta_path, 'rb') as f:
-            meta = pickle.load(f).T
+            meta, beat_divisor = pickle.load(f)
+        meta = meta.T
         data = mel_spec
         # mel_spec = preprocess_mel(mel_spec)
         # data = to_data_feature(meta, mel_spec)
@@ -261,9 +262,17 @@ class SubseqFeeder(torch.utils.data.Dataset):
             if not self.pad:
                 print('padding occur!')
         data = data[start * self.coeff_data_len: end * self.coeff_data_len]
+        end = start + self.subseq_len
+        populated_indicator = np.ones([self.subseq_len, 1])
+        if start < start_frame:
+            populated_indicator[:start_frame-start, ...] = 0
+        if end > end_frame:
+            populated_indicator[end_frame-end:, ...] = 0
+        data = np.concatenate([data, populated_indicator], axis=1)
         # *circle count, slider count, spinner count, *slider occupied, *spinner occupied
+        # use meta from the whole sequence
         meta = meta[start * self.coeff_data_len: end * self.coeff_data_len, np.array([0, 3, 4])]
-        meta = np.mean(meta, axis=0)
+        meta = np.append(np.mean(meta, axis=0), beat_divisor / 16)
         # print('meta', meta)
 
         if not self.inference:

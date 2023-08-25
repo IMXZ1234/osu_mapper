@@ -14,12 +14,12 @@ import torch
 import torchaudio
 import multiprocessing
 
-# import audio_util
-# from plt_util import plot_signal
+import audio_util
+from plt_util import plot_signal
 
 
-from util import audio_util
-from util.plt_util import plot_signal
+# from util import audio_util
+# from util.plt_util import plot_signal
 
 
 def frames_to_time(length, sr, hop_length, n_fft, centered=True):
@@ -386,6 +386,15 @@ class HeatmapDatasetv1:
         # print(mel_spec.shape)
         return mel_spec
 
+    def add_populated_indicator(self, mel_spec, beatmap):
+        first_ho_frame = time_to_frame(beatmap._hit_objects[0].time // timedelta(milliseconds=1), self.sample_rate, self.hop_length, self.n_fft)
+        last_ho_frame = time_to_frame(beatmap._hit_objects[-1].time // timedelta(milliseconds=1), self.sample_rate, self.hop_length, self.n_fft)
+        populated_indicator = np.ones([mel_spec.shape[0], 1])
+        populated_indicator[:first_ho_frame, ...] = 0
+        populated_indicator[last_ho_frame:, ...] = 0
+        mel_spec = np.concatenate([mel_spec, populated_indicator], axis=1)
+        return mel_spec
+
     def process_info(self, beatmap, mel_spec, beatmapsetid):
         # (total frames, beatmapsetid)
         first_ho_time = beatmap._hit_objects[0].time // timedelta(milliseconds=1)
@@ -418,7 +427,7 @@ class HeatmapDatasetv1:
 
     def process_beatmap_meta_dict(self, beatmap_meta_dict, save_dir, osz_dir, temp_dir):
         # print('in process')
-        tgt_mel_dir = os.path.join(save_dir, 'mel')
+        tgt_mel_dir = os.path.join(save_dir, 'melv3')
         tgt_meta_dir = os.path.join(save_dir, 'meta')
         tgt_label_dir = os.path.join(save_dir, 'label')
         tgt_info_dir = os.path.join(save_dir, 'info')
@@ -487,6 +496,7 @@ class HeatmapDatasetv1:
             os.remove(on_disk_audio_filepath)
 
             mel_spec = self.process_audio(audio_data, sr)
+            mel_spec = self.add_populated_indicator(mel_spec, beatmap)
             with open(mel_path, 'wb') as f:
                 pickle.dump(mel_spec, f)
         else:

@@ -33,4 +33,5 @@ from . import (
     vaev4,
     simple_acganv1,
     simple_acganv2,
+    simple_acganv3,
 )

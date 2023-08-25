@@ -12,6 +12,7 @@ from tqdm import tqdm
 from nn.dataset import dataset_util
 from preprocess import db, filter
 from util import beatmap_util, audio_util, plt_util
+from collections import Counter
 
 np.set_printoptions(threshold=np.inf)
 
@@ -406,20 +407,32 @@ def view_ho_meta_subseq():
     all_circle_count = []
     all_slider_occupy = []
 
-    rand_inst = np.random.RandomState(404)
+    all_beat_divisor = []
+    all_diff_circle_count = []
+    all_diff_slider_occupy = []
+    all_diff_circle_count_p = []
+    all_diff_slider_occupy_p = []
 
-    for sample_ho_meta_filename in tqdm(os.listdir(root_dir)):
+    rand_inst = np.random.RandomState(404)
+    all_files = os.listdir(root_dir)
+
+    for sample_ho_meta_filename in tqdm(all_files[:5000]):
         filepath = os.path.join(root_dir, sample_ho_meta_filename)
         with open(filepath, 'rb') as f:
-            sample_ho_meta = pickle.load(f)
+            sample_ho_meta, beat_divisor = pickle.load(f)
+            all_beat_divisor.append(beat_divisor)
         info_filepath = os.path.join(info_root_dir, sample_ho_meta_filename)
         with open(info_filepath, 'rb') as f:
-            sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
+            sample_len, beatmapsetid, start_frame, end_frame, tps = pickle.load(f)
         sample_len = sample_ho_meta.shape[1]
         all_sample_len.append(sample_len)
         in_sample_subseq_num = sample_len // subseq_len
         rand_end = sample_len - subseq_len
-        start_list = rand_inst.randint(prelude_end_pos, rand_end, size=[in_sample_subseq_num])
+        start_list = rand_inst.randint(start_frame, rand_end, size=[in_sample_subseq_num])
+
+        sample_circle_count = np.mean(sample_ho_meta[0])
+        sample_slider_occupy = np.mean(sample_ho_meta[3])
+
         for i, start_pos in enumerate(start_list):
             subseq_idx = i + num_subseq
             subseq_ho_meta = sample_ho_meta[:, start_pos:start_pos+subseq_len]
@@ -430,6 +443,14 @@ def view_ho_meta_subseq():
 
             all_circle_count.append(subseq_circle_count)
             all_slider_occupy.append(subseq_slider_occupy)
+
+            all_diff_circle_count.append(abs(sample_circle_count - subseq_circle_count))
+            all_diff_slider_occupy.append(abs(sample_slider_occupy - subseq_slider_occupy))
+
+            if sample_circle_count > 0:
+                all_diff_circle_count_p.append(abs(sample_circle_count - subseq_circle_count) / sample_circle_count)
+            if sample_slider_occupy > 0:
+                all_diff_slider_occupy_p.append(abs(sample_slider_occupy - subseq_slider_occupy) / sample_slider_occupy)
 
             if subseq_circle_count < circle_count_thresh:
                 idx_low_circle_count.add(subseq_idx)
@@ -445,6 +466,13 @@ def view_ho_meta_subseq():
     save_hist(all_sample_len, 'all_sample_len')
     save_hist(all_slider_occupy, 'all_slider_occupy', (0, 0.7))
     save_hist(all_circle_count, 'all_circle_count', (0, 0.1))
+
+    save_hist(all_diff_circle_count, 'all_diff_circle_count', (0, 0.1))
+    save_hist(all_diff_slider_occupy, 'all_diff_slider_occupy', (0, 0.7))
+    save_hist(all_diff_circle_count_p, 'all_diff_circle_count_p', (0, 1))
+    save_hist(all_diff_slider_occupy_p, 'all_diff_slider_occupy_p', (0, 1))
+
+    print(Counter(all_beat_divisor))
 
     # 3d
     fig = plt.figure()
