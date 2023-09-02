@@ -2,6 +2,7 @@ import collections
 import os
 import random
 import sys
+import time
 
 import numpy as np
 import torch
@@ -529,6 +530,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         noise_level_sched.set_current_step(self.current_epoch-1)
 
         for epoch in range(self.current_epoch, self.epoch):
+            time_cost_dict = {'net': 0, 'data': 0, 'log': 0}
             self.logger.info('\n--------\nEPOCH %d\n--------' % epoch)
             self.logger.info('lr %.8f' % self.optimizer[0].param_groups[0]['lr'])
             self.tensorboard_writer.add_scalar('lr', self.optimizer[0].param_groups[0]['lr'], epoch)
@@ -559,12 +561,14 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             last_few_batch_fake_loss = AvgLossLogger(10)
             last_few_batch_real_loss = AvgLossLogger(10)
 
+            self.log_time_stamp()
             for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter)):
                 batch_size = cond_data.shape[0]
                 total_sample_num += batch_size
                 cond_data = recursive_wrap_data(cond_data, self.output_device)
                 real_gen_output = recursive_wrap_data(real_gen_output, self.output_device)
                 cls_label = recursive_wrap_data(cls_label, self.output_device)
+                time_cost_dict['data'] += self.log_time_stamp()
                 # print(cls_label.shape)
 
                 # train generator batch
@@ -603,11 +607,13 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                     epoch_real_loss += real_loss * batch_size
                     epoch_gp_loss += gp_loss * batch_size
                     epoch_cls_loss += cls_loss * batch_size
+                time_cost_dict['net'] += self.log_time_stamp()
 
             gen_sched.step()
             dis_sched.step()
             adv_generator_epoch_sched.step()
             noise_level_sched.step()
+
 
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
@@ -642,6 +648,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             if (epoch + 1) % self.save_train_state_itv == 0:
                 self.save_train_state(self.model[0], self.optimizer[0], epoch, 0)
                 self.save_train_state(self.model[1], self.optimizer[1], epoch, 1)
+
+            time_cost_dict['log'] += self.log_time_stamp()
+
+            total_time = sum(time_cost_dict.values())
+            for k, v in time_cost_dict.items():
+                print('%s: %.2f' % (k, v / total_time), end=' ')
 
     def train_discriminator_batch(self, batch_items):
         """

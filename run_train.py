@@ -5061,7 +5061,7 @@ def train_simple_acganv3_heatmapv3(setting_name='simple_acganv3_heatmapv3'):
 
     compressed_channels = 16
 
-    for gen_lr, dis_lr in [[0.0001, 0.0001]]:
+    for gen_lr, dis_lr in [[0.000005, 0.000005]]:
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
@@ -5152,7 +5152,7 @@ def train_simple_acganv3_heatmapv3(setting_name='simple_acganv3_heatmapv3'):
                      # 'noise_level_step': [30, 60, 90, 120],
                      # 'noise_level': [0.5, 0.5, 0.5, 0.5, 0.5],
                      'noise_level_step': [30],
-                     'noise_level': [0.5, 0.5],
+                     'noise_level': [1., 1.],
                      # 'noise_level': [0.5, 0.3, 0.1, 0.05, 0.],
                      'lambda_gp': 10,
                      'lambda_cls': 5.,
@@ -5192,7 +5192,8 @@ if __name__ == '__main__':
     # train_simple_acganv1_heatmapv2('simple_acganv1_heatmapv2_20230818_g0.0001_d0.0001')
     # train_simple_acganv1_heatmapv2('simple_acganv1_heatmapv2_20230821_g0.00003_d0.00003_rev1')
     # train_simple_acganv2_heatmapv2('simple_acganv2_heatmapv2_20230823_g0.0001_d0.0001_constlr')
-    train_simple_acganv3_heatmapv3('simple_acganv3_heatmapv3_20230825_g0.0001_d0.0001_constlr')
+    # train_simple_acganv3_heatmapv3('simple_acganv3_heatmapv3_20230829_g0.00001_d0.00001_constlr')
+    train_simple_acganv3_heatmapv3('simple_acganv3_heatmapv3_20230830_g0.000005_d0.000005_constlr')
     # setting_name = 'seq2seq_lr0.1'
     # train_seq2seq(setting_name)
     # setting_name = 'rnnv3_nolabel_lr0.1'

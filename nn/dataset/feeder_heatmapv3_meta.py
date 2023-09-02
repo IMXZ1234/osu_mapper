@@ -1,6 +1,8 @@
 import math
 import os
 import pickle
+import time
+import traceback
 
 import numpy as np
 import torch
@@ -36,7 +38,7 @@ def preprocess_label(label, level_coeff):
     rescale hit signal to (0.1, 0.9) to avoid extreme value
     """
     label[:, :3] = 0.8 * label[:, :3] + 0.1
-    label[:, :3] += level_coeff * np.random.randn(*label[:, :3].shape) / 64
+    label[:, :3] += level_coeff * (np.tile(np.random.randn(1, 1), (label.shape[0], 1)) / 64 + np.random.randn(*label[:, :3].shape) / 64)
     label[:, 3:] += level_coeff * np.random.randn(*label[:, 3:].shape) / 4096
     return label
 
@@ -233,6 +235,9 @@ class SubseqFeeder(torch.utils.data.Dataset):
                     self.sample_subseq[beatmapid].append(subseq_index)
 
     def load_subseq(self, subseq_idx):
+        # time_list = []
+        # print('start')
+        # time_list.append(time.perf_counter_ns())
         beatmapid, beatmapsetid, start, start_frame, end_frame = self.subseq_dict[subseq_idx]
         end = start + self.subseq_len
 
@@ -247,6 +252,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
             meta, beat_divisor = pickle.load(f)
         meta = meta.T
         data = mel_spec
+        # print('loaded')
+        # time_list.append(time.perf_counter_ns())
         # mel_spec = preprocess_mel(mel_spec)
         # data = to_data_feature(meta, mel_spec)
         # data_dis = to_data_feature_dis(meta, mel_spec)
@@ -262,6 +269,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
             if not self.pad:
                 print('padding occur!')
         data = data[start * self.coeff_data_len: end * self.coeff_data_len]
+
+        # print('padded')
+        # time_list.append(time.perf_counter_ns())
+
         end = start + self.subseq_len
         populated_indicator = np.ones([self.subseq_len, 1])
         if start < start_frame:
@@ -274,19 +285,34 @@ class SubseqFeeder(torch.utils.data.Dataset):
         meta = meta[start * self.coeff_data_len: end * self.coeff_data_len, np.array([0, 3, 4])]
         meta = np.append(np.mean(meta, axis=0), beat_divisor / 16)
         # print('meta', meta)
+        # print('added indicator')
+        # time_list.append(time.perf_counter_ns())
 
         if not self.inference:
             # load label
             with open(label_path, 'rb') as f:
                 label = pickle.load(f)
+            # print('loaded label')
+            # time_list.append(time.perf_counter_ns())
             if pad_len > 0:
                 if not self.pad:
                     print('padding occur!')
                 label = np.pad(label, ((0, pad_len * self.coeff_label_len), (0, 0)), mode='constant')
             label = label[start * self.coeff_label_len: end * self.coeff_label_len]
-            label = preprocess_label(label, self.level_coeff)
+            # print('padded label')
+            # time_list.append(time.perf_counter_ns())
+            try:
+                label = preprocess_label(label, self.level_coeff)
+            except Exception:
+                traceback.print_exc()
+                raise AssertionError
+            # print('preprocessed label')
+            # time_list.append(time.perf_counter_ns())
         else:
             label = None
+        # print('finished')
+        # time_list.append(time.perf_counter_ns())
+        # print(np.diff(time_list))
 
         # if subseq_idx == 0:
         #     print('np.max(data), np.min(data)')

@@ -362,7 +362,7 @@ def test_gen_6(generator):
         r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄.mp3"
 
     audio_info_path = \
-        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄yaml"
+        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄.yaml"
 
     meta_list = [
         {

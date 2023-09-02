@@ -434,7 +434,7 @@ class Discriminator(nn.Module):
                                middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim,
                                ),
             kernel_size_list=(7, 7, 7, 7,
-                              5, 5, 5, 5, 5, 3, 3, 3),
+                              7, 7, 5, 5, 5, 3, 3, 3),
             norm=norm,
         )
 
@@ -474,7 +474,7 @@ if __name__ == '__main__':
     import thop
 
     subseq_len = 2560
-    snap_feature = 40
+    snap_feature = 41
     gen_params = {
         'seq_len': subseq_len,
         'tgt_dim': 5,
@@ -483,7 +483,7 @@ if __name__ == '__main__':
         'norm': 'LN',
         'middle_dim': 128,
         'preprocess_dim': 16,
-        'cls_label_dim': 3,
+        'cls_label_dim': 4,
     }
     dis_params = {
         'seq_len': subseq_len,
@@ -493,12 +493,12 @@ if __name__ == '__main__':
         'norm': 'LN',
         'middle_dim': 128,
         'preprocess_dim': 16,
-        'cls_label_dim': 3,
+        'cls_label_dim': 4,
     }
     gen = Generator(**gen_params)
     dis = Discriminator(**dis_params)
 
-    gen_input = ((torch.zeros([1, 2560, 40]), torch.zeros([1, 3])),)
-    dis_input = (torch.zeros([1, 2560, 40]), torch.zeros([1, 2560, 5]))
+    gen_input = ((torch.zeros([1, 2560, 41]), torch.zeros([1, 4])),)
+    dis_input = (torch.zeros([1, 2560, 41]), torch.zeros([1, 2560, 5]))
     print(thop.profile(gen, gen_input))
     print(thop.profile(dis, dis_input))

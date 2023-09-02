@@ -503,47 +503,73 @@ def save_hist(values, title, rg=None):
     )
 
 
+def np_statistics(arr):
+    print(np.mean(arr), np.min(arr), np.max(arr))
+
+
 if __name__ == '__main__':
-    view_ho_meta_subseq()
-    # with open(
-    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\label\40285.pkl',
-    #     'rb'
-    # ) as f:
-    #     label = pickle.load(f)
-    # with open(
-    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\info\40285.pkl',
-    #     'rb'
-    # ) as f:
-    #     sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
-    # print(prelude_end_pos)
-    # label = label[prelude_end_pos:prelude_end_pos + 200]
-    # for signal, name in zip(
-    #         label.T,
-    #         [
-    #             'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
-    #         ]
-    # ):
-    #     print(np.min(signal), np.max(signal), np.mean(signal))
-    #     fig_array, fig = plt_util.plot_signal(signal, name,
-    #                                  save_path=None,
-    #                                  show=True)
+    """
+    view mel statistics
+    """
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\999739.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # # print(mel[:, 40])
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\melv3\999739.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # print(mel[:, 40])
+    # view_ho_meta_subseq()
+
+    with open(
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\label\40285.pkl',
+        'rb'
+    ) as f:
+        label = pickle.load(f)
+    with open(
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\info\40285.pkl',
+        'rb'
+    ) as f:
+        sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
+    print(prelude_end_pos)
+    label = label[prelude_end_pos:prelude_end_pos + 2560]
+    for signal, name in zip(
+            label.T,
+            [
+                'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+            ]
+    ):
+        print(np.min(signal), np.max(signal), np.mean(signal))
+        fig_array, fig = plt_util.plot_signal(signal, name,
+                                     save_path=None,
+                                     show=True)
     # processed = process_label(label_list[0])
     # print(processed)
     # mel_from_audio()
-        # assert isinstance(beatmap, slider.Beatmap)
-        # try:
-        #     all_speed_stars.append(beatmap.speed_stars())
-        # except Exception:
-        #     continue
+    # assert isinstance(beatmap, slider.Beatmap)
+    # try:
+    #     all_speed_stars.append(beatmap.speed_stars())
+    # except Exception:
+    #     continue
     # plt.hist(all_speed_stars)
     # plt.show()
-        # print(beatmap.speed_stars)
-        # snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
-        # label = dataset_util.hitobjects_to_label_with_pos(beatmap, snap_ms=snap_ms)
-        # if label is not None:
-        #     x, y = label[:, 1], label[:, 2]
-        #     pos = np.where(x < 0)
-        #     print(pos)
-        #     # print(label[pos])
-        #     print(label)
-        #     input()
+    # print(beatmap.speed_stars)
+    # snap_ms = beatmap_util.get_snap_milliseconds(beatmap, 8)
+    # label = dataset_util.hitobjects_to_label_with_pos(beatmap, snap_ms=snap_ms)
+    # if label is not None:
+    #     x, y = label[:, 1], label[:, 2]
+    #     pos = np.where(x < 0)
+    #     print(pos)
+    #     # print(label[pos])
+    #     print(label)
+    #     input()

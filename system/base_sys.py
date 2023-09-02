@@ -3,6 +3,7 @@ import logging
 import os
 import pickle
 import re
+import time
 
 import numpy as np
 import torch
@@ -107,6 +108,14 @@ class Train:
         self.eva_loss_list = []
         self.learning_rate_list = []
         self.save_model_flag = False
+
+        self.last_time_stamp = time.perf_counter_ns()
+
+    def log_time_stamp(self):
+        current_time = time.perf_counter_ns()
+        time_itv = current_time - self.last_time_stamp
+        self.last_time_stamp = current_time
+        return time_itv
 
     def load_logger(self, log_dir, model_save_dir, model_save_step, **kwargs):
         writer = SummaryWriter(logdir=log_dir + '/run')
