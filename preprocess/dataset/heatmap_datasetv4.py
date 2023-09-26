@@ -13,157 +13,11 @@ import slider
 import torch
 import torchaudio
 import multiprocessing
+import math
 
 import audio_util
 from plt_util import plot_signal
-
-
-# from util import audio_util
-# from util.plt_util import plot_signal
-
-
-def frames_to_time(length, sr, hop_length, n_fft, centered=True):
-    """
-    output is in ms
-    """
-    frame_samples = np.arange(length) * hop_length
-    if not centered:
-        frame_samples += n_fft // 2
-    return frame_samples / sr * 1000
-
-
-def time_to_frame(time_ms, sr, hop_length, n_fft, centered=True):
-    """
-    output is in ms
-    """
-    sample_pos = time_ms / 1000 * sr
-    if not centered:
-        sample_pos -= n_fft // 2
-    return round(sample_pos / hop_length)
-
-
-def smooth_hit(x: np.ndarray, mu: "float | [float, float]", sigma: float = 5):
-    """
-    a smoothed impulse
-    modelled using a normal distribution with mean `mu` and std. dev `sigma`
-    evaluated at values in `x`
-    """
-
-    if isinstance(mu, (float, int)):
-        z = (x - mu) / sigma
-    elif isinstance(mu, tuple):
-        a, b = mu
-        z = np.where(x < a, x - a, np.where(x < b, 0, x - b)) / sigma
-    else:
-        raise NotImplementedError(f"`mu` must be float or tuple, got {type(mu)}")
-
-    return np.exp(-.5 * z ** 2)
-
-
-def hit_signal(beatmap: slider.Beatmap, frame_times: "L,") -> "L, 3":
-    """
-    returns an array encoding the hits occurring at the times represented by `frames`
-    - [0] represents hits
-    - [1] represents slider holds
-    - [2] represents spinner holds
-    # - [3] represents new combos
-
-    - `frame_times`: array of times at each frame in ms
-    """
-
-    sig = np.zeros((3, len(frame_times)))
-    for ho in beatmap._hit_objects:
-        if isinstance(ho, slider.beatmap.Circle):
-            sig[0] += smooth_hit(frame_times, ho.time // timedelta(milliseconds=1))
-        elif isinstance(ho, slider.beatmap.Slider):
-            sig[1] += smooth_hit(frame_times,
-                                 (ho.time // timedelta(milliseconds=1), ho.end_time // timedelta(milliseconds=1)))
-        elif isinstance(ho, slider.beatmap.Spinner):
-            sig[2] += smooth_hit(frame_times,
-                                 (ho.time // timedelta(milliseconds=1), ho.end_time // timedelta(milliseconds=1)))
-
-    return sig.T
-
-
-def cursor_signal(beatmap: slider.Beatmap, frame_times: "L,") -> "L, 2":
-    """
-    return [2,L] where [{0,1},i] is the {x,y} position at the times represented by `frames`
-
-    - `frame_times`: array of times at each frame in ms
-    """
-    # print(beatmap._hit_objects)
-    length = frame_times.shape[0]
-    # print(frame_times)
-    pos = np.zeros([length, 2])
-    ci = 0
-    for a, b in zip([None] + beatmap._hit_objects, beatmap._hit_objects + [None]):
-        if a is None:
-            # before first hit object
-            while frame_times[ci] < b.time / timedelta(milliseconds=1):
-                pos[ci] = np.array([b.position.x, b.position.y])
-                ci += 1
-        elif b is None:
-            if isinstance(a, (slider.beatmap.Circle, slider.beatmap.Spinner)):
-                ho_pos = a.position
-            else:
-                # is Slider, take end pos
-                ho_pos = a.curve(1)
-            # after last hit object
-            while ci < length:
-                pos[ci] = np.array([ho_pos.x, ho_pos.y])
-                ci += 1
-        else:
-            a_time, b_time = a.time / timedelta(milliseconds=1), b.time / timedelta(milliseconds=1)
-            last_pos = np.array([a.position.x, a.position.y])
-            last_time = a_time
-            if isinstance(a, slider.beatmap.Slider):
-                a_end_time = a.end_time / timedelta(milliseconds=1)
-                a_len = a_end_time - a_time
-                one_repeat_a_len = a_len / a.repeat
-                while frame_times[ci] < a_end_time:
-                    offset = frame_times[ci] - a_time
-                    # consider repeat
-                    r, p = offset / one_repeat_a_len, (offset % one_repeat_a_len) / one_repeat_a_len
-                    if r % 2 == 1:
-                        p = 1 - p
-                    curve_pos = a.curve(p)
-                    pos[ci] = np.array([curve_pos.x, curve_pos.y])
-                    ci += 1
-                last_pos = np.array([curve_pos.x, curve_pos.y])
-                last_time = a_end_time
-            elif isinstance(a, slider.beatmap.Spinner):
-                a_end_time = a.end_time / timedelta(milliseconds=1)
-                while frame_times[ci] < a_end_time:
-                    pos[ci] = np.array([a.position.x, a.position.y])
-                    ci += 1
-                last_pos = np.array([a.position.x, a.position.y])
-                last_time = a_end_time
-            # do linear interpolation until hit_object b
-            interpolate_itv = b_time - last_time
-            b_pos = np.array([b.position.x, b.position.y])
-            pos_change = b_pos - last_pos
-            while frame_times[ci] < b_time:
-                offset = frame_times[ci] - last_time
-                pos[ci] = offset / interpolate_itv * pos_change + last_pos
-                ci += 1
-    pos[:, 0] = (pos[:, 0] + 180) / (691 + 180)
-    pos[:, 1] = (pos[:, 1] + 82) / (407 + 82)
-    return pos
-
-
-def generate_label(beatmap, frame_times, add_noise=True):
-    """
-    -> L, 5
-    circle hit, slider hit, spinner hit, cursor x, cursor y
-    """
-    cursor_sig = cursor_signal(beatmap, frame_times)
-    hit_sig = hit_signal(beatmap, frame_times)
-    if add_noise:
-        # noise's value for cursor_sig should be small
-        cursor_sig += np.random.randn(*cursor_sig.shape) / 1024
-        # noise's value for hit_signal could be a litte larger
-        hit_sig += np.random.randn(*hit_sig.shape) / 32
-    return np.concatenate([hit_sig, cursor_sig], axis=1)
+import itertools
 
 
 def calculate_meta(beatmap: slider.Beatmap, frame_times):
@@ -284,17 +138,17 @@ def plot_label(label):
     for signal, name in zip(
             label.T,
             [
-                'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+                'signal_type', 'cursor_x', 'cursor_y'
             ]
     ):
         plot_signal(signal, name)
-    # for signal, name in zip(
-    #         label.T,
-    #         [
-    #             'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
-    #         ]
-    # ):
-    #     plot_signal(signal[:5120], name)
+    for signal, name in zip(
+            label.T,
+            [
+                'signal_type', 'cursor_x', 'cursor_y'
+            ]
+    ):
+        plot_signal(signal[:512], name)
 
 
 def plot_meta(meta_data):
@@ -326,8 +180,8 @@ def check_integrity(file_path):
     return True
 
 
-def check_beatmap_suitable(beatmap: slider.Beatmap):
-    if beatmap.beat_divisor != 4:
+def check_beatmap_suitable(beatmap: slider.Beatmap, beat_divisor=8):
+    if beat_divisor % beatmap.beat_divisor != 0:
         return False
     assert beatmap.timing_points[0].parent is None
     for tp in beatmap.timing_points[1:]:
@@ -338,7 +192,51 @@ def check_beatmap_suitable(beatmap: slider.Beatmap):
     return True
 
 
-class HeatmapDatasetv1:
+def cal_mel_spec(audio_data,
+                 frame_start, frame_length,
+                 window='hamming',
+                 nfft=None, n_mel=40, sample_rate=22000):
+    """
+    calculate mel spec for frames starting from specified pos
+    audio_data: ..., sample
+    return time, ..., n_mel
+    """
+    if nfft is None:
+        nfft = frame_length
+    frames = np.stack([audio_data[..., start:start + frame_length] for start in frame_start], axis=0)
+    if window == 'hamming':
+        frames *= np.hamming(frame_length)
+    mag_frames = np.absolute(np.fft.rfft(frames, nfft, axis=-1))  # Magnitude of the FFT
+    pow_frames = ((1.0 / nfft) * (mag_frames ** 2))  # Power Spectrum
+
+    low_freq_mel = 0
+    high_freq_mel = (2595 * np.log10(1 + (sample_rate / 2) / 700))  # Convert Hz to Mel
+    mel_points = np.linspace(low_freq_mel, high_freq_mel, n_mel + 2)  # Equally spaced in Mel scale
+    hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
+    bin = np.floor((nfft + 1) * hz_points / sample_rate)
+
+    fbank = np.zeros((n_mel, int(np.floor(nfft / 2 + 1))))
+    for m in range(1, n_mel + 1):
+        f_m_minus = int(bin[m - 1])  # left
+        f_m = int(bin[m])  # center
+        f_m_plus = int(bin[m + 1])  # right
+
+        for k in range(f_m_minus, f_m):
+            fbank[m - 1, k] = (k - bin[m - 1]) / (bin[m] - bin[m - 1])
+        for k in range(f_m, f_m_plus):
+            fbank[m - 1, k] = (bin[m + 1] - k) / (bin[m + 1] - bin[m])
+    # filter_banks_shape = list(pow_frames.shape)
+    # filter_banks_shape[-1] = n_mel
+    # filter_banks = np.zeros(filter_banks_shape)
+    # for n in range(len(frames)):
+    #     filter_banks[n, ...] = np.dot(pow_frames[n, ...], fbank.T)
+    filter_banks = np.dot(pow_frames, fbank.T)
+    filter_banks = np.where(filter_banks == 0, np.finfo(float).eps, filter_banks)  # Numerical Stability
+    filter_banks = 20 * np.log10(filter_banks)  # dB
+    return filter_banks
+
+
+class HeatmapDataset:
     """
     Typical frame sizes in speech processing range from 20 ms to 40 ms with 50% (+/-10%) overlap between consecutive frames.
     Popular settings are **25 ms** for the frame size, frame_size = 0.025 and a 10 ms stride (15 ms overlap), frame_stride = 0.01.
@@ -353,60 +251,17 @@ class HeatmapDatasetv1:
 
         self.sample_rate = mel_args.get('sample_rate', 22000)
         self.mel_frame_per_snap = mel_args.get('mel_frame_per_snap', 16)
-        self.n_mels = mel_args.get('n_mels', 64)
+        self.n_mels = mel_args.get('n_mels', 40)
 
-    def process_sample(self, audio_data, sr, beatmap=None, meta_dict=None):
-        mel_spec = self.process_audio(audio_data, sr)
-        if beatmap is None:
-            return mel_spec
-        label = self.process_label(beatmap, mel_spec)
-        if meta_dict is None:
-            return mel_spec, label
-        meta = self.process_meta(beatmap, mel_spec, meta_dict)
-        return mel_spec, label, meta
+        self.beat_divisor = feature_args.get('beat_divisor', 8)
+        self.off_snap_threshold = feature_args.get('off_snap_threshold', 0.15)
 
-    def process_meta(self, beatmap, mel_spec, meta_dict):
-        frame_times = frames_to_time(mel_spec.shape[0], self.sample_rate, self.hop_length, self.n_fft)
-        meta = calculate_hitobject_meta(beatmap, frame_times)
-        return meta
-
-    def process_label(self, beatmap, mel_spec):
-        frame_times = frames_to_time(mel_spec.shape[0], self.sample_rate, self.hop_length, self.n_fft)
-        sample_label = generate_label(beatmap, frame_times, add_noise=False)
-        return sample_label
-
-    def process_audio(self, audio_data, sr):
-        audio_data = torchaudio.functional.resample(audio_data, sr, self.sample_rate)
-        # to single channel
-        mel_spec = torch.mean(self.mel_spectrogram(audio_data), dim=0).numpy().T
-        # print(mel_spec.shape)
-        return mel_spec
-
-    def add_populated_indicator(self, mel_spec, beatmap):
-        first_ho_frame = time_to_frame(beatmap._hit_objects[0].time // timedelta(milliseconds=1), self.sample_rate, self.hop_length, self.n_fft)
-        last_ho_frame = time_to_frame(beatmap._hit_objects[-1].time // timedelta(milliseconds=1), self.sample_rate, self.hop_length, self.n_fft)
-        populated_indicator = np.ones([mel_spec.shape[0], 1])
-        populated_indicator[:first_ho_frame, ...] = 0
-        populated_indicator[last_ho_frame:, ...] = 0
-        mel_spec = np.concatenate([mel_spec, populated_indicator], axis=1)
-        return mel_spec
-
-    def process_info(self, beatmap, mel_spec, beatmapsetid):
-        # (total frames, beatmapsetid)
-        first_ho_time = beatmap._hit_objects[0].time // timedelta(milliseconds=1)
-        last_ho_time = beatmap._hit_objects[-1].time // timedelta(milliseconds=1)
-        tp_start_frame = [
-            time_to_frame(tp.offset // timedelta(milliseconds=1), self.sample_rate, self.hop_length, self.n_fft)
-            for tp in beatmap.timing_points if tp.parent is None]
-        return mel_spec.shape[0], beatmapsetid, \
-               time_to_frame(first_ho_time, self.sample_rate, self.hop_length, self.n_fft), \
-               time_to_frame(last_ho_time, self.sample_rate, self.hop_length, self.n_fft), \
-               tp_start_frame
+        self.label_idx_to_beat_label_seq = list(itertools.product(*[(0, 1, 2, 3) for _ in range(self.beat_divisor)]))
+        self.beat_label_seq_to_label_idx = {seq: idx for idx, seq in enumerate(self.label_idx_to_beat_label_seq)}
+        self.label_idx_count = []
 
     def from_meta_file(self, save_dir, meta_filepath, osz_dir,
-                       # tgt_mel_dir=None, ref_mel_dir=None,
-                       # tgt_osu_dir=None, ref_osu_dir=None,
-                       temp_dir='E:/'
+                       temp_dir='.'
                        ):
         """
         will save processed label under data_dir
@@ -414,34 +269,28 @@ class HeatmapDatasetv1:
 
         with open(os.path.join(meta_filepath), 'r') as f:
             meta_dict_list = json.load(f)
-        for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list):
+        for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list[3:4]):
             self.process_beatmap_meta_dict(
-                beatmap_meta_dict, save_dir, osz_dir, temp_dir
+                beatmap_meta_dict, save_dir, osz_dir, temp_dir, skip_exist=False,
             )
-        # for sample_idx, beatmap_meta_dict in enumerate(meta_dict_list.values()):
-        # str
 
-    def process_beatmap_meta_dict(self, beatmap_meta_dict, save_dir, osz_dir, temp_dir):
+    def process_beatmap_meta_dict(self, beatmap_meta_dict, save_dir, osz_dir, temp_dir, skip_exist=True):
         # print('in process')
-        tgt_mel_dir = os.path.join(save_dir, 'melv3')
-        tgt_meta_dir = os.path.join(save_dir, 'meta')
-        tgt_label_dir = os.path.join(save_dir, 'label')
-        tgt_info_dir = os.path.join(save_dir, 'info')
-        os.makedirs(tgt_mel_dir, exist_ok=True)
-        os.makedirs(tgt_label_dir, exist_ok=True)
-        os.makedirs(tgt_meta_dir, exist_ok=True)
-        os.makedirs(tgt_info_dir, exist_ok=True)
         beatmap_id, beatmapset_id = beatmap_meta_dict['beatmap_id'], beatmap_meta_dict['beatmapset_id']
-        mel_path = os.path.join(tgt_mel_dir, beatmapset_id + '.pkl')
-        label_path = os.path.join(tgt_label_dir, beatmap_id + '.pkl')
-        meta_path = os.path.join(tgt_meta_dir, beatmap_id + '.pkl')
-        info_path = os.path.join(tgt_info_dir, beatmap_id + '.pkl')
-
-        mel_processed = os.path.exists(mel_path)
-        label_processed = os.path.exists(label_path)
-        meta_processed = os.path.exists(meta_path)
-        info_processed = os.path.exists(info_path)
-        if mel_processed and label_processed and meta_processed and info_processed:
+        dirs, paths, processed = {}, {}, {}
+        items = {
+            'mel': beatmapset_id,
+            'meta': beatmap_id,
+            'label': beatmap_id,
+            'label_idx': beatmap_id,
+            'info': beatmap_id,
+        }
+        for item_name, sample_name in items.items():
+            dirs[item_name] = os.path.join(save_dir, item_name)
+            os.makedirs(dirs[item_name], exist_ok=True)
+            paths[item_name] = os.path.join(dirs[item_name], sample_name + '.pkl')
+            processed[item_name] = os.path.exists(paths[item_name])
+        if skip_exist and all(os.path.exists(path) for path in paths.values()):
             print('skipping %s' % beatmap_id)
             return
 
@@ -468,98 +317,280 @@ class HeatmapDatasetv1:
             print('beatmap %s not found in osz %s' % (beatmap_id, osz_path))
             return
 
-        if not check_beatmap_suitable(beatmap_id):
+        if not check_beatmap_suitable(beatmap, self.beat_divisor):
             print('beatmap not suitable %s' % beatmap_id)
             return
 
-        bpm = beatmap.bpm_max()
-        snap_length_s = 60 / 4 / bpm
+        bpm = beatmap.timing_points[0].bpm
+        beat_length_s = 60 / bpm
+        snap_length_s = beat_length_s / self.beat_divisor
         snap_length_samples_f = snap_length_s * self.sample_rate
+        beat_length_samples_f = beat_length_s * self.sample_rate
         hop_length_s = snap_length_s / self.mel_frame_per_snap
         hop_length_samples_f = hop_length_s * self.sample_rate
-        hop_length = round(hop_length_samples_f)
+        hop_length = math.ceil(hop_length_samples_f)
         # since we align mel frames with snaps,
-        # the center of the first mel frame should depend on temporal position of hit objects
+        # the center of the first mel frame should depend on temporal position of the first timing point
+        first_tp_s = beatmap.timing_points[0].offset / timedelta(seconds=1)
+        first_tp_sample_f = first_tp_s * self.sample_rate
+
         first_ho = beatmap._hit_objects[0]
         last_ho = beatmap._hit_objects[-1]
-        occupied_start_s = first_ho.time // timedelta(seconds=1)
+        # time offset relative to tp
+        occupied_start_s = first_ho.time / timedelta(seconds=1)
         if isinstance(last_ho, slider.beatmap.Circle):
-            occupied_end_s = last_ho.time // timedelta(seconds=1)
+            occupied_end_s = last_ho.time / timedelta(seconds=1)
         else:
-            occupied_end_s = last_ho.end_time // timedelta(seconds=1)
+            occupied_end_s = last_ho.end_time / timedelta(seconds=1)
         # hit objects should be well aligned with snaps
+        # occupied_totol_beats_f = (occupied_end_s - occupied_start_s) / beat_length_s
         occupied_totol_snaps_f = (occupied_end_s - occupied_start_s) / snap_length_s
-        if not abs(occupied_totol_snaps_f - round(occupied_totol_snaps_f)) < 0.05:
+        occupied_start_snaps_f = (occupied_start_s - first_tp_s) / snap_length_s
+        if abs(occupied_start_snaps_f - round(occupied_start_snaps_f)) > 0.15:
             print('hit objects not well aligned %s' % beatmap_id)
+            # print(occupied_start_snaps_f, occupied_start_snaps_f)
+            return
+        if abs(occupied_totol_snaps_f - round(occupied_totol_snaps_f)) > 0.15:
+            print('hit objects not well aligned %s' % beatmap_id)
+            # print('beat_length_s', beat_length_s)
+            # print('snap_length_s', snap_length_s)
+            # print('first_tp_s', first_tp_s)
+            # print('occupied_start_s', occupied_start_s)
+            # print('occupied_end_s', occupied_end_s)
+            # print('occupied_totol_beats_f', occupied_totol_beats_f)
+            # print('occupied_totol_snaps_f', occupied_totol_snaps_f)
             return
 
-        # count by snap_length_samples_f backward and forward to retrieve aligned audio
-        snaps_before_occupied = occupied_start_s // snap_length_s
-
         print('processing beatmap %s' % beatmap_id)
-        if not os.path.exists(mel_path):
-            # process mel
+        # retrieve audio data
+        audio_filename = all_beatmaps[0].audio_filename
 
-            # retrieve audio data
-            audio_filename = all_beatmaps[0].audio_filename
+        for beatmap in all_beatmaps:
+            if beatmap.audio_filename != audio_filename:
+                print('multiple audio file in same beatmapset!')
+                continue
 
-            for beatmap in all_beatmaps:
-                if beatmap.audio_filename != audio_filename:
-                    print('multiple audio file in same beatmapset!')
-                    continue
+        on_disk_audio_filepath = os.path.join(temp_dir, beatmapset_id + os.path.splitext(audio_filename)[1])
+        try:
+            with open(on_disk_audio_filepath, 'wb') as f:
+                f.write(osz_file.read(audio_filename))
+        except Exception:
+            print('no audio %s' % audio_filename)
+            return
+        try:
+            audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath, ret_tensor=False)
+        except Exception:
+            print('fail to load audio %s' % beatmapset_id)
+            return
+        os.remove(on_disk_audio_filepath)
 
-            on_disk_audio_filepath = os.path.join(temp_dir, beatmapset_id + os.path.splitext(audio_filename)[1])
+        total_sample = audio_data.shape[1]
+        # count by beat_length_samples_f backward and forward to retrieve aligned audio
+        beats_before_first_tp = math.floor(first_tp_sample_f / beat_length_samples_f)
+        crop_start_sample_f = first_tp_sample_f - beats_before_first_tp * beat_length_samples_f
+        snaps_before_first_tp = beats_before_first_tp * self.beat_divisor
+        beats_after_first_tp = math.floor((total_sample - first_tp_sample_f) / beat_length_samples_f)
+        crop_end_sample_f = first_tp_sample_f + beats_after_first_tp * beat_length_samples_f
+        # crop_start_sample, crop_end_sample = round(crop_start_sample_f), round(crop_end_sample_f)
+
+        total_beats_f = (crop_end_sample_f - crop_start_sample_f) / beat_length_samples_f
+        total_snaps_f = total_beats_f * self.beat_divisor
+        total_snaps = round(total_snaps_f)
+        if abs(total_snaps - total_snaps_f) > 0.15:
+            print('hit objects not well aligned %s' % beatmap_id)
+            # print('total_beats_f', total_beats_f)
+            # print('total_snaps_f', total_snaps_f)
+            # print('total_snaps', total_snaps)
+            return
+
+        total_mel_frames = total_snaps * self.mel_frame_per_snap
+
+        """
+        process mel
+        """
+        if not (skip_exist and processed['mel']):
             try:
-                with open(on_disk_audio_filepath, 'wb') as f:
-                    f.write(osz_file.read(audio_filename))
+                # mel_spectrogram = torchaudio.transforms.MelSpectrogram(
+                #     sample_rate=self.sample_rate,
+                #     n_fft=2 * hop_length,
+                #     win_length=2 * hop_length,
+                #     hop_length=hop_length,
+                #     # center=True,
+                #     # pad_mode="reflect",
+                #     # we shall satisfy "center" by padding outside this function manually
+                #     center=False,
+                #     pad_mode="reflect",
+                #     power=2.0,
+                #     norm="slaney",
+                #     onesided=True,
+                #     n_mels=self.n_mels,
+                #     mel_scale="htk",
+                # )
+                # # pad left and right with half window length = hop length
+                # audio_for_mel = audio_data[:, max(0, crop_start_sample-hop_length):min(total_sample, crop_end_sample+hop_length)]
+                # pad_left = hop_length - min(crop_start_sample, hop_length)
+                # if pad_left > 0:
+                #     audio_for_mel = torch.cat([torch.zeros([2, pad_left]), audio_for_mel], dim=1)
+                # pad_right = hop_length - min(total_sample - crop_end_sample, hop_length)
+                # if pad_right > 0:
+                #     audio_for_mel = torch.cat([audio_for_mel, torch.zeros([2, pad_right])], dim=1)
+
+                # # channel, n_mels, T -> T, n_mels
+                # mel_spec = torch.mean(mel_spectrogram(audio_for_mel), dim=0).numpy().T
+                frame_length = round(2 * hop_length_samples_f)
+                frame_start_f = np.linspace(crop_start_sample_f - hop_length_samples_f, crop_end_sample_f - hop_length_samples_f, total_mel_frames, endpoint=False)
+                frame_start = np.round(frame_start_f).astype(int)
+                audio_for_mel = audio_data
+                # pad and crop left
+                if frame_start[0] < 0:
+                    audio_for_mel = np.concatenate([np.zeros([2, -frame_start[0]]), audio_for_mel], axis=1)
+                else:
+                    audio_for_mel = audio_for_mel[..., frame_start[0]:]
+                frame_start -= frame_start[0]
+                # pad right, generally this will not happen
+                if frame_start[-1] + frame_length > audio_for_mel.shape[1]:
+                    audio_for_mel = np.concatenate([audio_for_mel, np.zeros([2, frame_start[-1] + frame_length - audio_for_mel.shape[1]])], axis=1)
+                else:
+                    audio_for_mel = audio_for_mel[..., :frame_start[-1] + frame_length]
+                mel_spec = cal_mel_spec(
+                    audio_for_mel,
+                    frame_start, frame_length,
+                    window='hamming',
+                    nfft=frame_length,
+                    n_mel=frame_length,
+                    sample_rate=self.sample_rate
+                )
+                mel_spec = np.mean(mel_spec, axis=1)
+                assert mel_spec.shape[0] == total_mel_frames, 'mel_spec.shape[0] %s != total_mel_frames %s' % (mel_spec.shape[0], total_mel_frames)
             except Exception:
-                print('no audio %s' % audio_filename)
+                traceback.print_exc()
+                print('failed process_mel %s_%s' % (beatmapset_id, beatmap_id))
                 return
-            try:
-                audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath)
-            except Exception:
-                print('fail to load audio %s' % beatmapset_id)
-                return
-            os.remove(on_disk_audio_filepath)
-
-            snaps_after_occupied = len(audio_data.shape[1]) // snap_length_s
-
-
-            mel_spectrogram = torchaudio.transforms.MelSpectrogram(
-                sample_rate=self.sample_rate,
-                n_fft=2 * hop_length,
-                win_length=2 * hop_length,
-                hop_length=hop_length,
-                center=True,
-                pad_mode="reflect",
-                # we shall satisfy "center" by padding outside this function manually
-                # center=False,
-                # pad_mode="reflect",
-                power=2.0,
-                norm="slaney",
-                onesided=True,
-                n_mels=self.n_mels,
-                mel_scale="htk",
-            )
-
-            mel_spec = self.process_audio(audio_data, sr)
-            mel_spec = self.add_populated_indicator(mel_spec, beatmap)
-            with open(mel_path, 'wb') as f:
+            # mel_spec = self.add_populated_indicator(mel_spec, beatmap)
+            with open(paths['mel'], 'wb') as f:
                 pickle.dump(mel_spec, f)
-        else:
-            with open(mel_path, 'rb') as f:
-                mel_spec = pickle.load(f)
 
-        if not label_processed:
+        def get_ho_pos_snap(ho_, end_time=False):
+            if end_time and isinstance(ho_, (slider.beatmap.Slider, slider.beatmap.Spinner)):
+                ho_pos_s_ = ho_.end_time / timedelta(seconds=1)
+            else:
+                ho_pos_s_ = ho_.time / timedelta(seconds=1)
+            ho_pos_snap_f_ = (ho_pos_s_ - first_tp_s) / snap_length_s
+            ho_pos_snap_ = round(ho_pos_snap_f_)
+            # assert strict alignment between ho and snaps
+            # more lenient
+            assert abs(ho_pos_snap_f_ - ho_pos_snap_) < 0.15
+            ho_pos_snap_ += snaps_before_first_tp
+            return ho_pos_snap_
+
+        if not (skip_exist and processed['label'] and processed['label_idx']):
+            """
+            process label
+            """
             try:
-                # process label
-                sample_label = self.process_label(beatmap, mel_spec)
+                # snap type
+                # no hitobject: 0
+                # circle: 1
+                # slider: 2
+                # spinner: 3
+                snap_type = np.zeros(total_snaps)
+                for i, ho in enumerate(beatmap._hit_objects):
+                    # print(i)
+                    ho_pos_snap = get_ho_pos_snap(ho, end_time=False)
+                    if isinstance(ho, slider.beatmap.Circle):
+                        snap_type[ho_pos_snap] = 1
+                    else:
+                        ho_end_pos_snap = get_ho_pos_snap(ho, end_time=True)
+                        if isinstance(ho, slider.beatmap.Slider):
+                            snap_type[ho_pos_snap: ho_end_pos_snap+1] = 2
+                        else:
+                            assert isinstance(ho, slider.beatmap.Spinner)
+                            snap_type[ho_pos_snap: ho_end_pos_snap+1] = 3
+                # cursor signal
+                x_pos_seq, y_pos_seq = np.zeros(total_snaps), np.zeros(total_snaps)
+                for ho_a, ho_b in zip([None] + beatmap._hit_objects, beatmap._hit_objects + [None]):
+                    if ho_a is None:
+                        # before first hit object
+                        # start point for following interpolation
+                        ho_a_end_pos_snap = 0
+                        ho_a_end_x = ho_b.position.x
+                        ho_a_end_y = ho_b.position.y
+                    else:
+                        ho_a_pos_snap = get_ho_pos_snap(ho_a, end_time=False)
+                        if isinstance(ho_a, slider.beatmap.Circle):
+                            ho_a_end_pos_snap = ho_a_pos_snap
+                            ho_a_end_x = ho_a.position.x
+                            ho_a_end_y = ho_a.position.y
+                        else:
+                            # calculate cursor pos within span of ho_a
+                            ho_a_end_pos_snap = get_ho_pos_snap(ho_a, end_time=True)
+                            # end snap is not counted
+                            ho_span_snaps = ho_a_end_pos_snap - ho_a_pos_snap
+                            if isinstance(ho_a, slider.beatmap.Slider):
+                                assert ho_span_snaps % ho_a.repeat == 0
+                                single_repeat_span_snaps = ho_span_snaps / ho_a.repeat
+                                for snap_offset in range(ho_span_snaps):
+                                    snap = ho_a_pos_snap + snap_offset
+                                    # consider repeat
+                                    r, p = snap_offset // single_repeat_span_snaps, (snap_offset % single_repeat_span_snaps) / single_repeat_span_snaps
+                                    if r % 2 == 1:
+                                        p = 1 - p
+                                    curve_pos = ho_a.curve(p)
+                                    # if curve_pos.x > 1000 or curve_pos.y > 1000:
+                                    #     print('invalid curve')
+                                    #     print(r, p, curve_pos)
+                                    x_pos_seq[snap] = curve_pos.x
+                                    y_pos_seq[snap] = curve_pos.y
+                                last_position = ho_a.curve(1)
+                                ho_a_end_x = last_position.x
+                                ho_a_end_y = last_position.y
+                            else:
+                                assert isinstance(ho_a, slider.beatmap.Spinner)
+                                ho_a_end_x = ho_a.position.x
+                                ho_a_end_y = ho_a.position.y
+                                x_pos_seq[ho_a_pos_snap:ho_a_end_pos_snap] = ho_a_end_x
+                                y_pos_seq[ho_a_pos_snap:ho_a_end_pos_snap] = ho_a_end_y
+                    if ho_b is None:
+                        # after the last ho
+                        assert ho_a is not None
+                        ho_b_pos_snap = total_snaps
+                        ho_b_x = ho_a_end_x
+                        ho_b_y = ho_a_end_y
+                    else:
+                        ho_b_pos_snap = get_ho_pos_snap(ho_b, end_time=False)
+                        ho_b_x = ho_b.position.x
+                        ho_b_y = ho_b.position.y
+
+                    # do linear interpolation until the snap before the first snap occupied by hit_object ho_b
+                    num_itp = ho_b_pos_snap - ho_a_end_pos_snap
+                    x_pos_seq[ho_a_end_pos_snap:ho_b_pos_snap] = np.linspace(ho_a_end_x, ho_b_x, num=num_itp, endpoint=False)
+                    y_pos_seq[ho_a_end_pos_snap:ho_b_pos_snap] = np.linspace(ho_a_end_y, ho_b_y, num=num_itp, endpoint=False)
+                    if ho_a_end_x > 1000 or ho_a_end_y > 1000:
+                        print('invalid ho_a')
+                        print(ho_a)
+                        print(ho_a.position)
+                    if ho_b_x > 1000 or ho_b_y > 1000:
+                        print('invalid ho_b')
+                        print(ho_b)
+                        print(ho_b.position)
+                x_pos_seq = (x_pos_seq + 180) / (691 + 180)
+                y_pos_seq = (y_pos_seq + 82) / (407 + 82)
+                label = np.stack([snap_type, x_pos_seq, y_pos_seq], axis=1)
             except Exception:
                 traceback.print_exc()
                 print('failed process_label %s_%s' % (beatmapset_id, beatmap_id))
                 return
-            with open(label_path, 'wb') as f:
-                pickle.dump(sample_label, f)
+            with open(paths['label'], 'wb') as f:
+                pickle.dump(label, f)
+            # plot_label(label)
+
+            # """
+            # create label idx
+            # """
+            beat_snap_type = snap_type.reshape([total_snaps // self.beat_divisor, self.beat_divisor])
+            label_idx = [self.beat_label_seq_to_label_idx[tuple(beat_label_seq.tolist())] for beat_label_seq in beat_snap_type]
+            with open(paths['label_idx'], 'wb') as f:
+                pickle.dump(label_idx, f)
 
             # vis
             # if sample_idx in range(1):
@@ -569,30 +600,60 @@ class HeatmapDatasetv1:
             # with open(data_path, 'wb') as f:
             #     pickle.dump(sample_data, f)
             # process meta from mel
-        if not meta_processed:
+        if not (skip_exist and processed['meta']):
             try:
-                meta_data = self.process_meta(beatmap, mel_spec, beatmap_meta_dict)
+                meta_data = (beatmap.stars(), beatmap.cs())
             except Exception:
                 traceback.print_exc()
                 print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
                 return
-            with open(meta_path, 'wb') as f:
+            with open(paths['meta'], 'wb') as f:
                 pickle.dump(meta_data, f)
             # if sample_idx in range(1):
             #     plot_meta(meta_data)
 
-        if not info_processed:
+        if not (skip_exist and processed['info']):
             try:
-                sample_info = self.process_info(beatmap, mel_spec, beatmapset_id)
+                first_occupied_snap = get_ho_pos_snap(beatmap._hit_objects[0], end_time=False)
+                last_occupied_snap = get_ho_pos_snap(beatmap._hit_objects[-1], end_time=True)
+                sample_info = (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap)
+                # print(sample_info)
             except Exception:
                 traceback.print_exc()
-                print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
+                print('failed process_info %s_%s' % (beatmapset_id, beatmap_id))
                 return
-            with open(info_path, 'wb') as f:
+            with open(paths['info'], 'wb') as f:
                 pickle.dump(sample_info, f)
 
 
-def multiprocessing_prepare_data(nproc=32):
+def worker(q: multiprocessing.Queue, i):
+    # print('worker!')
+    mel_args = {
+        'sample_rate': 22000,
+        'mel_frame_per_snap': 16,
+        'n_mels': 40,
+    }
+    feature_args = {
+        'beat_divisor': 8,
+        'off_snap_threshold': 0.15,
+    }
+    ds = HeatmapDataset(mel_args, feature_args)
+    temp_dir = r'/home/data1/xiezheng/osu_mapper/temp/%d' % i
+    os.makedirs(temp_dir, exist_ok=True)
+    while True:
+        beatmap_meta_dict = q.get(block=True, timeout=None)
+        if beatmap_meta_dict is None:
+            # print('end msg')
+            return 0
+        ds.process_beatmap_meta_dict(
+            beatmap_meta_dict,
+            r'/home/data1/xiezheng/osu_mapper/preprocessed_v4',
+            r'/home/data1/xiezheng/osu_mapper/beatmapsets',
+            temp_dir,
+        )
+
+
+def multiprocessing_prepare_data(nproc=32, target=worker):
     meta_root = r'/home/xiezheng/osu_mapper/resources/data/osz'
     update_exist = True
     all = True
@@ -600,10 +661,10 @@ def multiprocessing_prepare_data(nproc=32):
     all_meta = os.listdir(meta_root)
     all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
 
-    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed'
+    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4'
     os.makedirs(preprocessed_root, exist_ok=True)
 
-    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed/processed_ids.txt'
+    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/processed_ids.txt'
     if not os.path.exists(processed_beatmapid_log_file):
         open(processed_beatmapid_log_file, 'w')
     processed_beatmapid = set()
@@ -612,7 +673,7 @@ def multiprocessing_prepare_data(nproc=32):
             processed_beatmapid.add(int(line))
 
     q = multiprocessing.Queue(maxsize=256)
-    processes = [multiprocessing.Process(target=worker, args=(q, i)) for i in range(nproc)]
+    processes = [multiprocessing.Process(target=target, args=(q, i)) for i in range(nproc)]
 
     for process in processes:
         process.start()
@@ -648,39 +709,26 @@ def multiprocessing_prepare_data(nproc=32):
         q.put(None)
 
 
-def worker(q: multiprocessing.Queue, i):
-    # print('worker!')
-    mel_args = {
-        'sample_rate': 22000,
-        'n_fft': 512,
-        'hop_length': 220,
-        'n_mels': 40,
-    }
-    ds = HeatmapDatasetv1(mel_args, {})
-    temp_dir = r'/home/data1/xiezheng/osu_mapper/temp/%d' % i
-    os.makedirs(temp_dir, exist_ok=True)
-    while True:
-        beatmap_meta_dict = q.get(block=True, timeout=None)
-        if beatmap_meta_dict is None:
-            # print('end msg')
-            return 0
-        ds.process_beatmap_meta_dict(
-            beatmap_meta_dict,
-            r'/home/data1/xiezheng/osu_mapper/preprocessed',
-            r'/home/data1/xiezheng/osu_mapper/beatmapsets',
-            temp_dir,
-        )
-
-
 if __name__ == '__main__':
     multiprocessing_prepare_data(16)
+    # ds = HeatmapDataset(
+    #     {
+    #         'sample_rate': 22000,
+    #         'mel_frame_per_snap': 16,
+    #         'n_mels': 40,
+    #     },
+    #     {
+    #         'beat_divisor': 8,
+    #         'off_snap_threshold': 0.15,
+    #     }
+    # )
     # ds.from_meta_file(
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\fit\heatmapv1',
     #     r'C:\Users\asus\coding\python\osu_mapper\resources\data\meta20230320.json',
     #     r'F:\beatmapsets',
     # )
     # ds.from_meta_file(
-    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed',
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed_v4',
     #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\osz\meta_2010-04-01.json',
     #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\beatmapsets',
     # )

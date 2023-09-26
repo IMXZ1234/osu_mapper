@@ -1,3 +1,4 @@
+import itertools
 import os
 import pickle
 from datetime import timedelta
@@ -507,29 +508,7 @@ def np_statistics(arr):
     print(np.mean(arr), np.min(arr), np.max(arr))
 
 
-if __name__ == '__main__':
-    """
-    view mel statistics
-    """
-    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\999739.pkl', 'rb') as f:
-    #     mel = pickle.load(f)
-    # print(mel.shape)
-    # print(np_statistics(mel[:40]))
-    # # print(mel[:, 40])
-    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\melv3\999739.pkl', 'rb') as f:
-    #     mel = pickle.load(f)
-    # print(mel.shape)
-    # print(np_statistics(mel[:40]))
-    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
-    #     mel = pickle.load(f)
-    # print(mel.shape)
-    # print(np_statistics(mel[:40]))
-    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
-    #     mel = pickle.load(f)
-    # print(mel.shape)
-    # print(np_statistics(mel[:40]))
-    # print(mel[:, 40])
-    # view_ho_meta_subseq()
+def check_signal():
 
     with open(
         r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\label\40285.pkl',
@@ -553,6 +532,71 @@ if __name__ == '__main__':
         fig_array, fig = plt_util.plot_signal(signal, name,
                                      save_path=None,
                                      show=True)
+
+
+def count_beat_label_seq():
+    beat_divisor = 8
+    label_idx_to_beat_label_seq = list(itertools.product(*[(0, 1, 2, 3) for _ in range(beat_divisor)]))
+    print(len(label_idx_to_beat_label_seq))
+    beat_label_seq_to_label_idx = {seq: idx for idx, seq in enumerate(label_idx_to_beat_label_seq)}
+    all_label_idx = []
+    # label_idx_dir = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/label_idx'
+    # for label_idx_filename in tqdm(os.listdir(label_idx_dir)):
+    #     label_idx_filepath = os.path.join(label_idx_dir, label_idx_filename)
+    #     with open(label_idx_filepath, 'rb') as f:
+    #         label_idx = pickle.load(f)
+    #         all_label_idx.append(label_idx)
+    # with open(r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/all_label_idx.pkl', 'wb') as f:
+    #     pickle.dump(all_label_idx, f)
+    # cnt = Counter(itertools.chain.from_iterable(all_label_idx))
+    with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\counter.pkl', 'rb') as f:
+        cnt = pickle.load(f)
+    print(len(cnt))
+    # with open(r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/counter.pkl', 'wb') as f:
+    #     pickle.dump(cnt, f)
+    most_common = cnt.most_common(10)
+    print(most_common)
+    for k, v in most_common:
+        print(label_idx_to_beat_label_seq[k], v)
+    label_idxs, all_occurrences = list(zip(*cnt.most_common(None)))
+    fig = plt.figure()
+    for k, v in zip(label_idxs[-10:], all_occurrences[-10:]):
+        print(label_idx_to_beat_label_seq[k], v)
+    print(all_occurrences)
+    plt.bar(np.arange(len(all_occurrences)), all_occurrences)
+    plt.savefig(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\occurences.jpg')
+    plt.show()
+
+
+if __name__ == '__main__':
+    """
+    view mel statistics
+    """
+    count_beat_label_seq()
+    """
+    view mel statistics
+    """
+    # view_ho_meta_subseq()
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\999739.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # # print(mel[:, 40])
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\melv3\999739.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\mel\10314.pkl', 'rb') as f:
+    #     mel = pickle.load(f)
+    # print(mel.shape)
+    # print(np_statistics(mel[:40]))
+    # print(mel[:, 40])
+    # view_ho_meta_subseq()
+
     # processed = process_label(label_list[0])
     # print(processed)
     # mel_from_audio()

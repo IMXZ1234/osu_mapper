@@ -1,10 +1,3 @@
-from . import (
-    base_sys,
-    gan_sys,
-    wgan_sys,
-    rnngan_sys,
-    seq2seq_sys,
-    vae_sys
-)
+from . import base_sys, gan_sys, wgan_sys, rnngan_sys, seq2seq_sys, vae_sys, word2vec_skipgram_sys
 
 from . import inference

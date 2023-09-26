@@ -25,6 +25,7 @@ SYS_DICT = {
     'vae': TrainVAE,
     'seq2seq': TrainSeq2Seq,
     'seqgan_adv_loss': TrainSeqGANAdvLoss,
+    'skipgram': TrainSeqGANAdvLoss,
 }
 
 
