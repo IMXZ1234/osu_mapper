@@ -2,18 +2,17 @@ import collections
 import os
 import random
 import sys
-import time
 
 import numpy as np
+import tensorboardX
 import torch
 from torch import autograd
 from tqdm import tqdm
 
 from system.gan_sys import TrainGAN
-from util.general_util import recursive_wrap_data
+from util.general_util import recursive_wrap_data, dynamic_import
 from util.plt_util import plot_loss, plot_signal
 from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger
-import tensorboardX
 
 
 class TrainWGAN(TrainGAN):
@@ -497,6 +496,9 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.lambda_gp = None
         self.lambda_cls = self.config_dict['train_arg']['lambda_cls']
 
+        if 'embedding_decoder' in self.config_dict:
+            self.embedding_output_decoder = dynamic_import(self.config_dict['embedding_decoder'])(**self.config_dict['embedding_decoder_args'])
+
     def run_train(self):
         print('Start Train...')
 
@@ -620,8 +622,21 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss, epoch)
             self.gen_loss_list.append(avg_gen_loss)
 
-            sample = gen((cond_data, cls_label))[0].cpu().detach().numpy()
-            self.log_gen_output(sample, epoch)
+            print('generating sample...')
+            print('run1')
+            sample = gen((cond_data, cls_label))
+            self.log_gen_output_embedding(sample, epoch, 'run1')
+            print('run2')
+            sample = gen((cond_data, cls_label))
+            self.log_gen_output_embedding(sample, epoch, 'run2')
+            print('max_difficulty')
+            max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+            sample = gen((cond_data, max_difficulty))
+            self.log_gen_output_embedding(sample, epoch, str(max_difficulty[0].item()))
+            print('min_difficulty')
+            min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+            sample = gen((cond_data, min_difficulty))
+            self.log_gen_output_embedding(sample, epoch, str(min_difficulty[0].item()))
 
             avg_loss = total_loss / total_sample_num
             avg_fake_loss = epoch_fake_loss / total_sample_num
@@ -690,7 +705,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
-            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output.data, fake.data)
+            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake)
             gp_loss = self.lambda_gp * gradient_penalty
             loss = loss + gp_loss
         else:
@@ -741,7 +756,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
-            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output.data, fake.data)
+            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake)
             gp_loss = self.lambda_gp * gradient_penalty
             loss = loss + gp_loss
         else:
@@ -798,6 +813,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         return gen_loss.item()
 
     def log_gen_output(self, gen_output, epoch):
+        gen_output = gen_output[0].cpu().detach().numpy()
         output_dir = os.path.join(self.log_dir, 'output', str(epoch))
         os.makedirs(output_dir, exist_ok=True)
         for signal, name in zip(
@@ -811,25 +827,76 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                          show=False)
             self.tensorboard_writer.add_figure(name, fig, epoch)
 
+    def log_gen_output_embedding(self, gen_output, epoch, prefix='', plot_first=3):
+        coord_output, embedding_output = gen_output
+        coord_output = coord_output.cpu().detach().numpy()
+        # print(embedding_output.shape)
+        embedding_output = embedding_output.cpu().detach().numpy()
+        # print(embedding_output.shape)
+        output_dir = os.path.join(self.log_dir, 'output', prefix + str(epoch))
+        os.makedirs(output_dir, exist_ok=True)
+        for i, (sample_coord_output, sample_embedding_output) in enumerate(zip(coord_output, embedding_output)):
+            if i >= plot_first:
+                break
+            for signal, name in zip(
+                sample_coord_output.T,
+                [
+                    'cursor_x', 'cursor_y'
+                ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=os.path.join(output_dir, name + '%d.jpg' % i),
+                                             show=False)
+                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+            decoded = self.embedding_output_decoder.decode(sample_embedding_output)
+            for signal, name in zip(
+                [
+                    np.where(decoded == 1, 1, 0),
+                    np.where(decoded == 2, 1, 0),
+                    np.where(decoded == 3, 1, 0),
+                ],
+                [
+                    'circle_hit', 'slider_hit', 'spinner_hit'
+                ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=os.path.join(output_dir, name + '%d.jpg' % i),
+                                             show=False)
+                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+
     def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
         """Calculates the gradient penalty loss for WGAN GP"""
+        batch_size = len(cond_data)
+
+        def interpolate(real_item, fake_item):
+            alpha = torch.rand(real_item.shape, device=real_item.device)
+            return (alpha * real_item + ((1 - alpha) * fake_item)).requires_grad_(True)
+
         gen, dis = self.model
-        batch_size = real_samples.shape[0]
+        if isinstance(real_samples, (list, tuple)):
+            interpolates = [interpolate(r.data, f.data) for r, f in zip(real_samples, fake_samples)]
+        else:
+            interpolates = interpolate(real_samples.data, fake_samples.data)
         # Random weight term for interpolation between real and fake samples
-        alpha = torch.rand([batch_size] + list(real_samples.shape[1:]), device=real_samples.device)
         # Get random interpolation between real and fake samples
-        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
         interpolates_validity, _ = dis(cond_data, interpolates)
-        fake = torch.ones([batch_size, 1], dtype=torch.float, device=real_samples.device, requires_grad=False)
-        # Get gradient w.r.t. interpolates
-        gradients = autograd.grad(
-            outputs=interpolates_validity,
-            inputs=interpolates,
-            grad_outputs=fake,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True,
-        )[0]
-        gradients = gradients.reshape(batch_size, -1)
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+
+        def penalty(inputs):
+            fake = torch.ones([batch_size, 1], dtype=torch.float, device=cond_data.device, requires_grad=False)
+            # Get gradient w.r.t. interpolates
+            gradients = autograd.grad(
+                outputs=interpolates_validity,
+                inputs=inputs,
+                grad_outputs=fake,
+                create_graph=True,
+                retain_graph=True,
+                only_inputs=True,
+            )[0]
+            gradients = gradients.reshape(batch_size, -1)
+            return ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+
+        if isinstance(interpolates, (list, tuple)):
+            gradient_penalty = sum(penalty(inp) for inp in interpolates) / len(interpolates)
+        else:
+            gradient_penalty = penalty(interpolates)
         return gradient_penalty

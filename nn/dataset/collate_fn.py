@@ -344,7 +344,7 @@ def output_collate_fn_dfo(epoch_output_list):
     return collated
 
 
-def recursive_to_tensor(item, dtype):
+def recursive_to_tensor(item, dtype=None):
     if isinstance(item, np.ndarray):
         item = torch.tensor(item, dtype=dtype)
     elif isinstance(item, list):
@@ -355,12 +355,10 @@ def recursive_to_tensor(item, dtype):
 
 def recursive_stack(item):
     if isinstance(item, list):
+        if all([isinstance(t, torch.Tensor) for t in item]):
+            return torch.stack(item, dim=0)
         for idx in range(len(item)):
-            if isinstance(item[idx], list):
-                if isinstance(item[idx][0], torch.Tensor):
-                    item[idx] = torch.stack(item[idx], dim=0)
-                else:
-                    recursive_stack(item[idx])
+            item[idx] = recursive_stack(item[idx])
     return item
 
 
@@ -400,7 +398,7 @@ def recursive_zip(original, item=None, path=None):
     return zipped_list
 
 
-def tensor_list_recursive_stack(sample_list):
+def tensor_list_stack(sample_list):
     """
     everything is tensor
 
@@ -411,4 +409,52 @@ def tensor_list_recursive_stack(sample_list):
     # batch_data, batch_label, batch_index
     for i in range(len(sample_list[0])):
         collated.append(torch.stack([torch.tensor(sample_data[i], dtype=torch.float32) for sample_data in sample_list]))
+    return collated
+
+
+def tensor_list_stack_retain_type(sample_list):
+    """
+    everything is tensor
+
+    :param sample_list:
+    :return:
+    """
+    collated = []
+    # batch_data, batch_label, batch_index
+    for i in range(len(sample_list[0])):
+        collated.append(torch.stack([torch.tensor(sample_data[i]) for sample_data in sample_list]))
+    return collated
+
+
+def tensor_list_recursive_stack(sample_list):
+    """
+    everything is tensor
+
+    :param sample_list:
+    :return:
+    """
+    collated = []
+    for i in range(len(sample_list[0])):
+        collated.append([sample_data[i] for sample_data in sample_list])
+    for i in range(len(collated)):
+        collated[i] = recursive_zip(collated[i])
+        collated[i] = recursive_to_tensor(collated[i], dtype=torch.float32)
+        collated[i] = recursive_stack(collated[i])
+    return collated
+
+
+def tensor_list_recursive_stack_retain_type(sample_list):
+    """
+    everything is tensor
+
+    :param sample_list:
+    :return:
+    """
+    collated = []
+    for i in range(len(sample_list[0])):
+        collated.append(sample_data[i] for sample_data in sample_list)
+    for i in range(len(collated)):
+        collated[i] = recursive_zip(collated[i])
+        collated[i] = recursive_to_tensor(collated[i])
+        collated[i] = recursive_stack(collated[i])
     return collated

@@ -11,4 +11,6 @@ from . import (
     seqganv1_generator,
     seq2seq_generator,
     vaev3_generator,
+
+    interpreter,
 )

@@ -457,7 +457,7 @@ class HeatmapDataset:
                     frame_start, frame_length,
                     window='hamming',
                     nfft=frame_length,
-                    n_mel=frame_length,
+                    n_mel=self.n_mels,
                     sample_rate=self.sample_rate
                 )
                 mel_spec = np.mean(mel_spec, axis=1)
@@ -650,6 +650,7 @@ def worker(q: multiprocessing.Queue, i):
             r'/home/data1/xiezheng/osu_mapper/preprocessed_v4',
             r'/home/data1/xiezheng/osu_mapper/beatmapsets',
             temp_dir,
+            skip_exist=True,
         )
 
 

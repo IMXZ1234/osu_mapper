@@ -23,4 +23,8 @@ from . import (
     feeder_heatmapv2_meta,
     feeder_heatmapv2_meta_no_hit,
     feeder_heatmapv3_meta,
+
+    feeder_word2vec_skipgram,
+
+    feeder_embedding,
 )

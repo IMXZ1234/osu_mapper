@@ -568,11 +568,38 @@ def count_beat_label_seq():
     plt.show()
 
 
+def view_word_embedding():
+    embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16\embedding_center.pkl'
+    counter_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\counter.pkl'
+    with open(embedding_filepath, 'rb') as f:
+        embedding = pickle.load(f)
+    with open(counter_path, 'rb') as f:
+        cnt = pickle.load(f)
+    existent_label_idxs = np.array(list(cnt.keys()))
+    existent_label_idxs_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\existent_label_idxs.pkl'
+    with open(counter_path, 'wb') as f:
+        cnt = pickle.load(f)
+    existent_embedding = embedding[existent_label_idxs]
+    pairwise_cosine_dist = [
+        np.sum(existent_embedding[i] * existent_embedding[j]) / np.linalg.norm(existent_embedding[i]) / np.linalg.norm(existent_embedding[j])
+        for i in range(len(existent_embedding)) for j in range(i+1, len(existent_embedding))
+    ]
+    print(pairwise_cosine_dist)
+    min_cosine_dist = np.min(pairwise_cosine_dist)
+    max_cosine_dist = np.max(pairwise_cosine_dist)
+    mean_cosine_dist = np.mean(pairwise_cosine_dist)
+    print(min_cosine_dist, max_cosine_dist, mean_cosine_dist)
+
+
 if __name__ == '__main__':
     """
-    view mel statistics
+    view embedding
     """
-    count_beat_label_seq()
+    view_word_embedding()
+    """
+    count label idx
+    """
+    # count_beat_label_seq()
     """
     view mel statistics
     """

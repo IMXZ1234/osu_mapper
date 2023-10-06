@@ -95,13 +95,14 @@ class Train:
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else os.path.join(self.log_dir, 'train_state')
         os.makedirs(self.train_state_dir, exist_ok=True)
         self.model = self.load_model(**model_arg)
+        self.display_model_param()
         self.optimizer = self.load_optimizer(**optimizer_arg)
         self.scheduler = self.load_scheduler(**scheduler_arg)
         self.train_iter, self.test_iter = self.load_data(**data_arg)
         self.loss = self.load_loss(**loss_arg)
 
         self.epoch = train_arg['epoch']
-        self.eval_step = train_arg['eval_step']
+        self.eval_step = train_arg.get('eval_step', 1)
 
         self.control_file_path = os.path.join(self.log_dir, 'control.yaml')
         self.train_loss_list = []
@@ -233,6 +234,10 @@ class Train:
                 loss = nn.BCELoss(**kwargs)
             elif loss_type == 'NLLLoss':
                 loss = nn.NLLLoss(**kwargs)
+            elif loss_type == 'BCEWithLogitsLoss':
+                loss = nn.BCEWithLogitsLoss(**kwargs)
+            elif loss_type == 'binary_cross_entropy_with_logits':
+                loss = functools.partial(nn.functional.binary_cross_entropy_with_logits, **kwargs)
             elif loss_type == 'CrossEntropyLoss':
                 if 'weight' in kwargs and kwargs['weight'] is not None:
                     kwargs['weight'] = torch.tensor(kwargs['weight'], dtype=torch.float32, device=self.output_device)
@@ -271,7 +276,7 @@ class Train:
             models = self.model
             optimizers = self.optimizer
         for index, (optimizer, model) in enumerate(zip(optimizers, models)):
-            if self.train_state_dir is not None:
+            if (self.train_state_dir is not None) and (self.start_epoch is not None and self.start_epoch != 0):
                 self.start_epoch = self.from_train_state(model, optimizer, epoch=self.start_epoch, index=index)
             else:
                 model.apply(init_weights)
@@ -528,11 +533,22 @@ class Train:
             self.logger.info('found latest state at epoch %d' % last_epoch)
         pt_filename = 'epoch%d_state%d.pt' % (epoch, index) if index is not None else 'epoch%d_state.pt' % epoch
         filename = os.path.join(self.train_state_dir, pt_filename)
+        if not os.path.exists(filename):
+            self.logger.info('train state at epoch %d is not found!' % epoch)
+            return 0
         state = torch.load(filename)
         model.load_state_dict(state['model'])
         optimizer.load_state_dict(state['model'])
         start_epoch = state['epoch']
         return start_epoch
+
+    def display_model_param(self):
+        print('trainable params:')
+        model = self.model
+        if not isinstance(model, (list, tuple)):
+            model = [model]
+        for m in model:
+            print(type(m), sum(p.numel() for p in m.parameters()))
 
 
 class Train1:

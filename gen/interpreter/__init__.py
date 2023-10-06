@@ -1,3 +1,3 @@
 from . import (
-    heatmap_pos
+    heatmap_pos,
 )
