@@ -1,6 +1,7 @@
 import os
 
 import torch
+import numpy as np
 from torch.autograd import Variable
 
 from torch import nn
@@ -147,3 +148,96 @@ def try_format_dict_with_path(dict_in, path, fmt_elem):
         print('%s can not be formatted with %s' % (str(item[path[-1]]), fmt_elem))
         return False
     return True
+
+
+def recursive_to_tensor(item, dtype=None):
+    if isinstance(item, np.ndarray):
+        item = torch.tensor(item, dtype=dtype)
+    elif isinstance(item, list):
+        for idx in range(len(item)):
+            item[idx] = recursive_to_tensor(item[idx], dtype)
+    return item
+
+
+def recursive_to_ndarray(item, dtype=None):
+    if isinstance(item, torch.Tensor):
+        item = item.numpy()
+        if dtype is not None:
+            item = item.astype(dtype)
+    elif isinstance(item, list):
+        for idx in range(len(item)):
+            item[idx] = recursive_to_ndarray(item[idx], dtype)
+    return item
+
+
+def recursive_stack(item):
+    if isinstance(item, list):
+        if all([isinstance(t, torch.Tensor) for t in item]):
+            return torch.stack(item, dim=0)
+        for idx in range(len(item)):
+            item[idx] = recursive_stack(item[idx])
+    return item
+
+
+def recursive_zip(original, item=None, path=None):
+    """
+    Only zip the deepest iterable
+
+    :param original:
+    :param item:
+    :param path:
+    :return: hierarchical list structure
+    """
+    if item is None:
+        # a representative of the structure to be zipped
+        item = original[0]
+        # return if nothing can be zipped
+        if not isinstance(item, list):
+            return original
+        path = []
+    zipped_list = []
+    for pos, item_ in enumerate(item):
+        # print('pos')
+        # print(pos)
+        # print('item_')
+        # print(item_)
+        # tuples are viewd as a whole and are not recursively processed!
+        if isinstance(item_, list):
+            zipped_list.append(recursive_zip(original, item_, path + [pos]))
+        else:
+            inner_zip = []
+            for zip_input_idx in range(len(original)):
+                item__ = original[zip_input_idx]
+                for spec in path:
+                    item__ = item__[spec]
+                inner_zip.append(item__[pos])
+            zipped_list.append(inner_zip)
+    return zipped_list
+
+
+def recursive_flatten_batch(item, cat_dim):
+    """
+    first dim is batch dim,
+    and will concat along cat_dim
+    """
+    assert cat_dim != 0
+    if isinstance(item, tuple):
+        item = list(item)
+    if isinstance(item, list):
+        for idx in range(len(item)):
+            item[idx] = recursive_flatten_batch(item[idx], cat_dim)
+    elif isinstance(item, torch.Tensor):
+        item = torch.moveaxis(item, cat_dim, 1)
+        shape = list(item.shape)
+        new_shape = [shape[0] * shape[1]] + shape[2:]
+        item = item.reshape(new_shape)
+        item = torch.moveaxis(item, 0, cat_dim-1)
+        return item
+    elif isinstance(item, np.ndarray):
+        item = np.moveaxis(item, cat_dim, 1)
+        shape = list(item.shape)
+        new_shape = [shape[0] * shape[1]] + shape[2:]
+        item = item.reshape(new_shape)
+        item = np.moveaxis(item, 0, cat_dim-1)
+        return item
+    return item

@@ -2,6 +2,8 @@ import torch
 from torch.nn import functional as F
 import numpy as np
 
+from util.general_util import recursive_zip, recursive_to_tensor, recursive_stack
+
 
 def non_array_to_list(sample_list):
     """
@@ -342,60 +344,6 @@ def output_collate_fn_dfo(epoch_output_list):
             # concatenate tensors at sample dim(the first dim)
             collated[i] = torch.cat(collated[i])
     return collated
-
-
-def recursive_to_tensor(item, dtype=None):
-    if isinstance(item, np.ndarray):
-        item = torch.tensor(item, dtype=dtype)
-    elif isinstance(item, list):
-        for idx in range(len(item)):
-            item[idx] = recursive_to_tensor(item[idx], dtype)
-    return item
-
-
-def recursive_stack(item):
-    if isinstance(item, list):
-        if all([isinstance(t, torch.Tensor) for t in item]):
-            return torch.stack(item, dim=0)
-        for idx in range(len(item)):
-            item[idx] = recursive_stack(item[idx])
-    return item
-
-
-def recursive_zip(original, item=None, path=None):
-    """
-    Only zip the deepest iterable
-
-    :param original:
-    :param item:
-    :param path:
-    :return: hierarchical list structure
-    """
-    if item is None:
-        # a representative of the structure to be zipped
-        item = original[0]
-        # return if nothing can be zipped
-        if not isinstance(item, list):
-            return original
-        path = []
-    zipped_list = []
-    for pos, item_ in enumerate(item):
-        # print('pos')
-        # print(pos)
-        # print('item_')
-        # print(item_)
-        # tuples are viewd as a whole and are not recursively processed!
-        if isinstance(item_, list):
-            zipped_list.append(recursive_zip(original, item_, path + [pos]))
-        else:
-            inner_zip = []
-            for zip_input_idx in range(len(original)):
-                item__ = original[zip_input_idx]
-                for spec in path:
-                    item__ = item__[spec]
-                inner_zip.append(item__[pos])
-            zipped_list.append(inner_zip)
-    return zipped_list
 
 
 def tensor_list_stack(sample_list):

@@ -3,11 +3,11 @@ import os
 
 import yaml
 
-from gen.cganv5_generator import CGANGenerator
-from gen.simple_acganv2_generator import SimpleACGANGenerator
+from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
 from util import general_util
 
 
+DEFAULT_GEN_DIR = r'./resources/gen'
 DEFAULT_META_DIR = r'./resources/gen/meta'
 
 
@@ -359,10 +359,10 @@ def test_gen_5(generator):
 
 def test_gen_6(generator):
     audio_file_path = \
-        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄.mp3"
+        os.path.join(DEFAULT_GEN_DIR, r"遠くの子守の唄.mp3")
 
     audio_info_path = \
-        r"C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\遠くの子守の唄.yaml"
+        os.path.join(DEFAULT_GEN_DIR, r'audio_info\遠くの子守の唄.yaml')
 
     meta_list = [
         {
@@ -376,20 +376,25 @@ def test_gen_6(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 4.5,
         },
     ]
     # for meta in meta_list:
     #     save_meta(meta)
     generator.generate_beatmapset(
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\osz\test6.osz',
+        os.path.join(DEFAULT_GEN_DIR, r'osz\test6.osz'),
         audio_file_path,
         meta_list,
         audio_info_path=audio_info_path,
         title='遠くの子守の唄',
-        osu_dir=r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\generate\osu',
+        osu_dir=os.path.join(DEFAULT_GEN_DIR, r'osu\test6'),
     )
 
 
 if __name__ == '__main__':
-    generator = SimpleACGANGenerator()
+    # import pickle
+    # with open(r'C:\Users\asus\coding\python\osu_mapper\resources\data\processed_v4\mel\999834.pkl', 'rb') as f:
+    #     print(pickle.load(f))
+    generator = ACGANEmbeddingGenerator()
     test_gen_6(generator)
+#

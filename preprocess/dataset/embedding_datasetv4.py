@@ -1,7 +1,13 @@
 import sys
-
-sys.argv.append(r'/home/xiezheng/osu_mapper')
 import os
+
+import torchaudio
+
+from util.audio_util import cal_mel_spec
+
+proj_dir = os.path.dirname(os.path.dirname(__file__))
+if proj_dir not in sys.path:
+    sys.path.append(proj_dir)
 import pickle
 import traceback
 import zipfile
@@ -10,128 +16,12 @@ from datetime import timedelta
 import numpy as np
 
 import slider
-import torch
-import torchaudio
 import multiprocessing
 import math
 
-import audio_util
-from plt_util import plot_signal
+from util import audio_util
+from util.plt_util import plot_signal
 import itertools
-
-
-def calculate_meta(beatmap: slider.Beatmap, frame_times):
-    """
-    ms_per_beat, snap_divisor, ho_density, occupied_proportion
-    """
-    total_frames = len(frame_times)
-    # same length as mel frame data
-    occupied_proportion = np.zeros([total_frames])
-    ho_density = np.zeros([total_frames])
-    ms_per_beat = np.zeros([total_frames])
-    frame_ms = frame_times[1] - frame_times[0]
-
-    non_inherited_tps = [tp for tp in beatmap.timing_points if tp.parent is None]
-    ho_idx = 0
-    # statistics of hit_objects under control of timing_points
-    # a dummy timing_points is added at the beginning
-    # [total_snaps, hit_object_num, occupied_snap_num]
-    # a single hit_object Slider/Spinner may occupy multiple snaps
-    tp_statistics_list = [[0, 0, 0]] + [[0, 0, 0] for tp in non_inherited_tps]
-    for tp_idx, (tp1, tp2) in enumerate(zip([None] + non_inherited_tps, non_inherited_tps + [None])):
-        if tp1 is None:
-            tp_ms_per_snap = tp2.ms_per_beat / beatmap.beat_divisor
-            start_ms = 0
-            end_ms = tp2.offset / timedelta(milliseconds=1)
-        elif tp2 is None:
-            tp_ms_per_snap = tp1.ms_per_beat / beatmap.beat_divisor
-            start_ms = tp1.offset / timedelta(milliseconds=1)
-            end_ms = frame_times[-1]
-        else:
-            tp_ms_per_snap = tp1.ms_per_beat / beatmap.beat_divisor
-            start_ms = tp1.offset / timedelta(milliseconds=1)
-            end_ms = tp2.offset / timedelta(milliseconds=1)
-        tp_ms_itv = end_ms - start_ms
-        cur_tp_statistics = tp_statistics_list[tp_idx]
-        cur_tp_statistics[0] = round(tp_ms_itv / tp_ms_per_snap)
-        # count hit_objects under control of this timing_point
-        while ho_idx < len(beatmap._hit_objects):
-            ho = beatmap._hit_objects[ho_idx]
-            ho_time = ho.time / timedelta(milliseconds=1)
-            if ho_time > end_ms:
-                break
-            if isinstance(ho, slider.beatmap.Circle):
-                cur_tp_statistics[1] += 1
-                cur_tp_statistics[2] += 1
-            else:
-                assert isinstance(ho, (slider.beatmap.Slider, slider.beatmap.Spinner))
-                ho_end_time = ho.end_time / timedelta(milliseconds=1)
-                cur_tp_statistics[1] += 1
-                ho_snaps = round((ho_end_time - ho_time) / tp_ms_per_snap)
-                cur_tp_statistics[2] += ho_snaps
-            ho_idx += 1
-
-    for tp_idx, (tp1, tp2) in enumerate(zip([None] + non_inherited_tps, non_inherited_tps + [None])):
-        if tp1 is None:
-            tp_ms_per_beat = tp2.ms_per_beat
-            start_mel = 0
-            end_mel = round(tp2.offset / timedelta(milliseconds=1) / frame_ms)
-            cur_tp_statistics = tp_statistics_list[tp_idx + 1]
-        elif tp2 is None:
-            tp_ms_per_beat = tp1.ms_per_beat
-            start_mel = round(tp1.offset / timedelta(milliseconds=1) / frame_ms)
-            end_mel = len(frame_times)
-            cur_tp_statistics = tp_statistics_list[tp_idx]
-        else:
-            tp_ms_per_beat = tp1.ms_per_beat
-            start_mel = round(tp1.offset / timedelta(milliseconds=1) / frame_ms)
-            end_mel = round(tp2.offset / timedelta(milliseconds=1) / frame_ms)
-            cur_tp_statistics = tp_statistics_list[tp_idx]
-        occupied_proportion[start_mel:end_mel] = cur_tp_statistics[2] / cur_tp_statistics[0] if cur_tp_statistics[
-                                                                                                    0] != 0 else 0
-        ho_density[start_mel:end_mel] = cur_tp_statistics[1] / cur_tp_statistics[0] if cur_tp_statistics[0] != 0 else 0
-        ms_per_beat[start_mel:end_mel] = tp_ms_per_beat
-    return ms_per_beat, ho_density, occupied_proportion, beatmap.beat_divisor
-
-
-def calculate_hitobject_meta(beatmap: slider.Beatmap, frame_times):
-    """
-    -> 5, L
-    meta information of hit objects
-    """
-    total_frames = len(frame_times)
-    # hit_object count within each mel frame
-    # sliders or spinners are counted only once in the closest mel frame
-    # circle count, slider count, spinner count, slider occupied, spinner occupied
-    ho_meta = np.zeros([5, total_frames])
-    frame_bounds = (frame_times[:-1] + frame_times[1:]) / 2
-    itv = np.diff(frame_bounds)
-    itv = np.concatenate([np.array([frame_bounds[0]]), itv, itv[-1:]])
-    frame_idx = 0
-    for ho in beatmap._hit_objects:
-        time_start = ho.time // timedelta(milliseconds=1)
-        while frame_idx < len(frame_bounds) and time_start > frame_bounds[frame_idx]:
-            frame_idx += 1
-        if isinstance(ho, slider.beatmap.Circle):
-            ho_meta[0, frame_idx] += 1
-        else:
-            time_end = ho.end_time // timedelta(milliseconds=1)
-            if isinstance(ho, slider.beatmap.Slider):
-                ho_meta[1, frame_idx] += 1
-                i = 3
-            elif isinstance(ho, slider.beatmap.Spinner):
-                ho_meta[2, frame_idx] += 1
-                i = 4
-            accumulate_start = time_start
-            while frame_idx < len(frame_bounds) and time_end > frame_bounds[frame_idx]:
-                length_within_frame = frame_bounds[frame_idx] - accumulate_start
-                ho_meta[i, frame_idx] += length_within_frame
-                accumulate_start = frame_bounds[frame_idx]
-                frame_idx += 1
-            ho_meta[i, frame_idx] += time_end - accumulate_start
-    ho_meta[3, :] = ho_meta[3, :] / itv
-    ho_meta[4, :] = ho_meta[4, :] / itv
-    return ho_meta, beatmap.beat_divisor
 
 
 def plot_label(label):
@@ -190,50 +80,6 @@ def check_beatmap_suitable(beatmap: slider.Beatmap, beat_divisor=8):
     if len(beatmap._hit_objects) <= 1:
         return False
     return True
-
-
-def cal_mel_spec(audio_data,
-                 frame_start, frame_length,
-                 window='hamming',
-                 nfft=None, n_mel=40, sample_rate=22000):
-    """
-    calculate mel spec for frames starting from specified pos
-    audio_data: ..., sample
-    return time, ..., n_mel
-    """
-    if nfft is None:
-        nfft = frame_length
-    frames = np.stack([audio_data[..., start:start + frame_length] for start in frame_start], axis=0)
-    if window == 'hamming':
-        frames *= np.hamming(frame_length)
-    mag_frames = np.absolute(np.fft.rfft(frames, nfft, axis=-1))  # Magnitude of the FFT
-    pow_frames = ((1.0 / nfft) * (mag_frames ** 2))  # Power Spectrum
-
-    low_freq_mel = 0
-    high_freq_mel = (2595 * np.log10(1 + (sample_rate / 2) / 700))  # Convert Hz to Mel
-    mel_points = np.linspace(low_freq_mel, high_freq_mel, n_mel + 2)  # Equally spaced in Mel scale
-    hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
-    bin = np.floor((nfft + 1) * hz_points / sample_rate)
-
-    fbank = np.zeros((n_mel, int(np.floor(nfft / 2 + 1))))
-    for m in range(1, n_mel + 1):
-        f_m_minus = int(bin[m - 1])  # left
-        f_m = int(bin[m])  # center
-        f_m_plus = int(bin[m + 1])  # right
-
-        for k in range(f_m_minus, f_m):
-            fbank[m - 1, k] = (k - bin[m - 1]) / (bin[m] - bin[m - 1])
-        for k in range(f_m, f_m_plus):
-            fbank[m - 1, k] = (bin[m + 1] - k) / (bin[m + 1] - bin[m])
-    # filter_banks_shape = list(pow_frames.shape)
-    # filter_banks_shape[-1] = n_mel
-    # filter_banks = np.zeros(filter_banks_shape)
-    # for n in range(len(frames)):
-    #     filter_banks[n, ...] = np.dot(pow_frames[n, ...], fbank.T)
-    filter_banks = np.dot(pow_frames, fbank.T)
-    filter_banks = np.where(filter_banks == 0, np.finfo(float).eps, filter_banks)  # Numerical Stability
-    filter_banks = 20 * np.log10(filter_banks)  # dB
-    return filter_banks
 
 
 class HeatmapDataset:
@@ -348,17 +194,9 @@ class HeatmapDataset:
         occupied_start_snaps_f = (occupied_start_s - first_tp_s) / snap_length_s
         if abs(occupied_start_snaps_f - round(occupied_start_snaps_f)) > 0.15:
             print('hit objects not well aligned %s' % beatmap_id)
-            # print(occupied_start_snaps_f, occupied_start_snaps_f)
             return
         if abs(occupied_totol_snaps_f - round(occupied_totol_snaps_f)) > 0.15:
             print('hit objects not well aligned %s' % beatmap_id)
-            # print('beat_length_s', beat_length_s)
-            # print('snap_length_s', snap_length_s)
-            # print('first_tp_s', first_tp_s)
-            # print('occupied_start_s', occupied_start_s)
-            # print('occupied_end_s', occupied_end_s)
-            # print('occupied_totol_beats_f', occupied_totol_beats_f)
-            # print('occupied_totol_snaps_f', occupied_totol_snaps_f)
             return
 
         print('processing beatmap %s' % beatmap_id)
@@ -378,11 +216,13 @@ class HeatmapDataset:
             print('no audio %s' % audio_filename)
             return
         try:
-            audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath, ret_tensor=False)
+            audio_data, sr = audio_util.audioread_get_audio_data(on_disk_audio_filepath, ret_tensor=True)
         except Exception:
             print('fail to load audio %s' % beatmapset_id)
             return
         os.remove(on_disk_audio_filepath)
+        audio_data = torchaudio.functional.resample(audio_data, sr, self.sample_rate)
+        audio_data = audio_data.numpy()
 
         total_sample = audio_data.shape[1]
         # count by beat_length_samples_f backward and forward to retrieve aligned audio
@@ -410,33 +250,6 @@ class HeatmapDataset:
         """
         if not (skip_exist and processed['mel']):
             try:
-                # mel_spectrogram = torchaudio.transforms.MelSpectrogram(
-                #     sample_rate=self.sample_rate,
-                #     n_fft=2 * hop_length,
-                #     win_length=2 * hop_length,
-                #     hop_length=hop_length,
-                #     # center=True,
-                #     # pad_mode="reflect",
-                #     # we shall satisfy "center" by padding outside this function manually
-                #     center=False,
-                #     pad_mode="reflect",
-                #     power=2.0,
-                #     norm="slaney",
-                #     onesided=True,
-                #     n_mels=self.n_mels,
-                #     mel_scale="htk",
-                # )
-                # # pad left and right with half window length = hop length
-                # audio_for_mel = audio_data[:, max(0, crop_start_sample-hop_length):min(total_sample, crop_end_sample+hop_length)]
-                # pad_left = hop_length - min(crop_start_sample, hop_length)
-                # if pad_left > 0:
-                #     audio_for_mel = torch.cat([torch.zeros([2, pad_left]), audio_for_mel], dim=1)
-                # pad_right = hop_length - min(total_sample - crop_end_sample, hop_length)
-                # if pad_right > 0:
-                #     audio_for_mel = torch.cat([audio_for_mel, torch.zeros([2, pad_right])], dim=1)
-
-                # # channel, n_mels, T -> T, n_mels
-                # mel_spec = torch.mean(mel_spectrogram(audio_for_mel), dim=0).numpy().T
                 frame_length = round(2 * hop_length_samples_f)
                 frame_start_f = np.linspace(crop_start_sample_f - hop_length_samples_f, crop_end_sample_f - hop_length_samples_f, total_mel_frames, endpoint=False)
                 frame_start = np.round(frame_start_f).astype(int)

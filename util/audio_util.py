@@ -192,6 +192,50 @@ def audio_len(audio_file_path: str):
     return audio_data.shape[1] / sample_rate
 
 
+def cal_mel_spec(audio_data,
+                 frame_start, frame_length,
+                 window='hamming',
+                 nfft=None, n_mel=40, sample_rate=22000):
+    """
+    calculate mel spec for frames starting from specified pos
+    audio_data: ..., sample
+    return time, ..., n_mel
+    """
+    if nfft is None:
+        nfft = frame_length
+    frames = np.stack([audio_data[..., start:start + frame_length] for start in frame_start], axis=0)
+    if window == 'hamming':
+        frames *= np.hamming(frame_length)
+    mag_frames = np.absolute(np.fft.rfft(frames, nfft, axis=-1))  # Magnitude of the FFT
+    pow_frames = ((1.0 / nfft) * (mag_frames ** 2))  # Power Spectrum
+
+    low_freq_mel = 0
+    high_freq_mel = (2595 * np.log10(1 + (sample_rate / 2) / 700))  # Convert Hz to Mel
+    mel_points = np.linspace(low_freq_mel, high_freq_mel, n_mel + 2)  # Equally spaced in Mel scale
+    hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
+    bin = np.floor((nfft + 1) * hz_points / sample_rate)
+
+    fbank = np.zeros((n_mel, int(np.floor(nfft / 2 + 1))))
+    for m in range(1, n_mel + 1):
+        f_m_minus = int(bin[m - 1])  # left
+        f_m = int(bin[m])  # center
+        f_m_plus = int(bin[m + 1])  # right
+
+        for k in range(f_m_minus, f_m):
+            fbank[m - 1, k] = (k - bin[m - 1]) / (bin[m] - bin[m - 1])
+        for k in range(f_m, f_m_plus):
+            fbank[m - 1, k] = (bin[m + 1] - k) / (bin[m + 1] - bin[m])
+    # filter_banks_shape = list(pow_frames.shape)
+    # filter_banks_shape[-1] = n_mel
+    # filter_banks = np.zeros(filter_banks_shape)
+    # for n in range(len(frames)):
+    #     filter_banks[n, ...] = np.dot(pow_frames[n, ...], fbank.T)
+    filter_banks = np.dot(pow_frames, fbank.T)
+    filter_banks = np.where(filter_banks == 0, np.finfo(float).eps, filter_banks)  # Numerical Stability
+    filter_banks = 20 * np.log10(filter_banks)  # dB
+    return filter_banks
+
+
 if __name__ == '__main__':
     crop_audio(
         r'C:\Users\asus\coding\python\osu_mapper\resources\data\audio\47065.mp3',
