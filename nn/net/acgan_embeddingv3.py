@@ -315,7 +315,7 @@ class Generator(nn.Module):
         # 16 mel frames per snap, 8 snaps per beat, 1 hit_signal embedding label per beat
         n_frames = n_snap * 16
         self.n_frames = n_frames
-        middle_seq_len = n_frames // (2 ** 7)
+        middle_seq_len = n_frames // (2 ** 4)
         self.middle_seq_len = middle_seq_len
 
         self.tgt_embedding_dim = tgt_embedding_dim
@@ -357,28 +357,26 @@ class Generator(nn.Module):
             input_norm=True,
         )
 
-        # shrink 2 ** 7, equal to length of embedding final output
+        # shrink 2 ** 4, equal to length of embedding final output
         self.body = CNNExtractor(
             preprocess_dim * 2,
             n_frames,
-            stride_list=(2, 2, 2, 2, 2, 2, 2),
-            out_channels_list=(middle_dim // 4, middle_dim // 4, middle_dim // 2, middle_dim // 2, middle_dim, middle_dim, middle_dim),
-            kernel_size_list=(7, 7, 7, 7, 7, 7, 7),
+            stride_list=(2, 2, 2, 2),
+            out_channels_list=(middle_dim // 4, middle_dim // 2, middle_dim, middle_dim),
+            kernel_size_list=(7, 7, 7, 7),
             norm=norm,
         )
         self.condition_norm = nn.LayerNorm(middle_seq_len)
 
-        # upsample 2 ** 3, generate x & y coord for each snap
+        # generate x & y coord for each snap
         self.decoder_coord = nn.Sequential(
-            DecoderUpsample(
+            CNNExtractor(
                 middle_dim,
                 middle_seq_len,
-                stride_list=(1, 2, 1, 2, 1, 2, 1, 1),
-                out_channels_list=(middle_dim // 2, middle_dim // 2,
-                                   middle_dim // 2, middle_dim // 4,
-                                   middle_dim // 4, middle_dim // 4,
-                                   middle_dim // 8, middle_dim // 8),
-                kernel_size_list=(5, 5, 5, 5, 5, 3, 3, 3),
+                stride_list=(1, 1, 1, 1),
+                out_channels_list=(middle_dim, middle_dim // 2,
+                                   middle_dim // 4, middle_dim // 8),
+                kernel_size_list=(5, 5, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -386,16 +384,15 @@ class Generator(nn.Module):
             # nn.Sigmoid(),
         )
 
+        # downsample 2 ** 3, generate x & y coord for each snap
         self.decoder_embedding = nn.Sequential(
-            DecoderUpsample(
+            CNNExtractor(
                 middle_dim,
                 middle_seq_len,
-                stride_list=(1, 1, 1, 1, 1, 1, 1, 1),
-                out_channels_list=(middle_dim // 2, middle_dim // 2,
-                                   middle_dim // 2, middle_dim // 4,
-                                   middle_dim // 4, middle_dim // 4,
-                                   middle_dim // 8, middle_dim // 8),
-                kernel_size_list=(5, 5, 5, 5, 5, 3, 3, 3),
+                stride_list=(2, 2, 2, 1),
+                out_channels_list=(middle_dim, middle_dim // 2,
+                                   middle_dim // 4, middle_dim // 8),
+                kernel_size_list=(5, 5, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -448,10 +445,9 @@ class Discriminator(nn.Module):
         self.preprocess = CNNExtractor(
             audio_feature_dim,
             n_frames,
-            stride_list=(2, 2, 2, 2, 2, 2, 2),
-            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim,
-                               preprocess_dim, preprocess_dim, preprocess_dim),
-            kernel_size_list=(7, 7, 7, 7, 5, 5, 5),
+            stride_list=(2, 4, 4, 4),
+            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim),
+            kernel_size_list=(7, 7, 7, 7),
             norm=norm,
         )
 
@@ -459,10 +455,9 @@ class Discriminator(nn.Module):
         self.tgt_coord_preprocess = CNNExtractor(
             self.tgt_coord_dim,
             n_snap,
-            stride_list=(1, 2, 1, 2, 1, 2, 1),
-            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim,
-                               preprocess_dim, preprocess_dim, preprocess_dim),
-            kernel_size_list=(7, 7, 7, 7, 5, 5, 5),
+            stride_list=(2, 2, 2, 1),
+            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim),
+            kernel_size_list=(7, 7, 7, 7),
             norm=norm,
             input_norm=True,
         )
@@ -470,10 +465,9 @@ class Discriminator(nn.Module):
         self.tgt_embedding_preprocess = CNNExtractor(
             self.tgt_embedding_dim,
             n_beats,
-            stride_list=(1, 1, 1, 1, 1, 1, 1),
-            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim,
-                               preprocess_dim, preprocess_dim, preprocess_dim),
-            kernel_size_list=(7, 7, 7, 7, 5, 5, 5),
+            stride_list=(1, 1, 1, 1),
+            out_channels_list=(preprocess_dim, preprocess_dim, preprocess_dim, preprocess_dim),
+            kernel_size_list=(7, 7, 7, 7),
             norm=norm,
             input_norm=True,
         )
@@ -481,13 +475,9 @@ class Discriminator(nn.Module):
         self.body = CNNExtractor(
             preprocess_dim * 3,
             n_beats,
-            stride_list=(1, 1, 1, 1,
-                         1, 1, 1, 1, 1),
-            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim,
-                               middle_dim, middle_dim, middle_dim, middle_dim, middle_dim,
-                               ),
-            kernel_size_list=(5, 5, 5, 5,
-                              5, 3, 3, 3, 3),
+            stride_list=(1, 1, 1, 1, 1),
+            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim, middle_dim),
+            kernel_size_list=(5, 5, 5, 3, 3),
             norm=norm,
         )
 
@@ -519,7 +509,7 @@ class Discriminator(nn.Module):
 
         # -> n, 1, l
         x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)
-        validity = self.validity_head(x)
+        validity = torch.sigmoid(self.validity_head(x))
         cls_logits = self.cls_head(x)
         # cls_logits = torch.sigmoid(self.cls_head(x))
 

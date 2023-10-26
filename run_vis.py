@@ -511,27 +511,82 @@ def np_statistics(arr):
 def check_signal():
 
     with open(
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\label\40285.pkl',
+        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed_v5\label\999944.pkl',
         'rb'
     ) as f:
         label = pickle.load(f)
-    with open(
-        r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\info\40285.pkl',
-        'rb'
-    ) as f:
-        sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
-    print(prelude_end_pos)
-    label = label[prelude_end_pos:prelude_end_pos + 2560]
+        snap_type, x_pos_seq, y_pos_seq = label.T
+        print(snap_type)
+        print(len(snap_type))
+    # with open(
+    #     r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed\info\40285.pkl',
+    #     'rb'
+    # ) as f:
+    #     sample_len, beatmapsetid, prelude_end_pos = pickle.load(f)
+    # print(prelude_end_pos)
+    # label = label[prelude_end_pos:prelude_end_pos + 2560]
+    # for signal, name in zip(
+    #         [
+    #             x_pos_seq,
+    #             y_pos_seq
+    #         ],
+    #         # label.T,
+    #         [
+    #             'cursor_x', 'cursor_y'
+    #             # 'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+    #         ]
+    # ):
+    #     print(np.min(signal), np.max(signal), np.mean(signal))
+    #     fig_array, fig = plt_util.plot_signal(signal, name,
+    #                                  save_path=None,
+    #                                  show=True)
+    # influence of noise
+    from nn.dataset import feeder_embedding
+    from postprocess import embedding_decode
+
+    counter_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\counter.pkl'
+    embedding_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\pretrained_models\acgan_embeddingv1_20231006_g0.000003_d0.000003_test\embedding_center-1_-1.pkl'
+    decoder = embedding_decode.EmbeddingDecode(
+        embedding_path, 8, counter_path
+    )
+
+    feeder_args = {'save_dir': r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\processed_v5',
+                         'embedding_path': r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\pretrained_models\acgan_embeddingv1_20231006_g0.000003_d0.000003_test\embedding_center-1_-1.pkl',
+                         'subseq_snaps': 32 * 8,
+                         'random_seed': 404,
+                         'use_random_iter': True,
+                         'take_first': 1,
+                         'pad': False,
+                         'beat_divisor': 8,
+                         }
+    feeder = feeder_embedding.SubseqFeeder(**feeder_args)
+    feeder.set_noise_level(0)
+    data, [label, embedding], meta = feeder[0]
+    print('noise 0')
+    vis_subseq(label, embedding, decoder)
+    feeder.set_noise_level(0.5)
+    data, [label, embedding], meta = feeder[0]
+    print('noise 0.5')
+    vis_subseq(label, embedding, decoder)
+
+
+def vis_subseq(label, embedding, decoder):
     for signal, name in zip(
-            label.T,
             [
-                'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
+                label[:, 0],
+                label[:, 1],
+            ],
+            # label.T,
+            [
+                'cursor_x', 'cursor_y'
+                # 'circle_hit', 'slider_hit', 'spinner_hit', 'cursor_x', 'cursor_y'
             ]
     ):
-        print(np.min(signal), np.max(signal), np.mean(signal))
+        # print(np.min(signal), np.max(signal), np.mean(signal))
         fig_array, fig = plt_util.plot_signal(signal, name,
                                      save_path=None,
                                      show=True)
+    print(decoder.decode(embedding))
 
 
 def count_beat_label_seq():
@@ -569,16 +624,18 @@ def count_beat_label_seq():
 
 
 def view_word_embedding():
-    embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16\embedding_center.pkl'
-    counter_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\counter.pkl'
+    # embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16\embedding_center.pkl'
+    # embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16_early_stop\embedding_context8_-1.pkl'
+    # embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16_early_stop\embedding_context-1_-1.pkl'
+    # embedding_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\result\word2vec_skipgramv1_0.1_constlr_dim_16_early_stop\embedding_context-1_-1.pkl'
+    # counter_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\counter.pkl'
+    embedding_filepath = r'/home/data1/xiezheng/osu_mapper/result/word2vec_skipgramv1_0.1_constlr_dim_16_early_stop/embedding_center-1_-1.pkl'
+    counter_path = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/counter.pkl'
     with open(embedding_filepath, 'rb') as f:
         embedding = pickle.load(f)
     with open(counter_path, 'rb') as f:
         cnt = pickle.load(f)
     existent_label_idxs = np.array(list(cnt.keys()))
-    existent_label_idxs_filepath = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\existent_label_idxs.pkl'
-    with open(counter_path, 'wb') as f:
-        cnt = pickle.load(f)
     existent_embedding = embedding[existent_label_idxs]
     pairwise_cosine_dist = [
         np.sum(existent_embedding[i] * existent_embedding[j]) / np.linalg.norm(existent_embedding[i]) / np.linalg.norm(existent_embedding[j])
@@ -590,12 +647,96 @@ def view_word_embedding():
     mean_cosine_dist = np.mean(pairwise_cosine_dist)
     print(min_cosine_dist, max_cosine_dist, mean_cosine_dist)
 
+    embedding_norm = np.linalg.norm(existent_embedding, axis=1)
+    min_embedding_norm = np.min(embedding_norm)
+    max_embedding_norm = np.max(embedding_norm)
+    mean_embedding_norm = np.mean(embedding_norm)
+    print(min_embedding_norm, max_embedding_norm, mean_embedding_norm)
+
+    normed_embedding = embedding / mean_embedding_norm
+    normed_embedding_filepath = r'/home/data1/xiezheng/osu_mapper/result/word2vec_skipgramv1_0.1_constlr_dim_16_early_stop/embedding_center-1_-1_normed.pkl'
+    with open(normed_embedding_filepath, 'wb') as f:
+        pickle.dump(normed_embedding, f)
+        print('saved to %s' % normed_embedding_filepath)
+
+
+def count_snap_labels_in_hit_signal():
+    root_dir = r'/home/data1/xiezheng/osu_mapper/result/acgan_embeddingv3_20231014_g0.0001_d0.0001_grad_clip_norm1/output'
+    all_epoch_count = [0 for _ in range(len(os.listdir(root_dir)))]
+    for epoch_folder in tqdm(os.listdir(root_dir)):
+        count_tgt = os.path.join(
+            root_dir, epoch_folder, 'run1', 'hit_signal.txt'
+        )
+
+        with open(count_tgt, 'r') as f:
+            hit_signal_str = f.readline()
+            counter = Counter(hit_signal_str)
+            all_epoch_count[int(epoch_folder)] = counter['3']
+
+    print(all_epoch_count)
+    plt.plot(np.arange(len(all_epoch_count)), all_epoch_count)
+    plt.savefig(
+        os.path.join(
+            r'/home/data1/xiezheng/osu_mapper/vis',
+            'snap_labels_count_3' + '.jpg'
+        )
+    )
+
+
+def star_hist():
+    meta_dir = r'/home/data1/xiezheng/osu_mapper/preprocessed_v5/meta'
+    all_star = []
+    all_cs = []
+    for filename in tqdm(os.listdir(meta_dir)):
+        filepath = os.path.join(meta_dir, filename)
+        with open(filepath, 'rb') as f:
+            star, cs = pickle.load(f)
+            all_star.append(star)
+            all_cs.append(cs)
+    plt.hist(all_star, bins=np.linspace(0, 14, 140).tolist())
+    plt.title('star')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/star_hist.png')
+    plt.clf()
+    # 3.10023066607676 0.19123955711997528 13.700304400500588
+    print(np_statistics(np.array(all_star)))
+    plt.hist(all_cs)
+    plt.title('cs')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/cs_hist.png')
+    plt.clf()
+    # 3.671196325409603 0.0 10.0
+    print(np_statistics(np.array(all_cs)))
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/stars.pkl', 'wb') as f:
+        pickle.dump(all_star, f)
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/cs.pkl', 'wb') as f:
+        pickle.dump(all_cs, f)
+
 
 if __name__ == '__main__':
     """
+    view star hist
+    """
+    # view_word_embedding()
+    # star_hist()
+    with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\stars.pkl', 'rb') as f:
+        all_star = pickle.load(f)
+
+    def smaller_than(star_ref):
+        count = 0
+        for star in all_star:
+            if star < star_ref:
+                count += 1
+        return count / len(all_star)
+
+    for s in [1, 2, 3, 4, 5, 6, 7, 8]:
+        print(smaller_than(s))
+
+    """
+    """
+    # count_snap_labels_in_hit_signal()
+    """
     view embedding
     """
-    view_word_embedding()
+    # view_word_embedding()
     """
     count label idx
     """

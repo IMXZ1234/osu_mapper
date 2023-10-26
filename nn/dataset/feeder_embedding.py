@@ -7,6 +7,7 @@ import traceback
 import numpy as np
 import torch
 from torch.utils import data
+import scipy
 
 
 def normal_at(miu, sigma, length):
@@ -32,26 +33,44 @@ def filter_with_kernel_1d(img, kernel):
     return filtered
 
 
-def preprocess_label(label, level_coeff):
+def preprocess_label(label, level_coeff, rnd_bank=None):
     """
     only cursor signal
     -> x, y
-    rescale hit signal to (0.1, 0.9) to avoid extreme value
     """
     if level_coeff == 0:
         return label
-    label += level_coeff * np.random.randn(*label.shape) / 4096
+    if rnd_bank is None:
+        label += level_coeff * np.random.randn(*label.shape) / 4096
+    else:
+        take_len = np.size(label)
+        idx = np.random.randint(0, len(rnd_bank)-take_len)
+        label += rnd_bank[idx:idx + take_len].reshape(label.shape)
     return label
 
 
-def preprocess_embedding(embedding, level_coeff):
+def preprocess_label_filter(label, kernel):
+    """
+    only cursor signal
+    -> x, y
+    """
+    filtered = np.stack([scipy.signal.convolve(label_i, kernel, mode='same') for label_i in label.T], axis=1)
+    return filtered
+
+
+def preprocess_embedding(embedding, level_coeff, rnd_bank=None):
     """
     hit signal embedding
-    noise have probability 90% to have a norm < 0.001
+    noise have probability ~90% to have a norm < 0.001
     """
     if level_coeff == 0:
         return embedding
-    embedding += level_coeff * np.random.randn(*embedding.shape) / 1300
+    if rnd_bank is None:
+        embedding += level_coeff * np.random.randn(*embedding.shape) / 1300
+    else:
+        take_len = np.size(embedding)
+        idx = np.random.randint(0, len(rnd_bank)-take_len)
+        embedding += rnd_bank[idx:idx + take_len].reshape(embedding.shape)
     return embedding
 
 
@@ -154,10 +173,12 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  binary=False,
                  inference=False,
                  take_first=None,
+                 take_first_subseq=None,
                  coeff_data_len=1,
                  coeff_label_len=1,
                  level_coeff=1,
                  beat_divisor=8,
+                 rnd_bank_size=None,
                  **kwargs,
                  ):
         """
@@ -181,8 +202,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
             os.path.splitext(filename)[0]
             for filename in os.listdir(self.info_dir)
         ]
+        # print(self.all_beatmapids)
         self.use_random_iter = use_random_iter
         self.take_first = take_first
+        self.take_first_subseq = take_first_subseq
 
         self.beat_divisor = beat_divisor
 
@@ -193,12 +216,13 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.coeff_label_len = coeff_label_len
         self.level_coeff = level_coeff
         self.inference = inference
+        self.rnd_bank_size = rnd_bank_size
 
         self.binary = binary
         self.pad = pad
 
         if self.take_first:
-            self.all_beatmapids = self.all_beatmapids[16:16+self.take_first]
+            self.all_beatmapids = self.all_beatmapids[:self.take_first]
         self.info = {}
         for beatmapid in self.all_beatmapids:
             info_path = os.path.join(self.info_dir, '%s.pkl' % beatmapid)
@@ -212,14 +236,33 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # records which subseqs belongs to a sample
         self.sample_subseq = {}
         self.divide_subseq()
+        if self.take_first_subseq is not None:
+            new_subseq_dict = {}
+            keys = list(self.subseq_dict.keys())
+            for i in range(self.take_first_subseq):
+                k = keys[i]
+                v = self.subseq_dict[k]
+                new_subseq_dict[k] = v
+            self.subseq_dict = new_subseq_dict
         print('dataset initialized, totally %d subseqs' % len(self.subseq_dict))
+
+        self.set_noise_level(self.level_coeff)
         # print(self.sample_subseq)
         # print(self.subseq_dict)
         # vis_data, vis_label, _ = self.__getitem__(0)
         # print(vis_label[:32, :])
 
     def set_noise_level(self, level_coeff):
-        self.level_coeff = level_coeff
+        if self.rnd_bank_size is not None:
+            self.rnd_bank = np.random.randn(self.rnd_bank_size)
+            self.rnd_bank_label = self.rnd_bank * (level_coeff / 4096)
+            self.rnd_bank_embedding = self.rnd_bank * (level_coeff / 1300)
+            print('rnd_bank generated')
+        else:
+            self.rnd_bank = None
+            self.rnd_bank_label = None
+            self.rnd_bank_embedding = None
+        self.kernel = gaussian_kernel_1d(sigma=level_coeff * 5)
 
     def divide_subseq(self):
         subseq_index = 0
@@ -229,7 +272,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
             if self.take_first is not None and idx > self.take_first:
                 break
             self.sample_subseq[beatmapid] = []
-            total_beats = total_mel_frames // 16 // self.beat_divisor
+            total_beats = total_mel_frames // (16 * self.beat_divisor)
             in_sample_subseq_num = total_beats // self.subseq_beats
 
             if self.pad:
@@ -278,6 +321,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
             mel_spec = pickle.load(f)
         with open(meta_path, 'rb') as f:
             star, cs = pickle.load(f)
+        # [mel_frame, n_mel=40]
         data = mel_spec
         # print('loaded')
         # time_list.append(time.perf_counter_ns())
@@ -295,8 +339,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         data = data[start * self.beat_divisor * 16: min(len(data), end * self.beat_divisor * 16)]
         if pad_beats > 0:
             data = np.pad(data, ((0, pad_beats * self.beat_divisor * 16), (0, 0)), mode='constant')
-            if not self.pad:
-                print('padding occur!')
+            if (not self.pad) and (sample_beats >= (end - start)):
+                raise AssertionError
+            #     print('bad padding occur!')
+            #     print(beatmapid, beatmapsetid, sample_beats, end, start)
 
         # print('padded')
         # time_list.append(time.perf_counter_ns())
@@ -311,7 +357,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # use meta from the whole sequence
         # -> [subseq_beats, 2]
         # meta = np.tile(np.array([star, cs])[np.newaxis, :], (len(data), 1))
-        meta = np.array([star]) / 5
+        meta = np.array([star-3.5]) / 5
         # print('meta', meta)
         # print('added indicator')
         # time_list.append(time.perf_counter_ns())
@@ -319,25 +365,33 @@ class SubseqFeeder(torch.utils.data.Dataset):
         if not self.inference:
             # load label: (snap_type, x_pos_seq, y_pos_seq)
             with open(label_path, 'rb') as f:
+                # n_snaps, 3
                 label = pickle.load(f)
-            label = label[:, 1:]
+            # to [-1, 1]
+            label = label[:, 1:] - 0.5
+            # label = (label[:, 1:] - 0.5) * 2
             with open(label_idx_path, 'rb') as f:
+                # n_beats, 16
                 label_idx = pickle.load(f)
             # print('loaded label')
             # time_list.append(time.perf_counter_ns())
             label = label[start * self.beat_divisor: min(sample_snaps, end * self.beat_divisor)]
             label_idx = label_idx[start: min(sample_beats, end)]
             if pad_beats > 0:
-                if not self.pad:
-                    print('padding occur!')
+                if not self.pad and (sample_beats >= (end - start)):
+                    raise AssertionError
+                #     print('label bad padding occur!')
+                #     print(beatmapid, beatmapsetid, sample_beats, end, start)
                 label = np.pad(label, ((0, pad_beats * self.beat_divisor), (0, 0)), mode='constant')
                 label_idx = np.pad(label_idx, ((0, pad_beats), (0, 0)), mode='constant')
             # print('padded label')
             # time_list.append(time.perf_counter_ns())
+            # set mean norm of embedding to 1
             embedding = self.embedding[label_idx]
+            # embedding = self.embedding[label_idx] / 2.848476
             try:
-                label = preprocess_label(label, self.level_coeff)
-                embedding = preprocess_embedding(embedding, self.level_coeff)
+                label = preprocess_label_filter(label, self.kernel)
+                embedding = preprocess_embedding(embedding, self.level_coeff, self.rnd_bank_embedding)
             except Exception:
                 traceback.print_exc()
                 raise AssertionError
@@ -365,6 +419,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                 # print(data.shape, label[0].shape, label[1].shape, meta_pred.shape)
                 break
             except Exception:
+                # print('fail retrieve %d' % index)
                 index = (index + 1) % len(self.subseq_dict)
         if self.inference:
             return data, meta_pred

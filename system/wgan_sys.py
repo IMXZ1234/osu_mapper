@@ -12,7 +12,8 @@ from tqdm import tqdm
 from system.gan_sys import TrainGAN
 from util.general_util import recursive_wrap_data, dynamic_import
 from util.plt_util import plot_loss, plot_signal
-from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger
+from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger, AbsCosineScheduler, \
+    BatchAbsCosineScheduler
 
 
 class TrainWGAN(TrainGAN):
@@ -57,7 +58,7 @@ class TrainWGAN(TrainGAN):
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
 
-    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
+    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples, dis_real_validity_out=None, dis_fake_validity_out=None):
         """Calculates the gradient penalty loss for WGAN GP"""
         gen, dis = self.model
         batch_size = real_samples.shape[0]
@@ -334,7 +335,7 @@ class TrainWGANWithinBatch(TrainWGAN):
             if self.lambda_gp is not None:
                 self.logger.info('avg_gp_loss = %.8f' % (epoch_gp_loss / len(self.train_iter)))
 
-    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
+    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples, dis_real_validity_out=None, dis_fake_validity_out=None):
         """Calculates the gradient penalty loss for WGAN GP"""
         gen, dis = self.model
         batch_size = real_samples.shape[0]
@@ -496,6 +497,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             self.lambda_gp = None
         self.lambda_cls = self.config_dict['train_arg']['lambda_cls']
 
+        self.gp_type = self.config_dict['train_arg'].get('gp_type', 'gp')
+
         if 'embedding_decoder' in self.config_dict:
             self.embedding_output_decoder = dynamic_import(self.config_dict['embedding_decoder'])(**self.config_dict['embedding_decoder_args'])
 
@@ -526,10 +529,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         gen_sched, dis_sched = self.scheduler
 
         adv_generator_epoch_sched = MultiStepScheduler(train_arg['gen_lambda_step'], train_arg['gen_lambda'])
-        noise_level_sched = MultiStepScheduler(train_arg['noise_level_step'], train_arg['noise_level'])
+        noise_level_sched = BatchAbsCosineScheduler(train_arg['noise_level_step'], train_arg['noise_level'], train_arg['period'])
 
-        adv_generator_epoch_sched.set_current_step(self.current_epoch-1)
-        noise_level_sched.set_current_step(self.current_epoch-1)
+        adv_generator_epoch_sched.set_current_step(self.current_epoch)
+        noise_level_sched.set_current_step(self.current_epoch)
+        noise_level_sched.set_current_batch_step(0)
+        noise_level_sched.set_period(len(self.train_iter))
 
         for epoch in range(self.current_epoch, self.epoch):
             time_cost_dict = {'net': 0, 'data': 0, 'log': 0}
@@ -564,7 +569,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             last_few_batch_real_loss = AvgLossLogger(10)
 
             self.log_time_stamp()
-            for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter)):
+            for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter, ncols=50)):
                 batch_size = cond_data.shape[0]
                 total_sample_num += batch_size
                 cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -611,32 +616,17 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                     epoch_cls_loss += cls_loss * batch_size
                 time_cost_dict['net'] += self.log_time_stamp()
 
+                noise_level_sched.step_batch()
+
             gen_sched.step()
             dis_sched.step()
             adv_generator_epoch_sched.step()
             noise_level_sched.step()
 
-
             avg_gen_loss = epoch_gen_loss / total_sample_num
             self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
             self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss, epoch)
             self.gen_loss_list.append(avg_gen_loss)
-
-            print('generating sample...')
-            print('run1')
-            sample = gen((cond_data, cls_label))
-            self.log_gen_output_embedding(sample, epoch, 'run1')
-            print('run2')
-            sample = gen((cond_data, cls_label))
-            self.log_gen_output_embedding(sample, epoch, 'run2')
-            print('max_difficulty')
-            max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
-            sample = gen((cond_data, max_difficulty))
-            self.log_gen_output_embedding(sample, epoch, str(max_difficulty[0].item()))
-            print('min_difficulty')
-            min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
-            sample = gen((cond_data, min_difficulty))
-            self.log_gen_output_embedding(sample, epoch, str(min_difficulty[0].item()))
 
             avg_loss = total_loss / total_sample_num
             avg_fake_loss = epoch_fake_loss / total_sample_num
@@ -656,6 +646,24 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 avg_gp_loss = epoch_gp_loss / total_sample_num
                 self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
                 self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, epoch)
+
+            print('generating sample...')
+            print('run1')
+            sample = gen((cond_data, cls_label))
+            self.log_gen_output_embedding(sample, epoch, 'run1')
+            print('run2')
+            sample = gen((cond_data, cls_label))
+            self.log_gen_output_embedding(sample, epoch, 'run2')
+            print('max_difficulty')
+            max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+            sample = gen((cond_data, max_difficulty))
+            self.log_gen_output_embedding(sample, epoch, str(max_difficulty[0].item()))
+            print('min_difficulty')
+            min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+            sample = gen((cond_data, min_difficulty))
+            self.log_gen_output_embedding(sample, epoch, str(min_difficulty[0].item()))
+            print('label')
+            self.log_gen_output_embedding(real_gen_output, epoch, 'label')
 
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
@@ -705,7 +713,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
-            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake)
+            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake, dis_real_validity_out, dis_fake_validity_out)
             gp_loss = self.lambda_gp * gradient_penalty
             loss = loss + gp_loss
         else:
@@ -713,8 +721,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         loss.backward()
 
-        # if self.grad_alter_fn is not None:
-        #     self.grad_alter_fn(dis.parameters())
+        if self.grad_alter_fn is not None:
+            self.grad_alter_fn(dis.parameters())
 
         optimizer_D.step()
 
@@ -756,7 +764,7 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         if self.lambda_gp is not None:
             # use wgan gradient penalty
-            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake)
+            gradient_penalty = self.compute_gradient_penalty(cond_data, real_gen_output, fake, dis_real_validity_out, dis_fake_validity_out)
             gp_loss = self.lambda_gp * gradient_penalty
             loss = loss + gp_loss
         else:
@@ -764,8 +772,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
         loss.backward()
 
-        # if self.grad_alter_fn is not None:
-        #     self.grad_alter_fn(dis.parameters())
+        if self.grad_alter_fn is not None:
+            self.grad_alter_fn(dis.parameters())
 
         optimizer_D.step()
 
@@ -827,15 +835,25 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                          show=False)
             self.tensorboard_writer.add_figure(name, fig, epoch)
 
-    def log_gen_output_embedding(self, gen_output, epoch, prefix='', plot_first=3):
+    def log_gen_output_embedding(self, gen_output, epoch, prefix='gen', plot_first=3):
         coord_output, embedding_output = gen_output
         coord_output = coord_output.cpu().detach().numpy()
         # print(embedding_output.shape)
         embedding_output = embedding_output.cpu().detach().numpy()
         # print(embedding_output.shape)
-        output_dir = os.path.join(self.log_dir, 'output', prefix + str(epoch))
+        output_dir = os.path.join(self.log_dir, 'output', str(epoch), prefix)
         os.makedirs(output_dir, exist_ok=True)
-        for i, (sample_coord_output, sample_embedding_output) in enumerate(zip(coord_output, embedding_output)):
+        all_sample_decoded = [
+            self.embedding_output_decoder.decode(d)
+            for d in embedding_output
+        ]
+        with open(os.path.join(output_dir, r'hit_signal.txt'), 'w') as f:
+            for sample_decoded in all_sample_decoded:
+                f.write(str(sample_decoded.tolist()))
+        with open(os.path.join(output_dir, r'cursor_signal.txt'), 'w') as f:
+            for sample_coord_output in coord_output:
+                f.write(str(sample_coord_output.T.tolist()))
+        for i, (sample_coord_output, sample_decoded) in enumerate(zip(coord_output, all_sample_decoded)):
             if i >= plot_first:
                 break
             for signal, name in zip(
@@ -848,12 +866,11 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
                                              show=False)
                 self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
-            decoded = self.embedding_output_decoder.decode(sample_embedding_output)
             for signal, name in zip(
                 [
-                    np.where(decoded == 1, 1, 0),
-                    np.where(decoded == 2, 1, 0),
-                    np.where(decoded == 3, 1, 0),
+                    np.where(sample_decoded == 1, 1, 0),
+                    np.where(sample_decoded == 2, 1, 0),
+                    np.where(sample_decoded == 3, 1, 0),
                 ],
                 [
                     'circle_hit', 'slider_hit', 'spinner_hit'
@@ -864,15 +881,33 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                              show=False)
                 self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
 
-    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples):
+    def compute_gradient_penalty(self, cond_data, real_samples, fake_samples, dis_real_validity_out=None, dis_fake_validity_out=None):
         """Calculates the gradient penalty loss for WGAN GP"""
         batch_size = len(cond_data)
+        gen, dis = self.model
+
+        if self.gp_type == 'direct':
+            assert (dis_real_validity_out is not None) and (dis_fake_validity_out is not None)
+
+            def direct_penalty(real_samples_, fake_samples_):
+                penalty = (torch.clamp(
+                    torch.abs(dis_real_validity_out-dis_fake_validity_out) /
+                    torch.norm(real_samples_ - fake_samples_, p=2, dim=1) - 1,
+                    min=0, max=None
+                ) ** 2).mean()
+                return penalty
+
+            if isinstance(real_samples, (list, tuple)):
+                lips_direct_penalty = sum(direct_penalty(real_samples_, fake_samples_)
+                                          for real_samples_, fake_samples_ in zip(real_samples, fake_samples))
+            else:
+                lips_direct_penalty = direct_penalty(real_samples, fake_samples)
+            return lips_direct_penalty
 
         def interpolate(real_item, fake_item):
             alpha = torch.rand(real_item.shape, device=real_item.device)
             return (alpha * real_item + ((1 - alpha) * fake_item)).requires_grad_(True)
 
-        gen, dis = self.model
         if isinstance(real_samples, (list, tuple)):
             interpolates = [interpolate(r.data, f.data) for r, f in zip(real_samples, fake_samples)]
         else:
@@ -893,7 +928,12 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 only_inputs=True,
             )[0]
             gradients = gradients.reshape(batch_size, -1)
-            return ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+            if self.gp_type == 'lp':
+                return (torch.clamp(gradients.norm(2, dim=1) - 1, min=0, max=None) ** 2).mean()
+            elif self.gp_type == 'gp':
+                return ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+            else:
+                raise ValueError('unknown gp_type %s' % self.gp_type)
 
         if isinstance(interpolates, (list, tuple)):
             gradient_penalty = sum(penalty(inp) for inp in interpolates) / len(interpolates)

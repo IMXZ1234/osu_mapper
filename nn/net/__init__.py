@@ -36,4 +36,8 @@ from . import (
     simple_acganv3,
     word2vec_embed,
     acgan_embeddingv1,
+    acgan_embeddingv2,
+    acgan_embeddingv3,
+    acgan_embeddingv4,
+    acgan_embeddingv5,
 )

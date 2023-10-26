@@ -6,19 +6,22 @@ import numpy as np
 import yaml
 
 from system.base_sys import Train
-from system.gan_sys import TrainGAN
+from system.gan_sys import TrainGAN, TrainACGANWithinBatch
 from system.rnngan_sys import TrainRNNGANPretrain, TrainSeqGANAdvLoss
 from system.seq2seq_sys import TrainSeq2Seq
 from system.vae_sys import TrainVAE
 from system.wgan_sys import TrainWGAN, TrainWGANWithinBatch, TrainACWGANWithinBatch
 from system.word2vec_skipgram_sys import TrainWord2VecSkipGram
+from system.regression_sys import TrainRegression
 from util.general_util import try_format_dict_with_path
 
 np.set_printoptions(suppress=True)
 SYS_DICT = {
     'basic': Train,
+    'regression': TrainRegression,
     'rnngan_with_pretrain': TrainRNNGANPretrain,
     'gan': TrainGAN,
+    'acganwb': TrainACGANWithinBatch,
     'wgan': TrainWGAN,
     'wganwb': TrainWGANWithinBatch,
     'acwganwb': TrainACWGANWithinBatch,

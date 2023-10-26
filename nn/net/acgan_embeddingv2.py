@@ -519,7 +519,7 @@ class Discriminator(nn.Module):
 
         # -> n, 1, l
         x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)
-        validity = self.validity_head(x)
+        validity = torch.sigmoid(self.validity_head(x))
         cls_logits = self.cls_head(x)
         # cls_logits = torch.sigmoid(self.cls_head(x))
 

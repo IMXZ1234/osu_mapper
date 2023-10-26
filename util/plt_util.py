@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -32,6 +34,7 @@ def plot_signal(signal, title=None, save_path=None, show=True):
     fig.canvas.draw()
     fig_array = np.array(fig.canvas.renderer.buffer_rgba())
     if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
     if show:
         plt.show()

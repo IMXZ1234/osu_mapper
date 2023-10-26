@@ -1,24 +1,25 @@
 import sys
 import os
-
-import torchaudio
-
-from util.audio_util import cal_mel_spec
-
-proj_dir = os.path.dirname(os.path.dirname(__file__))
-if proj_dir not in sys.path:
-    sys.path.append(proj_dir)
 import pickle
 import traceback
 import zipfile
 import json
 from datetime import timedelta
 import numpy as np
-
 import slider
 import multiprocessing
 import math
+import torchaudio
 
+proj_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+print(proj_dir)
+if proj_dir not in sys.path:
+    sys.path.append(proj_dir)
+
+# import audio_util
+# from plt_util import plot_signal
+
+from util.audio_util import cal_mel_spec
 from util import audio_util
 from util.plt_util import plot_signal
 import itertools
@@ -136,7 +137,7 @@ class HeatmapDataset:
             os.makedirs(dirs[item_name], exist_ok=True)
             paths[item_name] = os.path.join(dirs[item_name], sample_name + '.pkl')
             processed[item_name] = os.path.exists(paths[item_name])
-        if skip_exist and all(os.path.exists(path) for path in paths.values()):
+        if skip_exist and all([processed[item_name] for item_name in items.keys()]):
             print('skipping %s' % beatmap_id)
             return
 
@@ -199,7 +200,7 @@ class HeatmapDataset:
             print('hit objects not well aligned %s' % beatmap_id)
             return
 
-        print('processing beatmap %s' % beatmap_id)
+        # print('processing beatmap %s' % beatmap_id)
         # retrieve audio data
         audio_filename = all_beatmaps[0].audio_filename
 
@@ -274,9 +275,9 @@ class HeatmapDataset:
                     sample_rate=self.sample_rate
                 )
                 mel_spec = np.mean(mel_spec, axis=1)
-                assert mel_spec.shape[0] == total_mel_frames, 'mel_spec.shape[0] %s != total_mel_frames %s' % (mel_spec.shape[0], total_mel_frames)
+                assert mel_spec.shape[0] == total_mel_frames, 'mel_spec.shape[0] %d != total_mel_frames %d' % (mel_spec.shape[0], total_mel_frames)
             except Exception:
-                traceback.print_exc()
+                # traceback.print_exc()
                 print('failed process_mel %s_%s' % (beatmapset_id, beatmap_id))
                 return
             # mel_spec = self.add_populated_indicator(mel_spec, beatmap)
@@ -292,7 +293,7 @@ class HeatmapDataset:
             ho_pos_snap_ = round(ho_pos_snap_f_)
             # assert strict alignment between ho and snaps
             # more lenient
-            assert abs(ho_pos_snap_f_ - ho_pos_snap_) < 0.15
+            assert abs(ho_pos_snap_f_ - ho_pos_snap_) < 0.15, 'strayed snap %.3f' % (ho_pos_snap_f_ - ho_pos_snap_)
             ho_pos_snap_ += snaps_before_first_tp
             return ho_pos_snap_
 
@@ -321,7 +322,7 @@ class HeatmapDataset:
                             snap_type[ho_pos_snap: ho_end_pos_snap+1] = 3
                 # cursor signal
                 x_pos_seq, y_pos_seq = np.zeros(total_snaps), np.zeros(total_snaps)
-                for ho_a, ho_b in zip([None] + beatmap._hit_objects, beatmap._hit_objects + [None]):
+                for i, (ho_a, ho_b) in enumerate(zip([None] + beatmap._hit_objects, beatmap._hit_objects + [None])):
                     if ho_a is None:
                         # before first hit object
                         # start point for following interpolation
@@ -390,8 +391,8 @@ class HeatmapDataset:
                 y_pos_seq = (y_pos_seq + 82) / (407 + 82)
                 label = np.stack([snap_type, x_pos_seq, y_pos_seq], axis=1)
             except Exception:
-                traceback.print_exc()
-                print('failed process_label %s_%s' % (beatmapset_id, beatmap_id))
+                # traceback.print_exc()
+                print('failed process_label %s_%s, at ho %d' % (beatmapset_id, beatmap_id, i))
                 return
             with open(paths['label'], 'wb') as f:
                 pickle.dump(label, f)
@@ -438,6 +439,8 @@ class HeatmapDataset:
             with open(paths['info'], 'wb') as f:
                 pickle.dump(sample_info, f)
 
+        print('success beatmap %s' % beatmap_id)
+
 
 def worker(q: multiprocessing.Queue, i):
     # print('worker!')
@@ -460,7 +463,7 @@ def worker(q: multiprocessing.Queue, i):
             return 0
         ds.process_beatmap_meta_dict(
             beatmap_meta_dict,
-            r'/home/data1/xiezheng/osu_mapper/preprocessed_v4',
+            r'/home/data1/xiezheng/osu_mapper/preprocessed_v6',
             r'/home/data1/xiezheng/osu_mapper/beatmapsets',
             temp_dir,
             skip_exist=True,
@@ -475,10 +478,10 @@ def multiprocessing_prepare_data(nproc=32, target=worker):
     all_meta = os.listdir(meta_root)
     all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
 
-    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4'
+    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6'
     os.makedirs(preprocessed_root, exist_ok=True)
 
-    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v4/processed_ids.txt'
+    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6/processed_ids.txt'
     if not os.path.exists(processed_beatmapid_log_file):
         open(processed_beatmapid_log_file, 'w')
     processed_beatmapid = set()

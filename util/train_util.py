@@ -1,4 +1,5 @@
 import collections
+import math
 
 
 class MultiStepScheduler:
@@ -22,15 +23,14 @@ class MultiStepScheduler:
     def step(self):
         self.current_step += 1
         if self.cur_milestone_idx < len(self.milestones):
-            if self.current_step > self.milestones[self.cur_milestone_idx]:
+            if self.current_step >= self.milestones[self.cur_milestone_idx]:
                 self.cur_milestone_idx += 1
 
     def set_current_step(self, step):
         self.current_step = step
         self.cur_milestone_idx = 0
-        if self.cur_milestone_idx < len(self.milestones):
-            if self.current_step > self.milestones[self.cur_milestone_idx]:
-                self.cur_milestone_idx += 1
+        while self.cur_milestone_idx < len(self.milestones) and self.current_step >= self.milestones[self.cur_milestone_idx]:
+            self.cur_milestone_idx += 1
 
     def reset(self):
         self.cur_milestone_idx = 0
@@ -38,6 +38,104 @@ class MultiStepScheduler:
 
     def cur_milestone_output(self):
         return self.milestone_output[self.cur_milestone_idx]
+
+
+class AbsCosineScheduler:
+    def __init__(self, milestones, milestone_output, period):
+        """
+        milestones = [5, 10, 15]
+        milestone_output = [0.1, 0.5, 0.7, 0.9]
+        period: half period of underlying cos
+
+        then:
+        if step < 5, cur_milestone_output() = 0.1
+        if 5 < step < 10, cur_milestone_output() = 0.5
+        ...
+        if 15 < step, cur_milestone_output() = 0.9
+        """
+        self.period = period
+        self.milestones = milestones
+        self.milestone_output = milestone_output
+        assert len(self.milestones) == len(self.milestone_output) - 1
+        self.current_step = 0
+        self.cur_milestone_idx = 0
+
+    def step(self):
+        self.current_step += 1
+        if self.cur_milestone_idx < len(self.milestones):
+            if self.current_step >= self.milestones[self.cur_milestone_idx]:
+                self.cur_milestone_idx += 1
+
+    def set_current_step(self, step):
+        self.current_step = step
+        self.cur_milestone_idx = 0
+        while self.cur_milestone_idx < len(self.milestones) and self.current_step >= self.milestones[self.cur_milestone_idx]:
+            self.cur_milestone_idx += 1
+
+    def reset(self):
+        self.cur_milestone_idx = 0
+        self.current_step = 0
+
+    def cur_milestone_output(self):
+        ampl = self.milestone_output[self.cur_milestone_idx]
+        phase = (self.current_step % self.period) / self.period * math.pi
+        return ampl * abs(math.cos(phase))
+
+
+class BatchAbsCosineScheduler:
+    def __init__(self, milestones, milestone_output, period=None):
+        """
+        milestones = [5, 10, 15]
+        milestone_output = [0.1, 0.5, 0.7, 0.9]
+        period: half period of underlying cos
+
+        then:
+        if step < 5, cur_milestone_output() = 0.1
+        if 5 < step < 10, cur_milestone_output() = 0.5
+        ...
+        if 15 < step, cur_milestone_output() = 0.9
+        """
+        self.period = period
+        self.milestones = milestones
+        self.milestone_output = milestone_output
+        assert len(self.milestones) == len(self.milestone_output) - 1
+        self.current_step = 0
+        self.current_batch_step = 0
+        self.cur_milestone_idx = 0
+
+    def step(self):
+        self.current_step += 1
+        self.current_batch_step = 0
+        if self.cur_milestone_idx < len(self.milestones):
+            if self.current_step >= self.milestones[self.cur_milestone_idx]:
+                self.cur_milestone_idx += 1
+
+    def set_current_step(self, step):
+        self.current_step = step
+        self.cur_milestone_idx = 0
+        while self.cur_milestone_idx < len(self.milestones) and self.current_step >= self.milestones[self.cur_milestone_idx]:
+            self.cur_milestone_idx += 1
+
+    def step_batch(self):
+        self.current_batch_step += 1
+
+    def set_current_batch_step(self, batch_step):
+        self.current_batch_step = batch_step
+
+    def set_period(self, period):
+        self.period = period
+
+    def reset(self):
+        self.cur_milestone_idx = 0
+        self.current_step = 0
+
+    def cur_milestone_output(self):
+        ampl = self.milestone_output[self.cur_milestone_idx]
+        if self.period is None:
+            print('set period first! returned unmodulated ampl')
+            return ampl
+        phase = (self.current_batch_step % self.period) / self.period * math.pi
+        return ampl * abs(math.cos(phase))
 
 
 def idx_set_with_uniform_itv(length, num, offset=0):
