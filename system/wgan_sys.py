@@ -13,7 +13,7 @@ from system.gan_sys import TrainGAN
 from util.general_util import recursive_wrap_data, dynamic_import
 from util.plt_util import plot_loss, plot_signal
 from util.train_util import MultiStepScheduler, idx_set_with_uniform_itv, AvgLossLogger, AbsCosineScheduler, \
-    BatchAbsCosineScheduler
+    BatchAbsCosineScheduler, BatchAbsCosineSchedulerMod
 
 
 class TrainWGAN(TrainGAN):
@@ -502,6 +502,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         if 'embedding_decoder' in self.config_dict:
             self.embedding_output_decoder = dynamic_import(self.config_dict['embedding_decoder'])(**self.config_dict['embedding_decoder_args'])
 
+        self.log_item = self.config_dict.get('log_item', 'coord_embedding')
+
     def run_train(self):
         print('Start Train...')
 
@@ -529,12 +531,13 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         gen_sched, dis_sched = self.scheduler
 
         adv_generator_epoch_sched = MultiStepScheduler(train_arg['gen_lambda_step'], train_arg['gen_lambda'])
-        noise_level_sched = BatchAbsCosineScheduler(train_arg['noise_level_step'], train_arg['noise_level'], train_arg['period'])
+        # noise_level_sched = BatchAbsCosineScheduler(train_arg['noise_level_step'], train_arg['noise_level'], train_arg['period'])
+        noise_level_sched = dynamic_import(train_arg['noise_sched_type'])(**train_arg['noise_sched_arg'])
 
         adv_generator_epoch_sched.set_current_step(self.current_epoch)
         noise_level_sched.set_current_step(self.current_epoch)
         noise_level_sched.set_current_batch_step(0)
-        noise_level_sched.set_period(len(self.train_iter))
+        # noise_level_sched.set_period(len(self.train_iter))
 
         for epoch in range(self.current_epoch, self.epoch):
             time_cost_dict = {'net': 0, 'data': 0, 'log': 0}
@@ -570,6 +573,9 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
 
             self.log_time_stamp()
             for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter, ncols=50)):
+                noise_level = noise_level_sched.cur_milestone_output()
+                self.train_iter.dataset.set_noise_level(noise_level)
+
                 batch_size = cond_data.shape[0]
                 total_sample_num += batch_size
                 cond_data = recursive_wrap_data(cond_data, self.output_device)
@@ -647,23 +653,32 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
                 self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, epoch)
 
+            if self.log_item == 'coord_embedding':
+                log_output = self.log_gen_output_embedding
+            elif self.log_item == 'coord':
+                log_output = self.log_coord
+            elif self.log_item == 'embedding':
+                log_output = self.log_embedding
+            else:
+                raise ValueError('unknown log item')
+
             print('generating sample...')
             print('run1')
             sample = gen((cond_data, cls_label))
-            self.log_gen_output_embedding(sample, epoch, 'run1')
+            log_output(sample, epoch, 'run1')
             print('run2')
             sample = gen((cond_data, cls_label))
-            self.log_gen_output_embedding(sample, epoch, 'run2')
+            log_output(sample, epoch, 'run2')
             print('max_difficulty')
             max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
             sample = gen((cond_data, max_difficulty))
-            self.log_gen_output_embedding(sample, epoch, str(max_difficulty[0].item()))
+            log_output(sample, epoch, str(max_difficulty[0].item()))
             print('min_difficulty')
             min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
             sample = gen((cond_data, min_difficulty))
-            self.log_gen_output_embedding(sample, epoch, str(min_difficulty[0].item()))
+            log_output(sample, epoch, str(min_difficulty[0].item()))
             print('label')
-            self.log_gen_output_embedding(real_gen_output, epoch, 'label')
+            log_output(real_gen_output, epoch, 'label')
 
             if (epoch + 1) % self.model_save_step == 0:
                 self.save_model(epoch, (0,))
@@ -835,25 +850,48 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                          show=False)
             self.tensorboard_writer.add_figure(name, fig, epoch)
 
-    def log_gen_output_embedding(self, gen_output, epoch, prefix='gen', plot_first=3):
-        coord_output, embedding_output = gen_output
-        coord_output = coord_output.cpu().detach().numpy()
-        # print(embedding_output.shape)
-        embedding_output = embedding_output.cpu().detach().numpy()
-        # print(embedding_output.shape)
+    def log_embedding(self, embedding_output, epoch, prefix='gen', plot_first=3):
         output_dir = os.path.join(self.log_dir, 'output', str(epoch), prefix)
         os.makedirs(output_dir, exist_ok=True)
+
+        embedding_output = embedding_output.cpu().detach().numpy()
         all_sample_decoded = [
             self.embedding_output_decoder.decode(d)
             for d in embedding_output
         ]
+
         with open(os.path.join(output_dir, r'hit_signal.txt'), 'w') as f:
             for sample_decoded in all_sample_decoded:
                 f.write(str(sample_decoded.tolist()))
+
+        for i, sample_decoded in enumerate(all_sample_decoded):
+            if i >= plot_first:
+                break
+            for signal, name in zip(
+                    [
+                        np.where(sample_decoded == 1, 1, 0),
+                        np.where(sample_decoded == 2, 1, 0),
+                        np.where(sample_decoded == 3, 1, 0),
+                    ],
+                    [
+                        'circle_hit', 'slider_hit', 'spinner_hit'
+                    ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=os.path.join(output_dir, name + '%d.jpg' % i),
+                                             show=False)
+                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+
+    def log_coord(self, coord_output, epoch, prefix='gen', plot_first=3):
+        output_dir = os.path.join(self.log_dir, 'output', str(epoch), prefix)
+        os.makedirs(output_dir, exist_ok=True)
+
         with open(os.path.join(output_dir, r'cursor_signal.txt'), 'w') as f:
             for sample_coord_output in coord_output:
                 f.write(str(sample_coord_output.T.tolist()))
-        for i, (sample_coord_output, sample_decoded) in enumerate(zip(coord_output, all_sample_decoded)):
+
+        coord_output = coord_output.cpu().detach().numpy()
+        for i, sample_coord_output in enumerate(coord_output):
             if i >= plot_first:
                 break
             for signal, name in zip(
@@ -866,20 +904,11 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
                                              show=False)
                 self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
-            for signal, name in zip(
-                [
-                    np.where(sample_decoded == 1, 1, 0),
-                    np.where(sample_decoded == 2, 1, 0),
-                    np.where(sample_decoded == 3, 1, 0),
-                ],
-                [
-                    'circle_hit', 'slider_hit', 'spinner_hit'
-                ]
-            ):
-                fig_array, fig = plot_signal(signal, name,
-                                             save_path=os.path.join(output_dir, name + '%d.jpg' % i),
-                                             show=False)
-                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+
+    def log_gen_output_embedding(self, gen_output, epoch, prefix='gen', plot_first=3):
+        coord_output, embedding_output = gen_output
+        self.log_embedding(embedding_output, epoch, prefix=prefix, plot_first=plot_first)
+        self.log_coord(coord_output, epoch, prefix=prefix, plot_first=plot_first)
 
     def compute_gradient_penalty(self, cond_data, real_samples, fake_samples, dis_real_validity_out=None, dis_fake_validity_out=None):
         """Calculates the gradient penalty loss for WGAN GP"""

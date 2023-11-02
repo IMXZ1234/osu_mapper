@@ -15,6 +15,10 @@ def normal_at(miu, sigma, length):
 
 
 def gaussian_kernel_1d(sigma, size=9):
+    if sigma == 0:
+        kernel = np.zeros(size, dtype=float)
+        kernel[size // 2] = 1
+        return kernel
     kernel = np.exp(-(np.abs(np.arange(size) - size // 2) / sigma) ** 2 / 2) / np.sqrt(2 * np.pi) / sigma
     kernel /= np.sum(kernel)
     return kernel
@@ -49,11 +53,13 @@ def preprocess_label(label, level_coeff, rnd_bank=None):
     return label
 
 
-def preprocess_label_filter(label, kernel):
+def preprocess_label_filter(label, level_coeff, kernel):
     """
     only cursor signal
     -> x, y
     """
+    if level_coeff == 0:
+        return label
     filtered = np.stack([scipy.signal.convolve(label_i, kernel, mode='same') for label_i in label.T], axis=1)
     return filtered
 
@@ -62,11 +68,23 @@ def preprocess_embedding(embedding, level_coeff, rnd_bank=None):
     """
     hit signal embedding
     noise have probability ~90% to have a norm < 0.001
+    embedding may move toward neighbour embeddings
     """
     if level_coeff == 0:
         return embedding
     if rnd_bank is None:
-        embedding += level_coeff * np.random.randn(*embedding.shape) / 1300
+        rand_step = level_coeff * np.random.randn(*embedding.shape) / 1300
+        gaussian = level_coeff * np.random.randn(*embedding.shape) / 2600
+        former_step = np.concatenate([embedding[:1], embedding[:-1]])
+        later_step = np.concatenate([embedding[1:], embedding[-1:]])
+        abs_rand_step = np.abs(rand_step)
+        dist = 1 - abs_rand_step
+        adj_embedding = embedding * dist
+        embedding = adj_embedding + abs_rand_step * np.where(
+            rand_step >= 0,
+            later_step,
+            former_step
+        ) + gaussian
     else:
         take_len = np.size(embedding)
         idx = np.random.randint(0, len(rnd_bank)-take_len)
@@ -177,8 +195,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  coeff_data_len=1,
                  coeff_label_len=1,
                  level_coeff=1,
+                 embedding_level_coeff=1,
                  beat_divisor=8,
                  rnd_bank_size=None,
+                 item='coord_embedding',
                  **kwargs,
                  ):
         """
@@ -215,6 +235,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.coeff_data_len = coeff_data_len
         self.coeff_label_len = coeff_label_len
         self.level_coeff = level_coeff
+        # embedding noise is kept constant,
+        # as a little noise will not interfere with decoding process,
+        # but greatly stabilizes training
+        self.embedding_level_coeff = embedding_level_coeff
         self.inference = inference
         self.rnd_bank_size = rnd_bank_size
 
@@ -247,6 +271,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         print('dataset initialized, totally %d subseqs' % len(self.subseq_dict))
 
         self.set_noise_level(self.level_coeff)
+        self.item = item
         # print(self.sample_subseq)
         # print(self.subseq_dict)
         # vis_data, vis_label, _ = self.__getitem__(0)
@@ -256,7 +281,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         if self.rnd_bank_size is not None:
             self.rnd_bank = np.random.randn(self.rnd_bank_size)
             self.rnd_bank_label = self.rnd_bank * (level_coeff / 4096)
-            self.rnd_bank_embedding = self.rnd_bank * (level_coeff / 1300)
+            self.rnd_bank_embedding = self.rnd_bank * (self.embedding_level_coeff / 1300)
             print('rnd_bank generated')
         else:
             self.rnd_bank = None
@@ -364,37 +389,39 @@ class SubseqFeeder(torch.utils.data.Dataset):
 
         if not self.inference:
             # load label: (snap_type, x_pos_seq, y_pos_seq)
-            with open(label_path, 'rb') as f:
-                # n_snaps, 3
-                label = pickle.load(f)
-            # to [-1, 1]
-            label = label[:, 1:] - 0.5
-            # label = (label[:, 1:] - 0.5) * 2
-            with open(label_idx_path, 'rb') as f:
-                # n_beats, 16
-                label_idx = pickle.load(f)
-            # print('loaded label')
-            # time_list.append(time.perf_counter_ns())
-            label = label[start * self.beat_divisor: min(sample_snaps, end * self.beat_divisor)]
-            label_idx = label_idx[start: min(sample_beats, end)]
-            if pad_beats > 0:
-                if not self.pad and (sample_beats >= (end - start)):
-                    raise AssertionError
-                #     print('label bad padding occur!')
-                #     print(beatmapid, beatmapsetid, sample_beats, end, start)
-                label = np.pad(label, ((0, pad_beats * self.beat_divisor), (0, 0)), mode='constant')
-                label_idx = np.pad(label_idx, ((0, pad_beats), (0, 0)), mode='constant')
-            # print('padded label')
-            # time_list.append(time.perf_counter_ns())
-            # set mean norm of embedding to 1
-            embedding = self.embedding[label_idx]
-            # embedding = self.embedding[label_idx] / 2.848476
-            try:
-                label = preprocess_label_filter(label, self.kernel)
-                embedding = preprocess_embedding(embedding, self.level_coeff, self.rnd_bank_embedding)
-            except Exception:
-                traceback.print_exc()
-                raise AssertionError
+            if 'coord' in self.item:
+                with open(label_path, 'rb') as f:
+                    # n_snaps, 3
+                    label = pickle.load(f)
+                # to [-5, 0.5]
+                # label = label[:, 1:] - 0.5
+                label = (label[:, 1:] - 0.5) * 2
+                # print('loaded label')
+                # time_list.append(time.perf_counter_ns())
+                label = label[start * self.beat_divisor: min(sample_snaps, end * self.beat_divisor)]
+                if pad_beats > 0:
+                    if not self.pad and (sample_beats >= (end - start)):
+                        raise AssertionError
+                    #     print('label bad padding occur!')
+                    #     print(beatmapid, beatmapsetid, sample_beats, end, start)
+                    label = np.pad(label, ((0, pad_beats * self.beat_divisor), (0, 0)), mode='constant')
+                label = preprocess_label_filter(label, self.level_coeff, self.kernel)
+
+            if 'embedding' in self.item:
+                with open(label_idx_path, 'rb') as f:
+                    # n_beats, 16
+                    label_idx = pickle.load(f)
+                label_idx = label_idx[start: min(sample_beats, end)]
+                # print('padded label')
+                # time_list.append(time.perf_counter_ns())
+                # set mean norm of embedding to 1
+                if pad_beats > 0:
+                    if not self.pad and (sample_beats >= (end - start)):
+                        raise AssertionError
+                    label_idx = np.pad(label_idx, (0, pad_beats), mode='constant')
+                embedding = self.embedding[label_idx]
+                embedding = preprocess_embedding(embedding, self.embedding_level_coeff, self.rnd_bank_embedding)
+                # embedding = self.embedding[label_idx] / 2.848476
             # print('preprocessed label')
             # time_list.append(time.perf_counter_ns())
         else:
@@ -407,7 +434,12 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # if subseq_idx == 0:
         #     print('np.max(data), np.min(data)')
         #     print(np.max(data), np.min(data))
-        return data, [label, embedding], meta
+        if self.item == 'coord_embedding':
+            return data, [label, embedding], meta
+        elif self.item == 'coord':
+            return data, label, meta
+        elif self.item == 'embedding':
+            return data, embedding, meta
 
     def __len__(self):
         return len(self.subseq_dict)

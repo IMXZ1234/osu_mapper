@@ -40,4 +40,10 @@ from . import (
     acgan_embeddingv3,
     acgan_embeddingv4,
     acgan_embeddingv5,
+    acgan_embeddingv6,
+    acgan_embeddingv6_only_coord,
+    acgan_embeddingv6_only_embedding,
+    acgan_embeddingv7,
+    acgan_embeddingv7_only_coord,
+    acgan_embeddingv7_only_embedding,
 )

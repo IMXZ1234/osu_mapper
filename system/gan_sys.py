@@ -505,7 +505,7 @@ class TrainACGANWithinBatch(TrainGAN):
         # real
         dis_real_validity_out, dis_real_cls_out = dis(cond_data, real_gen_output)
         with torch.no_grad():
-            fake = gen((cond_data, cls_label))
+            fake = gen((cond_data, cls_label)).detach()
             if random.random() < self.log_exp_replay_prob:
                 self.exp_replay_buffer.append([cond_data, real_gen_output, fake, cls_label, self.exp_replay_wait])
 

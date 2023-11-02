@@ -138,6 +138,49 @@ class BatchAbsCosineScheduler:
         return ampl * abs(math.cos(phase))
 
 
+class BatchAbsCosineSchedulerMod:
+    def __init__(self, y_coeff=1., x_coeff=0.1, period=None, low_bound=None):
+        """
+        e-x
+        """
+        self.period = period
+        self.current_step = 0
+        self.current_batch_step = 0
+        self.y_coeff = y_coeff
+        self.x_coeff = x_coeff
+        self.low_bound = low_bound
+
+    def step(self):
+        self.current_step += 1
+        self.current_batch_step = 0
+
+    def set_current_step(self, step):
+        self.current_step = step
+
+    def step_batch(self):
+        self.current_batch_step += 1
+
+    def set_current_batch_step(self, batch_step):
+        self.current_batch_step = batch_step
+
+    def set_period(self, period):
+        self.period = period
+
+    def reset(self):
+        self.current_step = 0
+
+    def cur_milestone_output(self):
+        ampl = self.y_coeff * math.exp(-self.x_coeff * self.current_step)
+        if self.period is None:
+            print('set period first! returned unmodulated ampl')
+            return ampl
+        phase = (self.current_batch_step % self.period) / self.period * math.pi
+        output = ampl * abs(math.cos(phase))
+        if self.low_bound is not None:
+            output = max(self.low_bound, output)
+        return output
+
+
 def idx_set_with_uniform_itv(length, num, offset=0):
     itv = length / num
     idx_offset = offset % round(itv)

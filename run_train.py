@@ -2,6 +2,7 @@ import yaml
 import numpy as np
 
 from nn.train import train_with_config
+from train_scripts import acgan_embedding
 
 
 def train_mel_mlp_density_c1(setting_name):
@@ -6070,7 +6071,7 @@ def test_gen_capacity(setting_name='test_gan_capacity'):
         train_with_config(config_path, folds=None, format_config=False)
 
 
-def train_acgan_embeddingv5_noise(setting_name='acgan_embeddingv5_noise'):
+def train_acgan_embeddingv6_noise(setting_name='acgan_embeddingv6_noise'):
     """
     acganv1_embedding
     """
@@ -6097,7 +6098,7 @@ def train_acgan_embeddingv5_noise(setting_name='acgan_embeddingv5_noise'):
         print('init lr %s' % str(gen_lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
-            'model_type': ['nn.net.acgan_embeddingv5.Generator', 'nn.net.acgan_embeddingv5.Discriminator'],
+            'model_type': ['nn.net.acgan_embeddingv6.Generator', 'nn.net.acgan_embeddingv6.Discriminator'],
             'params': [
                 {
                     'n_snap': subseq_snaps,
@@ -6139,8 +6140,8 @@ def train_acgan_embeddingv5_noise(setting_name='acgan_embeddingv5_noise'):
             'params': [
                 # {'milestones': [150, 300, 450], 'gamma': 1},
                 # {'milestones': [150, 300, 450], 'gamma': 1},
-                {'milestones': [1, 5], 'gamma': 0.3},
-                {'milestones': [1, 5], 'gamma': 0.3},
+                {'milestones': [1], 'gamma': 0.3},
+                {'milestones': [1], 'gamma': 0.3},
             ]
         }
         data_arg = {'dataset': 'nn.dataset.feeder_embedding.SubseqFeeder',
@@ -6197,7 +6198,7 @@ def train_acgan_embeddingv5_noise(setting_name='acgan_embeddingv5_noise'):
                      # 'noise_level': [5, 2.5, 1, 0.5, 0.25],
                      # 'noise_level': [0.5, 0.3, 0.1, 0.05, 0.],
                      'period': 15,
-                     'lambda_gp': 100,
+                     'lambda_gp': 500,
                      'lambda_cls': 10.,
                      'gp_type': 'lp',
                      # 'last_epoch': 12,
@@ -6258,4 +6259,11 @@ if __name__ == '__main__':
     # train_acgan_embeddingv5('acgan_embeddingv5_wgangp_20231017_g0.00001_d0.00001_grad_clip_norm5')
     # test_gen_capacity('20231021_acgan_embeddingv5_capacity_lr0.00001')
     # train_acgan_embeddingv5_noise('20231024_acgan_embeddingv15_glr0.00001_dlr0.0001_5_dp0.33_cls100_batch_noise_sched_filter_shuffle')
-    train_acgan_embeddingv5_noise('20231026_acgan_embeddingv5_glr0.00003_dlr0.00003_1_5_dp1_cls10_gl100')
+    # train_acgan_embeddingv6_noise('20231026_acgan_embeddingv6_glr0.00003_dlr0.00003_1_5_dp1_cls10_gl500_small_kernel_shift_embedding')
+
+    # train_acgan_embeddingv6_noise('20231026_acgan_embeddingv6_glr0.00003_dlr0.00003_1_5_dp1_cls10_gl500_small_kernel_shift_embedding')
+    # acgan_embedding.train_acgan_embeddingv6_only_coord('20231027_acgan_embeddingv6_only_coord_gp_lp10')
+    # acgan_embedding.train_acgan_embeddingv6_only_embedding('20231027_acgan_embeddingv6_only_embedding_gp_lp10')
+    # acgan_embedding.train_acgan_embeddingv7_only_coord('20231101_acgan_embeddingv7_only_coord_gp_lp10_lr0.00003_no_input_norm')
+    # acgan_embedding.train_acgan_embeddingv7_only_embedding('20231101_acgan_embeddingv7_only_embedding_gp_lp10_lr0.00003_no_input_norm')
+    acgan_embedding.train_acgan_embeddingv7('20231102_acgan_embeddingv7_gp_lp10_lr0.00003_batch_noise_embedding_const_noise_rm_res')
