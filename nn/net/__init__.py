@@ -44,6 +44,8 @@ from . import (
     acgan_embeddingv6_only_coord,
     acgan_embeddingv6_only_embedding,
     acgan_embeddingv7,
+    acgan_embeddingv8,
+    acgan_embeddingv9,
     acgan_embeddingv7_only_coord,
     acgan_embeddingv7_only_embedding,
 )

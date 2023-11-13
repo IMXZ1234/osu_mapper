@@ -387,8 +387,10 @@ class HeatmapDataset:
                         print('invalid ho_b')
                         print(ho_b)
                         print(ho_b.position)
-                x_pos_seq = (x_pos_seq + 180) / (691 + 180)
-                y_pos_seq = (y_pos_seq + 82) / (407 + 82)
+                # x_pos_seq = (x_pos_seq + 180) / (691 + 180)
+                # y_pos_seq = (y_pos_seq + 82) / (407 + 82)
+                x_pos_seq = (x_pos_seq - 256) / 512
+                y_pos_seq = (y_pos_seq - 192) / 384
                 label = np.stack([snap_type, x_pos_seq, y_pos_seq], axis=1)
             except Exception:
                 # traceback.print_exc()

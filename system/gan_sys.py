@@ -115,17 +115,20 @@ class TrainGAN(Train):
                 )
         self.logger.info('initialized train state, to cuda device %s' % str(self.output_device))
 
-    def save_model(self, epoch=-1, model_index=None):
+    def save_model(self, epoch=-1, batch_idx=None, model_index=None):
         if not isinstance(self.model, (list, tuple)):
             models = [self.model]
         else:
             models = self.model
         if model_index is None:
             model_index = list(range(len(models)))
-        pt_filename = 'model_%s_%d_%d.pt'
+        pt_filename = 'model_%s_%d%s_%d.pt'
         for index in model_index:
             model = models[index]
-            torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % (self.current_phase, epoch, index)))
+            torch.save(model.state_dict(), os.path.join(
+                self.model_save_dir, pt_filename % (self.current_phase, epoch,
+                                                    ('_' + str(batch_idx)) if batch_idx is not None else '', index)
+            ))
         self.logger.info('saved model of phase %s, epoch %d under %s' % (self.current_phase, epoch, self.model_save_dir))
 
     def run_train(self):
@@ -477,7 +480,7 @@ class TrainACGANWithinBatch(TrainGAN):
             self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss, epoch)
 
             if (epoch + 1) % self.model_save_step == 0:
-                self.save_model(epoch, (0,))
+                self.save_model(epoch, None, (0,))
 
             if (epoch + 1) % self.save_train_state_itv == 0:
                 self.save_train_state(self.model[0], self.optimizer[0], epoch, 0)

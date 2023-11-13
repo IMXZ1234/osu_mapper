@@ -6,13 +6,19 @@ import torch.nn.functional as F
 from nn.net.util.blocks_conv_no_bottleneck import CNNExtractor, DecoderUpsample
 
 
+
+# class AudioHead(nn.Module):
+#     def __init__(self, ):
+#         super(AudioHead, self).__init__()
+
+
 class Generator(nn.Module):
     """
     we predict 16 dim hit_signal embedding + 2 dim x&y coordinate
     """
 
     def __init__(self, n_snap, tgt_embedding_dim=16, tgt_coord_dim=2, audio_feature_dim=40, noise_dim=256, norm='BN',
-                 middle_dim=256, audio_preprocess_dim=2, label_preprocess_dim=1, condition_coeff=1.,
+                 middle_dim=256, audio_preprocess_dim=24, label_preprocess_dim=1, condition_coeff=1.,
                  # one-hot acgan predicted label (beatmap difficulty here)
                  cls_label_dim=3):
         super(Generator, self).__init__()
@@ -38,20 +44,19 @@ class Generator(nn.Module):
         self.preprocess_audio = CNNExtractor(
             audio_feature_dim,
             n_frames,
-            stride_list=(2, 4, 4, 4),
-            out_channels_list=(audio_feature_dim, audio_feature_dim, audio_feature_dim, audio_preprocess_dim,),
-            kernel_size_list=(5, 5, 5, 5),
+            stride_list=(16, 8),
+            out_channels_list=(audio_feature_dim, audio_preprocess_dim,),
+            kernel_size_list=(31, 15),
             norm=norm,
         )
 
         self.noise_preprocess = DecoderUpsample(
             self.init_noise_dim,
             n_beats,
-            stride_list=(1,),
-            out_channels_list=(noise_dim,),
-            kernel_size_list=(1,),
+            stride_list=(1, 1),
+            out_channels_list=(noise_dim, noise_dim),
+            kernel_size_list=(3, 3),
             norm=norm,
-            first_layer_residual=False,
         )
 
         self.cls_label_preprocess = CNNExtractor(
@@ -61,16 +66,15 @@ class Generator(nn.Module):
             out_channels_list=(label_preprocess_dim,),
             kernel_size_list=(1,),
             norm=norm,
-            first_layer_residual=False,
         )
 
         # keep dim
         self.body = CNNExtractor(
             noise_dim + audio_preprocess_dim + label_preprocess_dim,
             n_beats,
-            stride_list=(1, 1, 1, 1),
-            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim),
-            kernel_size_list=(3, 3, 3, 3),
+            stride_list=(1, 1),
+            out_channels_list=(middle_dim, middle_dim),
+            kernel_size_list=(3, 3),
             norm=norm,
         )
         # self.condition_norm = nn.LayerNorm(n_beats)
@@ -80,9 +84,9 @@ class Generator(nn.Module):
             DecoderUpsample(
                 middle_dim,
                 n_beats,
-                stride_list=(2, 1, 2, 1, 2, 1, 1),
-                out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim),
-                kernel_size_list=(3, 3, 3, 3, 3, 3, 3),
+                stride_list=(2, 2, 2),
+                out_channels_list=(middle_dim, middle_dim, middle_dim),
+                kernel_size_list=(3, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -94,11 +98,9 @@ class Generator(nn.Module):
             CNNExtractor(
                 middle_dim,
                 n_beats,
-                stride_list=(1, 1, 1, 1, 1, 1, 1),
-                out_channels_list=(middle_dim, middle_dim, middle_dim,
-                                   middle_dim, middle_dim, middle_dim,
-                                   middle_dim),
-                kernel_size_list=(3, 3, 3, 3, 3, 3, 3),
+                stride_list=(1, 1, 1),
+                out_channels_list=(middle_dim, middle_dim, middle_dim),
+                kernel_size_list=(3, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -108,7 +110,7 @@ class Generator(nn.Module):
 
     def forward(self, cond_data, noise=None):
         audio_feature, cls_label = cond_data
-        N, L, _ = audio_feature.shape
+        N, L, C = audio_feature.shape
         assert L == self.n_frames
         audio = self.preprocess_audio(audio_feature.permute(0, 2, 1))
         cls_label_feature = self.cls_label_preprocess(
@@ -131,7 +133,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, n_snap, tgt_embedding_dim=16, tgt_coord_dim=2, audio_feature_dim=40, norm='LN', middle_dim=256, preprocess_dim=32,
+    def __init__(self, n_snap, tgt_embedding_dim=16, tgt_coord_dim=2, audio_feature_dim=40, norm='LN', middle_dim=256, audio_preprocess_dim=24,
                  cls_label_dim=5, validity_sigmoid=False,
                  **kwargs):
         """
@@ -152,59 +154,62 @@ class Discriminator(nn.Module):
 
         # mel frame input, downsample 2 ** 5
         self.preprocess = nn.Sequential(
-            # nn.Conv1d(audio_feature_dim, middle_dim, kernel_size=3),
-            # nn.LeakyReLU(0.2),
             CNNExtractor(
-                # middle_dim,
                 audio_feature_dim,
                 n_frames,
-                stride_list=(4, 4, 4, 2),
-                out_channels_list=(middle_dim, preprocess_dim, middle_dim, preprocess_dim),
-                kernel_size_list=(5, 5, 5, 5),
+                stride_list=(16, 8),
+                out_channels_list=(audio_feature_dim, audio_preprocess_dim,),
+                kernel_size_list=(31, 15),
                 norm=norm,
             )
         )
 
         # downsample 2 ** 3
         self.tgt_coord_preprocess = nn.Sequential(
-            # nn.Conv1d(self.tgt_coord_dim, preprocess_dim, kernel_size=3, padding=1),
-            # nn.LeakyReLU(0.2),
             CNNExtractor(
                 self.tgt_coord_dim,
+                # middle_dim,
                 n_snap,
-                stride_list=(2, 2, 2, 1),
-                out_channels_list=(middle_dim, preprocess_dim, middle_dim, preprocess_dim),
-                kernel_size_list=(5, 5, 5, 5),
+                stride_list=(4, 2),
+                out_channels_list=(middle_dim, preprocess_dim),
+                kernel_size_list=(7, 5),
                 norm=norm,
             )
         )
 
+        # self.coord_shortcut = nn.Sequential(
+        #     nn.Conv1d(self.tgt_coord_dim, middle_dim, kernel_size=9, padding=4),
+        #     nn.LeakyReLU(0.02),
+        # )
+        self.coord_shortcut = nn.Sequential(
+            nn.Conv1d(self.tgt_coord_dim, preprocess_dim, kernel_size=9, padding=4),
+            nn.LeakyReLU(inplace=True),
+        )
+
         self.tgt_embedding_preprocess = nn.Sequential(
-            # nn.Conv1d(self.tgt_embedding_dim, preprocess_dim, kernel_size=3, padding=1),
-            # nn.LeakyReLU(0.2),
             CNNExtractor(
                 self.tgt_embedding_dim,
+                # middle_dim,
                 n_beats,
-                stride_list=(1, 1, 1, 1),
-                out_channels_list=(middle_dim, preprocess_dim, middle_dim, preprocess_dim),
-                kernel_size_list=(5, 5, 5, 5),
+                stride_list=(1, 1),
+                out_channels_list=(middle_dim, preprocess_dim),
+                kernel_size_list=(3, 3),
                 norm=norm,
             )
         )
 
         self.body = CNNExtractor(
-            preprocess_dim * 3,
+            preprocess_dim * 2 + audio_preprocess_dim,
             # (middle_dim // 2) * 3,
             n_beats,
-            stride_list=(1, 1, 1, 1, 1, 1, 1),
-            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim,
-                               middle_dim, middle_dim, middle_dim),
-            kernel_size_list=(5, 3, 5, 3, 5, 3, 3),
+            stride_list=(1, 1, 1),
+            out_channels_list=(middle_dim, middle_dim, middle_dim),
+            kernel_size_list=(3, 3, 3),
             norm=norm,
         )
 
         self.validity_head = nn.Sequential(
-            nn.Linear(middle_dim, 1),
+            nn.Linear(middle_dim + preprocess_dim * 3, 1),
             nn.Sigmoid() if self.validity_sigmoid else nn.Identity(),
         )
         self.cls_head = nn.Linear(middle_dim, cls_label_dim)
@@ -217,23 +222,32 @@ class Discriminator(nn.Module):
         N, L, _ = cond_data.shape
         audio_feature = cond_data
         # N, L, _ = gen_output.shape -> N, C, L
-        x = self.preprocess(audio_feature.permute(0, 2, 1))
+        audio_preprocess_out = self.preprocess(audio_feature.permute(0, 2, 1))
         # N, L, C -> N, C, L
         coord_output, embed_output = tgt
         coord_output = coord_output.permute(0, 2, 1)
         embed_output = embed_output.permute(0, 2, 1)
+        coord_preprocess_out = self.tgt_coord_preprocess(coord_output)
+        embedding_preprocess_out = self.tgt_embedding_preprocess(embed_output)
+        from_preprocess = torch.cat([coord_preprocess_out, embedding_preprocess_out], dim=1)
         x = torch.cat([
-            x,
-            self.tgt_coord_preprocess(coord_output),
-            self.tgt_embedding_preprocess(embed_output),
+            from_preprocess,
+            audio_preprocess_out,
         ], dim=1)
         # Concatenate label embedding and image to produce input
         # -> N, C, L
         x = self.body(x)
 
-        # -> n, 1, l
+        # -> n, c, 1
         x = F.adaptive_avg_pool1d(x, 1).squeeze(dim=-1)
-        validity = self.validity_head(x)
+
+        from_shortcut = self.coord_shortcut(coord_output)
+        from_shortcut = F.adaptive_avg_pool1d(from_shortcut, 1).squeeze(dim=-1)
+        from_preprocess = F.adaptive_avg_pool1d(from_preprocess, 1).squeeze(dim=-1)
+
+        v_x = torch.cat([x, from_shortcut, from_preprocess], dim=-1)
+
+        validity = self.validity_head(v_x)
         cls_logits = self.cls_head(x)
         # cls_logits = torch.sigmoid(self.cls_head(x))
 

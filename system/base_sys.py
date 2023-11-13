@@ -90,8 +90,9 @@ class Train:
             self.custom_init_weight = dynamic_import(config_dict['custom_init_weight'])
 
         self.start_epoch = self.config_dict.get('start_epoch', -1)
-        self.writer, self.logger, self.log_dir, self.model_save_dir, self.model_save_step = self.load_logger(
-            **output_arg)
+        self.writer, self.logger, self.log_dir, \
+        self.model_save_dir, self.model_save_step, self.model_save_batch_step,\
+        self.log_batch_step = self.load_logger(**output_arg)
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else os.path.join(self.log_dir, 'train_state')
         os.makedirs(self.train_state_dir, exist_ok=True)
         self.model = self.load_model(**model_arg)
@@ -118,7 +119,7 @@ class Train:
         self.last_time_stamp = current_time
         return time_itv
 
-    def load_logger(self, log_dir, model_save_dir, model_save_step, **kwargs):
+    def load_logger(self, log_dir, model_save_dir, model_save_step, model_save_batch_step=None, log_batch_step=None, **kwargs):
         writer = SummaryWriter(logdir=log_dir + '/run')
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -133,7 +134,7 @@ class Train:
         fHandler.setLevel(logging.DEBUG)
         fHandler.setFormatter(formatter)
         logger.addHandler(fHandler)
-        return writer, logger, log_dir, model_save_dir, model_save_step
+        return writer, logger, log_dir, model_save_dir, model_save_step, model_save_batch_step, log_batch_step
 
     def load_model(self, model_type, **kwargs):
         if isinstance(model_type, (list, tuple)):

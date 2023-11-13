@@ -33,7 +33,7 @@ def filter_with_kernel_1d(img, kernel):
     filtered = np.zeros(img.shape)
     img = np.pad(img, (half_kernel_size, half_kernel_size))
     for i in range(length):
-        filtered[i] = np.sum(img[i: i+kernel_size] * kernel)
+        filtered[i] = np.sum(img[i: i + kernel_size] * kernel)
     return filtered
 
 
@@ -48,7 +48,7 @@ def preprocess_label(label, level_coeff, rnd_bank=None):
         label += level_coeff * np.random.randn(*label.shape) / 4096
     else:
         take_len = np.size(label)
-        idx = np.random.randint(0, len(rnd_bank)-take_len)
+        idx = np.random.randint(0, len(rnd_bank) - take_len)
         label += rnd_bank[idx:idx + take_len].reshape(label.shape)
     return label
 
@@ -58,9 +58,14 @@ def preprocess_label_filter(label, level_coeff, kernel):
     only cursor signal
     -> x, y
     """
+    # print('label fileter')
     if level_coeff == 0:
         return label
-    filtered = np.stack([scipy.signal.convolve(label_i, kernel, mode='same') for label_i in label.T], axis=1)
+    kernel_size = kernel.shape[0]
+    padded_label = np.pad(label, ((kernel_size // 2, kernel_size // 2), (0, 0)), mode='symmetric')
+    filtered = np.stack([scipy.signal.convolve(label_i, kernel, mode='valid') for label_i in padded_label.T], axis=1)
+    # filtered += level_coeff * np.random.randn(*label.shape) / 1024
+    # filtered += level_coeff * np.random.randn(*label.shape) / 4096
     return filtered
 
 
@@ -87,7 +92,7 @@ def preprocess_embedding(embedding, level_coeff, rnd_bank=None):
         ) + gaussian
     else:
         take_len = np.size(embedding)
-        idx = np.random.randint(0, len(rnd_bank)-take_len)
+        idx = np.random.randint(0, len(rnd_bank) - take_len)
         embedding += rnd_bank[idx:idx + take_len].reshape(embedding.shape)
     return embedding
 
@@ -120,7 +125,7 @@ def to_data_feature(meta, mel_spec):
                                   ho_density[:, np.newaxis],
                                   occupied_proportion[:, np.newaxis],
                                   snap_divisor[:, np.newaxis] * 0.1,
-                                 *expanded_diff], axis=1)
+                                  *expanded_diff], axis=1)
     return sample_data
 
 
@@ -147,7 +152,7 @@ def to_data_feature_dis(meta, mel_spec):
                                   # ho_density[:, np.newaxis],
                                   # occupied_proportion[:, np.newaxis],
                                   # snap_divisor[:, np.newaxis] * 0.1,
-                                 *expanded_diff], axis=1)
+                                  *expanded_diff], axis=1)
     return sample_data
 
 
@@ -167,9 +172,9 @@ def preprocess_pred_meta(meta, mel_spec):
     expanded_diff = [np.array(diff / 10. - 0.5, dtype=float).repeat(total_frames)[:, np.newaxis] for diff in meta[8:]]
     snap_divisor = np.array(snap_divisor, dtype=float).repeat(total_frames)
     pred_meta = np.concatenate([ms_per_beat[:, np.newaxis] * 60 / 60000,
-                                  ho_density[:, np.newaxis],
-                                  occupied_proportion[:, np.newaxis],
-                                  snap_divisor[:, np.newaxis] * 0.1,
+                                ho_density[:, np.newaxis],
+                                occupied_proportion[:, np.newaxis],
+                                snap_divisor[:, np.newaxis] * 0.1,
                                 *expanded_diff], axis=1)
     return pred_meta
 
@@ -196,6 +201,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  coeff_label_len=1,
                  level_coeff=1,
                  embedding_level_coeff=1,
+                 coord_level_coeff=None,
                  beat_divisor=8,
                  rnd_bank_size=None,
                  item='coord_embedding',
@@ -235,6 +241,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.coeff_data_len = coeff_data_len
         self.coeff_label_len = coeff_label_len
         self.level_coeff = level_coeff
+        self.coord_level_coeff = coord_level_coeff
         # embedding noise is kept constant,
         # as a little noise will not interfere with decoding process,
         # but greatly stabilizes training
@@ -245,8 +252,10 @@ class SubseqFeeder(torch.utils.data.Dataset):
         self.binary = binary
         self.pad = pad
 
-        if self.take_first:
+        if self.take_first is not None:
             self.all_beatmapids = self.all_beatmapids[:self.take_first]
+            print('taking first %d seq' % self.take_first)
+        print('totally %d full seq' % len(self.all_beatmapids))
         self.info = {}
         for beatmapid in self.all_beatmapids:
             info_path = os.path.join(self.info_dir, '%s.pkl' % beatmapid)
@@ -280,8 +289,12 @@ class SubseqFeeder(torch.utils.data.Dataset):
     def set_noise_level(self, level_coeff):
         if self.rnd_bank_size is not None:
             self.rnd_bank = np.random.randn(self.rnd_bank_size)
-            self.rnd_bank_label = self.rnd_bank * (level_coeff / 4096)
-            self.rnd_bank_embedding = self.rnd_bank * (self.embedding_level_coeff / 1300)
+            self.rnd_bank_label = self.rnd_bank * \
+                                  ((
+                                       self.coord_level_coeff if self.coord_level_coeff is not None else level_coeff) / 4096)
+            self.rnd_bank_embedding = self.rnd_bank * \
+                                      ((
+                                           self.embedding_level_coeff if self.embedding_level_coeff is not None else level_coeff) / 1300)
             print('rnd_bank generated')
         else:
             self.rnd_bank = None
@@ -293,7 +306,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
         subseq_index = 0
         # print('len(self.info)')
         # print(len(self.info))
-        for idx, (beatmapid, (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap)) in enumerate(self.info.items()):
+        for idx, (beatmapid, (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap)) in enumerate(
+                self.info.items()):
             if self.take_first is not None and idx > self.take_first:
                 break
             self.sample_subseq[beatmapid] = []
@@ -330,7 +344,6 @@ class SubseqFeeder(torch.utils.data.Dataset):
 
     def load_subseq(self, subseq_idx):
         # time_list = []
-        # print('start')
         # time_list.append(time.perf_counter_ns())
         # beatmapid, beatmapsetid, start, start_frame, end_frame = self.subseq_dict[subseq_idx]
         beatmapid, beatmapsetid, start = self.subseq_dict[subseq_idx]
@@ -382,7 +395,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # use meta from the whole sequence
         # -> [subseq_beats, 2]
         # meta = np.tile(np.array([star, cs])[np.newaxis, :], (len(data), 1))
-        meta = np.array([star-3.5]) / 5
+        meta = np.array([star - 3.5]) / 5
         # print('meta', meta)
         # print('added indicator')
         # time_list.append(time.perf_counter_ns())
@@ -393,9 +406,11 @@ class SubseqFeeder(torch.utils.data.Dataset):
                 with open(label_path, 'rb') as f:
                     # n_snaps, 3
                     label = pickle.load(f)
-                # to [-5, 0.5]
-                # label = label[:, 1:] - 0.5
-                label = (label[:, 1:] - 0.5) * 2
+                # to [-0.5, 0.5]
+                label = label[:, 1:]
+                label[:, 0] = ((label[:, 0] * (691 + 180) - 180) - 256) / 512
+                label[:, 1] = ((label[:, 1] * (407 + 82) - 82) - 192) / 384
+                # label = (label[:, 1:] - 0.5) * 2
                 # print('loaded label')
                 # time_list.append(time.perf_counter_ns())
                 label = label[start * self.beat_divisor: min(sample_snaps, end * self.beat_divisor)]
@@ -405,7 +420,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
                     #     print('label bad padding occur!')
                     #     print(beatmapid, beatmapsetid, sample_beats, end, start)
                     label = np.pad(label, ((0, pad_beats * self.beat_divisor), (0, 0)), mode='constant')
-                label = preprocess_label_filter(label, self.level_coeff, self.kernel)
+                coord_level_coeff = self.coord_level_coeff if self.coord_level_coeff is not None else self.level_coeff
+                label = preprocess_label_filter(label, coord_level_coeff, self.kernel)
 
             if 'embedding' in self.item:
                 with open(label_idx_path, 'rb') as f:
@@ -420,7 +436,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
                         raise AssertionError
                     label_idx = np.pad(label_idx, (0, pad_beats), mode='constant')
                 embedding = self.embedding[label_idx]
-                embedding = preprocess_embedding(embedding, self.embedding_level_coeff, self.rnd_bank_embedding)
+                embedding_level_coeff = self.embedding_level_coeff if self.embedding_level_coeff is not None else self.level_coeff
+                embedding = preprocess_embedding(embedding, embedding_level_coeff, self.rnd_bank_embedding)
                 # embedding = self.embedding[label_idx] / 2.848476
             # print('preprocessed label')
             # time_list.append(time.perf_counter_ns())
@@ -452,6 +469,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                 break
             except Exception:
                 # print('fail retrieve %d' % index)
+                # traceback.print_exc()
                 index = (index + 1) % len(self.subseq_dict)
         if self.inference:
             return data, meta_pred
@@ -475,3 +493,57 @@ class SubseqFeeder(torch.utils.data.Dataset):
             subseq_idx_list, label_list = list(zip(*idx_label_tuple))
             all_sample_labels.append(torch.cat(label_list, dim=0))
         return all_sample_labels
+
+
+if __name__ == '__main__':
+    train_dataset_arg = {
+                            # 'save_dir': r'/home/data1/xiezheng/osu_mapper/preprocessed_v5',
+                            'save_dir': r'/home/xiezheng/data/preprocessed_v5',
+                            'embedding_path': '/home/data1/xiezheng/osu_mapper/result/word2vec_skipgramv1_0.1_constlr_dim_16_early_stop/embedding_center-1_-1_normed.pkl',
+                            'subseq_snaps': 32*8,
+                            'random_seed': 404,
+                            'use_random_iter': True,
+                            'take_first': 1024,
+                            'pad': False,
+                            'beat_divisor': 8,
+                            'rnd_bank_size': None,
+                            'level_coeff': 0.5,
+                            'embedding_level_coeff': 0.5,
+                            'coord_level_coeff': 0.5,
+                            'item': 'coord_embedding',
+                        }
+    feeder = SubseqFeeder(
+        **train_dataset_arg
+    )
+    # n_snaps_2
+    label_mean = 0
+    data_mean = 0
+    from tqdm import tqdm
+
+    for i in tqdm(range(len(feeder))):
+        data, (label, embedding), meta_pred = feeder[i]
+        label_mean += label
+        data_mean += data
+    data_mean = data_mean / len(feeder)
+    label_mean = label_mean / len(feeder)
+    save_dir = r'/home/data1/xiezheng/osu_mapper/vis'
+
+    with open(os.path.join(save_dir, 'data_mean.pkl'), 'wb') as f:
+        pickle.dump(data_mean, f)
+    with open(os.path.join(save_dir, 'label_mean.pkl'), 'wb') as f:
+        pickle.dump(label_mean, f)
+    print(label_mean)
+
+    import matplotlib.pyplot as plt
+
+
+    plt.figure()
+    plt.plot(np.arange(len(label_mean)), label_mean[:, 0])
+    plt.savefig(os.path.join(save_dir, 'mean_x.png'))
+    plt.figure()
+    plt.plot(np.arange(len(label_mean)), label_mean[:, 1])
+    plt.savefig(os.path.join(save_dir, 'mean_y.png'))
+
+    plt.figure()
+    plt.imshow(data_mean)
+    plt.savefig(os.path.join(save_dir, 'mean_data.png'))

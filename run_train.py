@@ -6266,4 +6266,7 @@ if __name__ == '__main__':
     # acgan_embedding.train_acgan_embeddingv6_only_embedding('20231027_acgan_embeddingv6_only_embedding_gp_lp10')
     # acgan_embedding.train_acgan_embeddingv7_only_coord('20231101_acgan_embeddingv7_only_coord_gp_lp10_lr0.00003_no_input_norm')
     # acgan_embedding.train_acgan_embeddingv7_only_embedding('20231101_acgan_embeddingv7_only_embedding_gp_lp10_lr0.00003_no_input_norm')
-    acgan_embedding.train_acgan_embeddingv7('20231102_acgan_embeddingv7_gp_lp10_lr0.00003_batch_noise_embedding_const_noise_rm_res')
+    # acgan_embedding.train_acgan_embeddingv7('20231103_acgan_embeddingv7_gp_lp10_glr0.0001_dlr0.00003_coord_noise_lb0.3_cls25')
+    # acgan_embedding.train_acgan_embeddingv8('20231107_acgan_embeddingv8_gp_lp10_glr0.00001_dlr0.00001_new_label')
+    # test_gen_capacity('20231108_acgan_embeddingv8_capacity_lr0.00001')
+    acgan_embedding.train_acgan_embeddingv9('20231111_acgan_embeddingv9_gp_lp10_glr1e-4_dlr1e-4_more_layers2')

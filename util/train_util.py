@@ -139,7 +139,7 @@ class BatchAbsCosineScheduler:
 
 
 class BatchAbsCosineSchedulerMod:
-    def __init__(self, y_coeff=1., x_coeff=0.1, period=None, low_bound=None):
+    def __init__(self, y_coeff=1., x_coeff=0.1, period=None, low_bound=None, batch_step_ref=False):
         """
         e-x
         """
@@ -149,6 +149,7 @@ class BatchAbsCosineSchedulerMod:
         self.y_coeff = y_coeff
         self.x_coeff = x_coeff
         self.low_bound = low_bound
+        self.batch_step_ref = batch_step_ref
 
     def step(self):
         self.current_step += 1
@@ -170,14 +171,14 @@ class BatchAbsCosineSchedulerMod:
         self.current_step = 0
 
     def cur_milestone_output(self):
-        ampl = self.y_coeff * math.exp(-self.x_coeff * self.current_step)
+        ampl = self.y_coeff * math.exp(-self.x_coeff * (self.current_batch_step if self.batch_step_ref else self.current_step))
+        if self.low_bound is not None:
+            ampl = max(self.low_bound, ampl)
         if self.period is None:
-            print('set period first! returned unmodulated ampl')
+            # print('set period first! returned unmodulated ampl')
             return ampl
         phase = (self.current_batch_step % self.period) / self.period * math.pi
         output = ampl * abs(math.cos(phase))
-        if self.low_bound is not None:
-            output = max(self.low_bound, output)
         return output
 
 

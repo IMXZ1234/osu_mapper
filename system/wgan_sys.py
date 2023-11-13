@@ -527,6 +527,9 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         self.exp_replay_buffer = collections.deque()
         self.exp_replay_wait = train_arg['exp_replay_wait']
 
+        batch_grad_norm_gen_f, batch_grad_norm_gen_l = [], []
+        batch_grad_norm_dis_f, batch_grad_norm_dis_l = [], []
+
         gen, dis = self.model
         gen_sched, dis_sched = self.scheduler
 
@@ -538,6 +541,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         noise_level_sched.set_current_step(self.current_epoch)
         noise_level_sched.set_current_batch_step(0)
         # noise_level_sched.set_period(len(self.train_iter))
+
+        total_batch_idx = 0
 
         for epoch in range(self.current_epoch, self.epoch):
             time_cost_dict = {'net': 0, 'data': 0, 'log': 0}
@@ -571,6 +576,87 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
             last_few_batch_fake_loss = AvgLossLogger(10)
             last_few_batch_real_loss = AvgLossLogger(10)
 
+            def log_and_gen(batch_idx):
+                nonlocal epoch_gen_loss, total_sample_num, total_loss, epoch_fake_loss, epoch_real_loss, epoch_cls_loss, epoch_gp_loss, self
+                avg_gen_loss = epoch_gen_loss / total_sample_num
+                self.logger.info('loss at epoch %d, batch %d:' % (epoch, total_batch_idx))
+                self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
+                self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss, batch_idx)
+                self.gen_loss_list.append(avg_gen_loss)
+
+                avg_loss = total_loss / total_sample_num
+                avg_fake_loss = epoch_fake_loss / total_sample_num
+                avg_real_loss = epoch_real_loss / total_sample_num
+                avg_cls_loss = epoch_cls_loss / total_sample_num
+                avg_batch_grad_norm_dis_f = np.mean(batch_grad_norm_dis_f)
+                batch_grad_norm_dis_f.clear()
+                avg_batch_grad_norm_dis_l = np.mean(batch_grad_norm_dis_l)
+                batch_grad_norm_dis_l.clear()
+                avg_batch_grad_norm_gen_f = np.mean(batch_grad_norm_gen_f)
+                batch_grad_norm_gen_f.clear()
+                avg_batch_grad_norm_gen_l = np.mean(batch_grad_norm_gen_l)
+                batch_grad_norm_gen_l.clear()
+                self.dis_loss_list.append(avg_loss)
+
+                self.logger.info('avg_loss = %.8f' % avg_loss)
+                self.tensorboard_writer.add_scalar('avg_loss', avg_loss, batch_idx)
+                self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
+                self.tensorboard_writer.add_scalar('avg_fake_loss', avg_fake_loss, batch_idx)
+                self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
+                self.tensorboard_writer.add_scalar('avg_real_loss', avg_real_loss, batch_idx)
+                self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
+                self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss, batch_idx)
+
+                self.logger.info('avg_batch_grad_norm_dis_f = %.8f' % avg_batch_grad_norm_dis_f)
+                self.tensorboard_writer.add_scalar('avg_batch_grad_norm_dis_f', avg_batch_grad_norm_dis_f, batch_idx)
+                self.logger.info('avg_batch_grad_norm_dis_l = %.8f' % avg_batch_grad_norm_dis_l)
+                self.tensorboard_writer.add_scalar('avg_batch_grad_norm_dis_l', avg_batch_grad_norm_dis_l, batch_idx)
+                self.logger.info('avg_batch_grad_norm_gen_f = %.8f' % avg_batch_grad_norm_gen_f)
+                self.tensorboard_writer.add_scalar('avg_batch_grad_norm_gen_f', avg_batch_grad_norm_gen_f, batch_idx)
+                self.logger.info('avg_batch_grad_norm_gen_l = %.8f' % avg_batch_grad_norm_gen_l)
+                self.tensorboard_writer.add_scalar('avg_batch_grad_norm_gen_l', avg_batch_grad_norm_gen_l, batch_idx)
+
+                if self.lambda_gp is not None:
+                    avg_gp_loss = epoch_gp_loss / total_sample_num
+                    self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
+                    self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, batch_idx)
+
+                if self.log_item == 'coord_embedding':
+                    log_output = self.log_gen_output_embedding
+                elif self.log_item == 'coord':
+                    log_output = self.log_coord
+                elif self.log_item == 'embedding':
+                    log_output = self.log_embedding
+                else:
+                    raise ValueError('unknown log item')
+
+                print('generating sample...')
+                print('run1')
+                sample = gen((cond_data, cls_label))
+                log_output(sample, batch_idx, 'run1')
+                print('run2')
+                sample = gen((cond_data, cls_label))
+                log_output(sample, batch_idx, 'run2')
+                print('max_difficulty')
+                max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+                sample = gen((cond_data, max_difficulty))
+                log_output(sample, batch_idx, str(max_difficulty[0].item()))
+                print('min_difficulty')
+                min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
+                sample = gen((cond_data, min_difficulty))
+                log_output(sample, batch_idx, str(min_difficulty[0].item()))
+                print('label')
+                log_output(real_gen_output, batch_idx, 'label')
+
+                epoch_gen_loss = 0
+                total_loss = 0
+                total_sample_num = 0
+
+                epoch_fake_loss = 0
+                epoch_real_loss = 0
+                epoch_gp_loss = 0
+                epoch_cls_loss = 0
+
             self.log_time_stamp()
             for batch, (cond_data, real_gen_output, cls_label) in enumerate(tqdm(self.train_iter, ncols=50)):
                 noise_level = noise_level_sched.cur_milestone_output()
@@ -585,8 +671,13 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 # print(cls_label.shape)
 
                 # train generator batch
-                if batch in train_gen_batches or (epoch_gen_loss / total_sample_num) > 5:
+                if batch in train_gen_batches:
                     gen_loss = self.train_generator_batch((cond_data, real_gen_output, cls_label))
+
+                    all_params = list(gen.parameters(recurse=True))
+                    batch_grad_norm_gen_f.append(torch.norm(all_params[0].grad).item())
+                    batch_grad_norm_gen_l.append(torch.norm(all_params[-1].grad).item())
+
                     epoch_gen_loss += gen_loss * batch_size
 
                 if len(self.exp_replay_buffer) > 0:
@@ -610,6 +701,10 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                     #     continue
                     loss, fake_loss, real_loss, gp_loss, cls_loss = self.train_discriminator_batch((cond_data, real_gen_output, cls_label))
 
+                    all_params = list(dis.parameters(recurse=True))
+                    batch_grad_norm_dis_f.append(torch.norm(all_params[0].grad).item())
+                    batch_grad_norm_dis_l.append(torch.norm(all_params[-1].grad).item())
+
                     # we only concern fake loss value
                     # if fake loss value is too large, generator training will be difficult
                     last_few_batch_fake_loss.append(fake_loss)
@@ -623,65 +718,21 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
                 time_cost_dict['net'] += self.log_time_stamp()
 
                 noise_level_sched.step_batch()
+                if (self.log_batch_step is not None) and (total_batch_idx % self.log_batch_step == 0):
+                    log_and_gen(total_batch_idx)
+                if self.model_save_batch_step is not None:
+                    if (total_batch_idx + 1) % self.model_save_batch_step == 0:
+                        self.save_model(epoch, total_batch_idx, (0,))
+
+                total_batch_idx += 1
 
             gen_sched.step()
             dis_sched.step()
             adv_generator_epoch_sched.step()
             noise_level_sched.step()
 
-            avg_gen_loss = epoch_gen_loss / total_sample_num
-            self.logger.info('avg_gen_loss %.8f' % avg_gen_loss)
-            self.tensorboard_writer.add_scalar('avg_gen_loss', avg_gen_loss, epoch)
-            self.gen_loss_list.append(avg_gen_loss)
-
-            avg_loss = total_loss / total_sample_num
-            avg_fake_loss = epoch_fake_loss / total_sample_num
-            avg_real_loss = epoch_real_loss / total_sample_num
-            avg_cls_loss = epoch_cls_loss / total_sample_num
-            self.dis_loss_list.append(avg_loss)
-
-            self.logger.info('avg_loss = %.8f' % avg_loss)
-            self.tensorboard_writer.add_scalar('avg_loss', avg_loss, epoch)
-            self.logger.info('avg_fake_loss = %.8f' % avg_fake_loss)
-            self.tensorboard_writer.add_scalar('avg_fake_loss', avg_fake_loss, epoch)
-            self.logger.info('avg_real_loss = %.8f' % avg_real_loss)
-            self.tensorboard_writer.add_scalar('avg_real_loss', avg_real_loss, epoch)
-            self.logger.info('avg_cls_loss = %.8f' % avg_cls_loss)
-            self.tensorboard_writer.add_scalar('avg_cls_loss', avg_cls_loss, epoch)
-            if self.lambda_gp is not None:
-                avg_gp_loss = epoch_gp_loss / total_sample_num
-                self.logger.info('avg_gp_loss = %.8f' % avg_gp_loss)
-                self.tensorboard_writer.add_scalar('avg_gp_loss', avg_gp_loss, epoch)
-
-            if self.log_item == 'coord_embedding':
-                log_output = self.log_gen_output_embedding
-            elif self.log_item == 'coord':
-                log_output = self.log_coord
-            elif self.log_item == 'embedding':
-                log_output = self.log_embedding
-            else:
-                raise ValueError('unknown log item')
-
-            print('generating sample...')
-            print('run1')
-            sample = gen((cond_data, cls_label))
-            log_output(sample, epoch, 'run1')
-            print('run2')
-            sample = gen((cond_data, cls_label))
-            log_output(sample, epoch, 'run2')
-            print('max_difficulty')
-            max_difficulty = torch.max(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
-            sample = gen((cond_data, max_difficulty))
-            log_output(sample, epoch, str(max_difficulty[0].item()))
-            print('min_difficulty')
-            min_difficulty = torch.min(cls_label, dim=0, keepdim=True).values.expand_as(cls_label)
-            sample = gen((cond_data, min_difficulty))
-            log_output(sample, epoch, str(min_difficulty[0].item()))
-            print('label')
-            log_output(real_gen_output, epoch, 'label')
-
             if (epoch + 1) % self.model_save_step == 0:
-                self.save_model(epoch, (0,))
+                self.save_model(epoch, None, (0,))
 
             if (epoch + 1) % self.save_train_state_itv == 0:
                 self.save_train_state(self.model[0], self.optimizer[0], epoch, 0)
@@ -827,6 +878,8 @@ class TrainACWGANWithinBatch(TrainWGANWithinBatch):
         # best both be negative
         gen_loss = gen_loss + self.lambda_cls * cls_loss
         gen_loss.backward()
+        # all_params = list(gen.parameters(recurse=True))
+        # print('gen grad', torch.norm(all_params[0].grad), torch.norm(all_params[-1].grad))
 
         if self.grad_alter_fn is not None:
             self.grad_alter_fn(gen.parameters())
