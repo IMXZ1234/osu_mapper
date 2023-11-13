@@ -78,9 +78,9 @@ class Generator(nn.Module):
         self.body = CNNExtractor(
             middle_dim,
             n_beats,
-            stride_list=(1, 1, 1),
-            out_channels_list=(middle_dim, middle_dim, middle_dim),
-            kernel_size_list=(3, 3, 3),
+            stride_list=(1, 1, 1, 1),
+            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim),
+            kernel_size_list=(3, 3, 3, 3),
             norm=norm,
         )
         # self.condition_norm = nn.LayerNorm(n_beats)
@@ -90,9 +90,9 @@ class Generator(nn.Module):
             DecoderUpsample(
                 middle_dim,
                 n_beats,
-                stride_list=(2, 2, 2, 1),
-                out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim),
-                kernel_size_list=(3, 3, 3, 3),
+                stride_list=(2, 2, 2, 1, 1),
+                out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim, middle_dim),
+                kernel_size_list=(3, 3, 3, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -104,9 +104,9 @@ class Generator(nn.Module):
             CNNExtractor(
                 middle_dim,
                 n_beats,
-                stride_list=(1, 1, 1, 1),
-                out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim),
-                kernel_size_list=(3, 3, 3, 3),
+                stride_list=(1, 1, 1, 1, 1),
+                out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim, middle_dim),
+                kernel_size_list=(3, 3, 3, 3, 3),
                 norm=norm,
             ),
             # to avoid last layer being leaky_relu
@@ -209,9 +209,9 @@ class Discriminator(nn.Module):
             preprocess_dim * 2 + audio_preprocess_dim,
             # (middle_dim // 2) * 3,
             n_beats,
-            stride_list=(1, 1, 1, 1),
-            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim),
-            kernel_size_list=(3, 3, 3, 3),
+            stride_list=(1, 1, 1, 1, 1, 1),
+            out_channels_list=(middle_dim, middle_dim, middle_dim, middle_dim, middle_dim, middle_dim),
+            kernel_size_list=(3, 3, 3, 3, 3, 3),
             norm=norm,
         )
 

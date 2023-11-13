@@ -6269,4 +6269,5 @@ if __name__ == '__main__':
     # acgan_embedding.train_acgan_embeddingv7('20231103_acgan_embeddingv7_gp_lp10_glr0.0001_dlr0.00003_coord_noise_lb0.3_cls25')
     # acgan_embedding.train_acgan_embeddingv8('20231107_acgan_embeddingv8_gp_lp10_glr0.00001_dlr0.00001_new_label')
     # test_gen_capacity('20231108_acgan_embeddingv8_capacity_lr0.00001')
-    acgan_embedding.train_acgan_embeddingv9('20231111_acgan_embeddingv9_gp_lp10_glr1e-4_dlr1e-4_more_layers2')
+    # acgan_embedding.train_acgan_embeddingv9('20231111_acgan_embeddingv9_gp_lp10_glr1e-4_dlr1e-4_more_layers2')
+    acgan_embedding.train_acgan_embeddingv10('20231113_acgan_embeddingv10_gp_lp10_glr7e-5_dlr7e-5')
