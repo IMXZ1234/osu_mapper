@@ -3,7 +3,6 @@ import os
 
 import yaml
 
-from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
 from util import general_util
 
 
@@ -325,6 +324,7 @@ def test_gen_5(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 2.5,
         },
         {
             'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -337,6 +337,7 @@ def test_gen_5(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 4.5,
         },
         {
             'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -349,12 +350,19 @@ def test_gen_5(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 5.5,
         },
     ]
     for meta in meta_list:
         save_meta(meta)
-    generator.generate_beatmapsets([audio_file_path], [[1.0, 1.3, 1.5]], [meta_list], [None],
-                                   audio_info_path_list=[audio_info_path])
+    generator.generate_beatmapset(
+        os.path.join(DEFAULT_GEN_DIR, r'osz\test5.osz'),
+        audio_file_path,
+        meta_list,
+        audio_info_path=audio_info_path,
+        title='自由の翅',
+        osu_dir=os.path.join(DEFAULT_GEN_DIR, r'osu\test5'),
+    )
 
 
 def test_gen_6(generator):
@@ -392,9 +400,12 @@ def test_gen_6(generator):
 
 
 if __name__ == '__main__':
+    from gen.acgan_embedding_generator import ACGANEmbeddingGenerator
+    # from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
     # import pickle
     # with open(r'C:\Users\asus\coding\python\osu_mapper\resources\data\processed_v4\mel\999834.pkl', 'rb') as f:
     #     print(pickle.load(f))
     generator = ACGANEmbeddingGenerator()
-    test_gen_6(generator)
+    # test_gen_6(generator)
+    test_gen_5(generator)
 #

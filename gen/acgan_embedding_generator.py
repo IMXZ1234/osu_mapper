@@ -10,10 +10,12 @@ import pickle
 
 from gen import gen_util
 from gen.interpreter import cursor_with_hit_embedding
-from nn.net import acgan_embeddingv1
+from nn.net import acgan_embeddingv10
+from postprocess import embedding_decode
 from util import audio_util, beatmap_util
 from util.audio_util import cal_mel_spec
 from util.general_util import recursive_to_cpu, recursive_to_ndarray, recursive_flatten_batch
+from util.plt_util import plot_signal
 
 
 class ACGANEmbeddingGenerator:
@@ -25,10 +27,11 @@ class ACGANEmbeddingGenerator:
             'tgt_embedding_dim': 16,
             'tgt_coord_dim': 2,
             'audio_feature_dim': 40,
-            'noise_dim': 16,
+            'noise_dim': 128,
             'norm': 'LN',
-            'middle_dim': 128,
-            'preprocess_dim': 32,
+            'middle_dim': 256,
+            'label_preprocess_dim': 1,
+            'audio_preprocess_dim': 24,
             'condition_coeff': 1.,
             # star
             'cls_label_dim': 1,
@@ -45,18 +48,24 @@ class ACGANEmbeddingGenerator:
         self.mel_frame_per_snap = 16
         self.n_mels = 40
 
-        self.model = acgan_embeddingv1.Generator(**model_param)
-        model_path = r'./resources/pretrained_models/model_adv_-1_0.pt'
-        state_dict = torch.load(model_path)
-        # self.model.load_state_dict(state_dict)
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            new_state_dict[k[7:]] = v
-        self.model.load_state_dict(new_state_dict)
+        self.model = acgan_embeddingv10.Generator(**model_param)
+        model_path = r'./resources/pretrained_models/model_adv_3_8999_0.pt'
+        state_dict = torch.load(model_path, map_location='cuda:0')
+        self.model.load_state_dict(state_dict)
+        # new_state_dict = {}
+        # for k, v in state_dict.items():
+        #     new_state_dict[k[7:]] = v
+        # self.model.load_state_dict(new_state_dict)
         if torch.cuda.is_available():
             self.model.cuda(0)
         self.label_interpreter = cursor_with_hit_embedding.CursorWithHitEmbeddingInterpreter(
-            r'./resources/pretrained_models/embedding_center-1_-1.pkl',
+            r'./resources/pretrained_models/embedding_center-1_-1_normed.pkl',
+            self.beat_divisor,
+            r'./resources/pretrained_models/counter.pkl',
+        )
+
+        self.embedding_output_decoder = embedding_decode.EmbeddingDecode(
+            r'./resources/pretrained_models/embedding_center-1_-1_normed.pkl',
             self.beat_divisor,
             r'./resources/pretrained_models/counter.pkl',
         )
@@ -201,17 +210,25 @@ class ACGANEmbeddingGenerator:
         # run for every meta
         for meta_dict in meta_list:
             # get and remove 'star'
-            meta = meta_dict.pop('star') / 5
+            # np.array([star - 3.5]) / 5
+            meta = (meta_dict.pop('star') - 3.5) / 5
             meta = torch.tensor([[meta]]).expand([mel_spec.shape[0], -1])
             meta = meta.to('cuda:0')
             with torch.no_grad():
                 self.model.eval()
                 # [
                 gen_output = self.model.forward((mel_spec, meta))
+            # self.log_gen_output_embedding(gen_output, 0)
 
             if torch.cuda.is_available():
                 gen_output = recursive_to_cpu(gen_output)
             gen_output = recursive_to_ndarray(gen_output)
+            coord_output, embedding_output = gen_output
+            # N, L, 2
+            coord_output = (coord_output - np.mean(coord_output, axis=1, keepdims=True)) / (np.max(coord_output, axis=1, keepdims=True) - np.min(coord_output, axis=1, keepdims=True))
+            # coord_output = coord_output + 0.5
+            # coord_output = coord_output * 0.8 + 0.1
+            gen_output = [coord_output, embedding_output]
             gen_output = recursive_flatten_batch(gen_output, cat_dim=1)
 
             # plot_gen_output(gen_output)
@@ -234,3 +251,47 @@ class ACGANEmbeddingGenerator:
             beatmap_list.append(beatmap)
         beatmap_util.pack_to_osz(audio_file_path, osu_path_list, osz_path, beatmap_list)
         print('saved to %s' % osz_path)
+
+    def log_embedding(self, embedding_output, epoch, prefix='gen', plot_first=3):
+        embedding_output = embedding_output.cpu().detach().numpy()
+        all_sample_decoded = [
+            self.embedding_output_decoder.decode(d)
+            for d in embedding_output
+        ]
+
+        for i, sample_decoded in enumerate(all_sample_decoded):
+            if i >= plot_first:
+                break
+            for signal, name in zip(
+                    [
+                        np.where(sample_decoded == 1, 1, 0),
+                        np.where(sample_decoded == 2, 1, 0),
+                        np.where(sample_decoded == 3, 1, 0),
+                    ],
+                    [
+                        'circle_hit', 'slider_hit', 'spinner_hit'
+                    ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=None,
+                                             show=True)
+
+    def log_coord(self, coord_output, epoch, prefix='gen', plot_first=3):
+        coord_output = coord_output.cpu().detach().numpy()
+        for i, sample_coord_output in enumerate(coord_output):
+            if i >= plot_first:
+                break
+            for signal, name in zip(
+                sample_coord_output.T,
+                [
+                    'cursor_x', 'cursor_y'
+                ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=None,
+                                             show=True)
+
+    def log_gen_output_embedding(self, gen_output, epoch, prefix='gen', plot_first=3):
+        coord_output, embedding_output = gen_output
+        self.log_embedding(embedding_output, epoch, prefix=prefix, plot_first=plot_first)
+        self.log_coord(coord_output, epoch, prefix=prefix, plot_first=plot_first)

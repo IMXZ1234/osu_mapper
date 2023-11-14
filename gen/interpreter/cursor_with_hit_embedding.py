@@ -13,16 +13,18 @@ class CursorWithHitEmbeddingInterpreter:
 
     @staticmethod
     def map_pos(x, y):
-        if x < 0:
-            x = 0.1
-        if x > 1:
-            x = 0.9
-        if y < 0:
-            y = 0.1
-        if y > 1:
-            y = 0.9
-        x = int(x * (691 + 180) - 180)
-        y = int(y * (407 + 82) - 82)
+        # x = int(x * (691 + 180) - 180)
+        # y = int(y * (407 + 82) - 82)
+        x = int(x * 512 + 256)
+        y = int(y * 384 + 192)
+        # if x < 0:
+        #     x = 0.1
+        # if x > 1:
+        #     x = 0.9
+        # if y < 0:
+        #     y = 0.1
+        # if y > 1:
+        #     y = 0.9
         return x, y
 
     def gen_hitobjects(self, beatmap: slider.Beatmap, labels, bpm, start_ms=None, end_ms=None):
