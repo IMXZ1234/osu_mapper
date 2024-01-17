@@ -188,6 +188,59 @@ class CNNExtractor(nn.Module):
         return self.net(x)
 
 
+class CNNExtractorWithShortcut(nn.Module):
+    def __init__(self, in_channels, seq_len,
+                 stride_list=(2, 2, 2, 2), out_channels_list=(128, 128, 128, 128),
+                 kernel_size_list=(5, 5, 5, 5),
+                 shortcut_start_pos_list=tuple(),
+                 aggregate='mean',
+                 norm='LN', input_norm=False, first_layer_residual=True):
+        super().__init__()
+        self.shortcut_start_pos_list = shortcut_start_pos_list
+        self.aggregate = aggregate
+        self.net = []
+        if input_norm:
+            if norm is None:
+                pass
+            elif norm == 'BN':
+                self.net.append(nn.BatchNorm1d(in_channels))
+            elif norm == 'LN':
+                self.net.append(nn.LayerNorm(seq_len))
+            else:
+                raise ValueError('unknown normalize')
+        current_in_channels = in_channels
+        current_seq_len = seq_len
+        residual_list = [first_layer_residual] + [True] * (len(stride_list) - 1)
+        for stride, out_channels, kernel_size, residual in zip(
+                stride_list, out_channels_list, kernel_size_list, residual_list):
+            self.net.append(
+                ConvBlock1DNoBottleneck(
+                    current_in_channels,
+                    out_channels,
+                    current_seq_len,
+                    stride=stride,
+                    kernel_size=kernel_size,
+                    norm=norm,
+                    residual=residual,
+                )
+            )
+            current_in_channels = out_channels
+            current_seq_len = current_seq_len // stride
+        self.net = nn.ModuleList(self.net)
+
+    def forward(self, x):
+        shortcut_x = []
+        for i, layer in enumerate(self.net):
+            if i in self.shortcut_start_pos_list:
+                shortcut_x.append(x)
+            x = layer(x)
+        shortcut_x.append(x)
+        if self.aggregate == 'mean':
+            return torch.mean(torch.stack(shortcut_x, dim=0), dim=0)
+        else:
+            return torch.cat(shortcut_x, dim=1)
+
+
 class CNNExtractorDownsample(nn.Module):
     def __init__(self, in_channels, seq_len,
                  stride_list=(2, 2, 2, 2), out_channels_list=(128, 128, 128, 128),

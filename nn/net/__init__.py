@@ -47,6 +47,9 @@ from . import (
     acgan_embeddingv8,
     acgan_embeddingv9,
     acgan_embeddingv10,
+    acgan_embeddingv11,
+    acgan_embeddingv12,
     acgan_embeddingv7_only_coord,
     acgan_embeddingv7_only_embedding,
+    diffusion,
 )
