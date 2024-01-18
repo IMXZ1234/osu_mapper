@@ -13,6 +13,7 @@ from system.vae_sys import TrainVAE
 from system.wgan_sys import TrainWGAN, TrainWGANWithinBatch, TrainACWGANWithinBatch
 from system.word2vec_skipgram_sys import TrainWord2VecSkipGram
 from system.regression_sys import TrainRegression
+from system.cddpm_sys import CDDPMSYS
 from util.general_util import try_format_dict_with_path
 
 np.set_printoptions(suppress=True)
@@ -29,6 +30,7 @@ SYS_DICT = {
     'seq2seq': TrainSeq2Seq,
     'seqgan_adv_loss': TrainSeqGANAdvLoss,
     'skipgram': TrainWord2VecSkipGram,
+    'cddpm': CDDPMSYS,
 }
 
 

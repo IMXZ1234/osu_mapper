@@ -1,1 +1,1 @@
-from . import uvit
+from . import uvit, cuvit
