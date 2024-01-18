@@ -84,11 +84,12 @@ def Downsample(
         factor=2
 ):
     return nn.Sequential(
-        Rearrange('b c (l p) -> b (c p) l', p1=factor, p2=factor),
-        nn.Conv2d(dim * factor, default(dim_out, dim), 1)
+        Rearrange('b c (l p) -> b (c p) l', p=factor),
+        nn.Conv1d(dim * factor, default(dim_out, dim), 1)
     )
 
 
+# https://arxiv.org/abs/1910.07467
 class RMSNorm(nn.Module):
     def __init__(self, dim, scale=True, normalize_dim=2):
         super().__init__()
@@ -99,7 +100,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x):
         normalize_dim = self.normalize_dim
-        # channel dim scale
+        # channel dim scale, independently for every sample/position
         scale = append_dims(self.g, x.ndim - self.normalize_dim - 1) if self.scale else 1
         return F.normalize(x, dim=normalize_dim) * scale * (x.shape[normalize_dim] ** 0.5)
 
@@ -170,6 +171,7 @@ class ResnetBlock(nn.Module):
         return h + self.res_conv(x)
 
 
+# https://arxiv.org/abs/2006.16236
 class LinearAttention(nn.Module):
     def __init__(self, dim, heads=4, dim_head=32):
         super().__init__()
@@ -178,32 +180,35 @@ class LinearAttention(nn.Module):
         hidden_dim = dim_head * heads
 
         self.norm = RMSNorm(dim, normalize_dim=1)
-        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
+        self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias=False)
 
         self.to_out = nn.Sequential(
-            nn.Conv2d(hidden_dim, dim, 1),
+            nn.Conv1d(hidden_dim, dim, 1),
             RMSNorm(dim, normalize_dim=1)
         )
 
     def forward(self, x):
         residual = x
 
-        b, c, h, w = x.shape
+        b, c, l = x.shape
 
         x = self.norm(x)
 
         qkv = self.to_qkv(x).chunk(3, dim=1)
-        q, k, v = map(lambda t: rearrange(t, 'b (h c) x y -> b h c (x y)', h=self.heads), qkv)
+        q, k, v = map(lambda t: rearrange(t, 'b (h c) l -> b h c l', h=self.heads), qkv)
 
+        # channel dim softmax
         q = q.softmax(dim=-2)
+        # spatial dim softmax
         k = k.softmax(dim=-1)
 
         q = q * self.scale
 
+        # e=d
         context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
 
         out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
-        out = rearrange(out, 'b h c (x y) -> b (h c) x y', h=self.heads, x=h, y=w)
+        out = rearrange(out, 'b h c l -> b (h c) l', h=self.heads, l=l)
 
         return self.to_out(out) + residual
 
@@ -233,6 +238,7 @@ class Attention(nn.Module):
 
         q, k = map(l2norm, (q, k))
 
+        # channel-wise scale
         q = q * self.q_scale
         k = k * self.k_scale
 
@@ -346,7 +352,7 @@ class UViT(nn.Module):
         # for initial dwt transform (or whatever transform researcher wants to try here)
 
         if exists(init_img_transform) and exists(final_img_itransform):
-            init_shape = torch.Size(1, 1, 32, 32)
+            init_shape = torch.Size(1, 1, 32)
             mock_tensor = torch.randn(init_shape)
             assert final_img_itransform(init_img_transform(mock_tensor)).shape == init_shape
 
@@ -448,9 +454,10 @@ class UViT(nn.Module):
         self.out_dim = default(out_dim, default_out_dim)
 
         self.final_res_block = resnet_block(dim * 2, dim, time_emb_dim=time_dim)
-        self.final_conv = nn.Conv2d(dim, self.out_dim, 1)
+        self.final_conv = nn.Conv1d(dim, self.out_dim, 1)
 
     def forward(self, x, time):
+        # input should be [n, c, l]
         x = self.init_img_transform(x)
 
         x = self.init_conv(x)
@@ -470,13 +477,13 @@ class UViT(nn.Module):
 
             x = downsample(x)
 
-        x = rearrange(x, 'b c h w -> b h w c')
-        x, ps = pack([x], 'b * c')
+        x = rearrange(x, 'b c l -> b l c')
+        # x, ps = pack([x], 'b * c')
 
         x = self.vit(x, t)
 
-        x, = unpack(x, ps, 'b * c')
-        x = rearrange(x, 'b h w c -> b c h w')
+        # x, = unpack(x, ps, 'b * c')
+        x = rearrange(x, 'b l c -> b c l')
 
         for upsample, block1, block2, attn in self.ups:
             x = upsample(x)
@@ -502,8 +509,11 @@ if __name__ == '__main__':
         dim=32,
         channels=4,
     )
-    total_numel = 0
-    for param_name, param in uvit.named_parameters():
-        print(param_name, param.numel())
-        total_numel += param.numel()
-    print(total_numel)
+    # total_numel = 0
+    # for param_name, param in uvit.named_parameters():
+    #     print(param_name, param.numel())
+    #     total_numel += param.numel()
+    # print(total_numel)
+    inp = torch.ones([2, 4, 32], dtype=torch.float32)
+    time = torch.ones([2], dtype=torch.float32)
+    print(uvit(inp, time).shape)
