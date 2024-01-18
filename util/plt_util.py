@@ -2,6 +2,8 @@ import os
 
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib
+matplotlib.use('TkAgg')
 
 
 def plot_loss(loss_list, title=None, save_path=None, show=True):

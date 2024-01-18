@@ -6,8 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter as P
 
-# from sync_batchnorm import SynchronizedBatchNorm2d as SyncBN2d
-
 
 # Projection of x onto y
 def proj(x, y):
@@ -110,6 +108,20 @@ class SNConv2d(nn.Conv2d, SN):
                         self.padding, self.dilation, self.groups)
 
 
+# 1D Conv layer with spectral norm
+class SNConv1d(nn.Conv1d, SN):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, dilation=1, groups=1, bias=True,
+                 num_svs=1, num_itrs=1, eps=1e-12):
+        nn.Conv1d.__init__(self, in_channels, out_channels, kernel_size, stride,
+                           padding, dilation, groups, bias)
+        SN.__init__(self, num_svs, num_itrs, out_channels, eps=eps)
+
+    def forward(self, x):
+        return F.conv1d(x, self.W_(), self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+
+
 # Linear layer with spectral norm
 class SNLinear(nn.Linear, SN):
     def __init__(self, in_features, out_features, bias=True,
@@ -159,6 +171,38 @@ class Attention(nn.Module):
         theta = self.theta(x)
         phi = F.max_pool2d(self.phi(x), [2, 2])
         g = F.max_pool2d(self.g(x), [2, 2])
+        # Perform reshapes
+        theta = theta.view(-1, self.ch // 8, x.shape[2] * x.shape[3])
+        phi = phi.view(-1, self.ch // 8, x.shape[2] * x.shape[3] // 4)
+        g = g.view(-1, self.ch // 2, x.shape[2] * x.shape[3] // 4)
+        # Matmul and softmax to get attention maps
+        beta = F.softmax(torch.bmm(theta.transpose(1, 2), phi), -1)
+        # Attention map times g path
+        o = self.o(torch.bmm(g, beta.transpose(1, 2)).view(-1, self.ch // 2, x.shape[2], x.shape[3]))
+        return self.gamma * o + x
+
+
+# A non-local block as used in SA-GAN
+# Note that the implementation as described in the paper is largely incorrect;
+# refer to the released code for the actual implementation.
+class Attention1D(nn.Module):
+    def __init__(self, ch, which_conv=SNConv1d, name='attention'):
+        super(Attention1D, self).__init__()
+        # Channel multiplier
+        self.ch = ch
+        self.which_conv = which_conv
+        self.theta = self.which_conv(self.ch, self.ch // 8, kernel_size=1, padding=0, bias=False)
+        self.phi = self.which_conv(self.ch, self.ch // 8, kernel_size=1, padding=0, bias=False)
+        self.g = self.which_conv(self.ch, self.ch // 2, kernel_size=1, padding=0, bias=False)
+        self.o = self.which_conv(self.ch // 2, self.ch, kernel_size=1, padding=0, bias=False)
+        # Learnable gain parameter
+        self.gamma = P(torch.tensor(0.), requires_grad=True)
+
+    def forward(self, x, y=None):
+        # Apply convs
+        theta = self.theta(x)
+        phi = F.max_pool1d(self.phi(x), [2])
+        g = F.max_pool1d(self.g(x), [2])
         # Perform reshapes
         theta = theta.view(-1, self.ch // 8, x.shape[2] * x.shape[3])
         phi = phi.view(-1, self.ch // 8, x.shape[2] * x.shape[3] // 4)
@@ -247,8 +291,8 @@ class myBN(nn.Module):
             return out
         # If not in training mode, use the stored statistics
         else:
-            mean = self.stored_mean.view(1, -1, 1)
-            var = self.stored_var.view(1, -1, 1)
+            mean = self.stored_mean.view(1, -1, 1, 1)
+            var = self.stored_var.view(1, -1, 1, 1)
             # If using standing stats, divide them by the accumulation counter
             if self.accumulate_standing:
                 mean = mean / self.accumulation_counter
@@ -295,9 +339,7 @@ class ccbn(nn.Module):
         # Norm style?
         self.norm_style = norm_style
 
-        if self.cross_replica:
-            self.bn = SyncBN2d(output_size, eps=self.eps, momentum=self.momentum, affine=False)
-        elif self.mybn:
+        if self.mybn:
             self.bn = myBN(output_size, self.eps, self.momentum)
         elif self.norm_style in ['bn', 'in']:
             self.register_buffer('stored_mean', torch.zeros(output_size))
@@ -348,9 +390,7 @@ class bn(nn.Module):
         # Use my batchnorm?
         self.mybn = mybn
 
-        if self.cross_replica:
-            self.bn = SyncBN2d(output_size, eps=self.eps, momentum=self.momentum, affine=False)
-        elif mybn:
+        if mybn:
             self.bn = myBN(output_size, self.eps, self.momentum)
         # Register buffers if neither of the above
         else:
