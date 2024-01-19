@@ -17,14 +17,14 @@ def train_cddpm(setting_name='cddpm'):
     rnd_bank_size = max(embedding_size, label_size) * 1024
     mel_features = 40
 
-    for lr in [0.001]:
+    for lr in [0.0001]:
         print('init lr %s' % str(lr))
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
             'model_type': 'nn.net.diffusion.cuvit.CUViT',
             'dim': 48,
             'channels': 5,
-            'num_meta': 1,
+            'num_meta': 2,
             'audio_in_channels': mel_features,
             'audio_out_channels': 12,
         }  # , 'num_block': [1, 1, 1, 1]

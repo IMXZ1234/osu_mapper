@@ -427,7 +427,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # meta = np.tile(np.array([star, cs])[np.newaxis, :], (len(data), 1))
         star, cs = self.meta_dict[beatmapid]
         type_coord = self.label_dict[beatmapid]
-        meta = [np.array([star], dtype=np.float32) / 10]
+        meta = [np.array([star], dtype=np.float32) / 10, np.array([start / sample_beats], dtype=np.float32)]
         # meta = np.array([star - 3.5]) / 5
         # print('meta', meta)
         # print('added indicator')

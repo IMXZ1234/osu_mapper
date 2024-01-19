@@ -91,6 +91,8 @@ class HeatmapDataset:
     commonly seen bpm is within 60 ~ 120
     with beat_divisor 4, snap per minute is 240 ~ 480,
     a typical snap therefore takes 250ms ~ 125ms, and can hold 10 ~ 20 mel frames (with stride of half window length)
+
+    with beat_divisor=8 and mel_frame_per_snap=16, we have 128~256 mel/sec, 7.8~3.9 ms/mel(stride)
     """
     def __init__(self, mel_args, feature_args):
         self.mel_args = mel_args
@@ -480,10 +482,12 @@ def multiprocessing_prepare_data(nproc=32, target=worker):
     all_meta = os.listdir(meta_root)
     all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
 
-    preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6'
+    preprocessed_root = r'/home/xiezheng/data/preprocessed_v6'
+    # preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6'
     os.makedirs(preprocessed_root, exist_ok=True)
 
-    processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6/processed_ids.txt'
+    processed_beatmapid_log_file = r'/home/xiezheng/data/preprocessed_v6'
+    # processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6/processed_ids.txt'
     if not os.path.exists(processed_beatmapid_log_file):
         open(processed_beatmapid_log_file, 'w')
     processed_beatmapid = set()

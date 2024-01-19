@@ -208,20 +208,18 @@ class Generator:
             mel_spec = np.concatenate([mel_spec, np.zeros([(self.n_snaps - extra_snaps) * self.mel_frame_per_snap, self.n_mels])], axis=0)
             num_subseq += 1
         mel_spec = mel_spec.T.reshape([num_subseq, self.n_mels, self.n_snaps * self.mel_frame_per_snap])
-        mel_spec = torch.tensor(mel_spec, dtype=torch.float32)
+        mel_spec = torch.tensor(mel_spec, dtype=torch.float32, device=self.output_device)
         print('mel spec shape: ', mel_spec.shape)
-
-        mel_spec = mel_spec.to(self.output_device)
+        offset_proportion = torch.arange(num_subseq, dtype=torch.float32, device=self.output_device) * (self.n_snaps / total_snaps)
 
         # run for every meta
         for meta_dict in meta_list:
             # get and remove 'star'
             # np.array([star - 3.5]) / 5
-            meta = np.array([meta_dict.pop('star')], dtype=np.float32) / 10
-            meta = torch.tensor(meta).expand([mel_spec.shape[0], -1])
-            meta = meta.to(self.output_device)
-            gen_output = self.sample((mel_spec, meta), mel_spec.shape[0])
-            self.log_gen_output(gen_output, 3)
+            star_meta = np.array([meta_dict.pop('star')], dtype=np.float32) / 10
+            star_meta = torch.tensor(star_meta, device=self.output_device).expand([mel_spec.shape[0], -1])
+            gen_output = self.sample((mel_spec, [star_meta, offset_proportion]), mel_spec.shape[0])
+            # self.log_gen_output(gen_output, 3)
 
             gen_output = recursive_to_cpu(gen_output)
             gen_output = recursive_to_ndarray(gen_output)
