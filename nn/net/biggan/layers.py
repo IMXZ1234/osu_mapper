@@ -169,48 +169,17 @@ class Attention(nn.Module):
     def forward(self, x, y=None):
         # Apply convs
         theta = self.theta(x)
-        phi = F.max_pool2d(self.phi(x), [2, 2])
-        g = F.max_pool2d(self.g(x), [2, 2])
-        # Perform reshapes
-        theta = theta.view(-1, self.ch // 8, x.shape[2] * x.shape[3])
-        phi = phi.view(-1, self.ch // 8, x.shape[2] * x.shape[3] // 4)
-        g = g.view(-1, self.ch // 2, x.shape[2] * x.shape[3] // 4)
-        # Matmul and softmax to get attention maps
-        beta = F.softmax(torch.bmm(theta.transpose(1, 2), phi), -1)
-        # Attention map times g path
-        o = self.o(torch.bmm(g, beta.transpose(1, 2)).view(-1, self.ch // 2, x.shape[2], x.shape[3]))
-        return self.gamma * o + x
-
-
-# A non-local block as used in SA-GAN
-# Note that the implementation as described in the paper is largely incorrect;
-# refer to the released code for the actual implementation.
-class Attention1D(nn.Module):
-    def __init__(self, ch, which_conv=SNConv1d, name='attention'):
-        super(Attention1D, self).__init__()
-        # Channel multiplier
-        self.ch = ch
-        self.which_conv = which_conv
-        self.theta = self.which_conv(self.ch, self.ch // 8, kernel_size=1, padding=0, bias=False)
-        self.phi = self.which_conv(self.ch, self.ch // 8, kernel_size=1, padding=0, bias=False)
-        self.g = self.which_conv(self.ch, self.ch // 2, kernel_size=1, padding=0, bias=False)
-        self.o = self.which_conv(self.ch // 2, self.ch, kernel_size=1, padding=0, bias=False)
-        # Learnable gain parameter
-        self.gamma = P(torch.tensor(0.), requires_grad=True)
-
-    def forward(self, x, y=None):
-        # Apply convs
-        theta = self.theta(x)
         phi = F.max_pool1d(self.phi(x), [2])
         g = F.max_pool1d(self.g(x), [2])
         # Perform reshapes
-        theta = theta.view(-1, self.ch // 8, x.shape[2] * x.shape[3])
-        phi = phi.view(-1, self.ch // 8, x.shape[2] * x.shape[3] // 4)
-        g = g.view(-1, self.ch // 2, x.shape[2] * x.shape[3] // 4)
+        theta = theta.view(-1, self.ch // 8, x.shape[2])
+        phi = phi.view(-1, self.ch // 8, x.shape[2] // 2)
+        g = g.view(-1, self.ch // 2, x.shape[2] // 2)
         # Matmul and softmax to get attention maps
+        # -> N, L, L//2
         beta = F.softmax(torch.bmm(theta.transpose(1, 2), phi), -1)
         # Attention map times g path
-        o = self.o(torch.bmm(g, beta.transpose(1, 2)).view(-1, self.ch // 2, x.shape[2], x.shape[3]))
+        o = self.o(torch.bmm(g, beta.transpose(1, 2)).view(-1, self.ch // 2, x.shape[2]))
         return self.gamma * o + x
 
 
@@ -291,8 +260,8 @@ class myBN(nn.Module):
             return out
         # If not in training mode, use the stored statistics
         else:
-            mean = self.stored_mean.view(1, -1, 1, 1)
-            var = self.stored_var.view(1, -1, 1, 1)
+            mean = self.stored_mean.view(1, -1, 1)
+            var = self.stored_var.view(1, -1, 1)
             # If using standing stats, divide them by the accumulation counter
             if self.accumulate_standing:
                 mean = mean / self.accumulation_counter
@@ -347,8 +316,8 @@ class ccbn(nn.Module):
 
     def forward(self, x, y):
         # Calculate class-conditional gains and biases
-        gain = (1 + self.gain(y)).view(y.size(0), -1, 1, 1)
-        bias = self.bias(y).view(y.size(0), -1, 1, 1)
+        gain = (1 + self.gain(y)).view(y.size(0), -1, 1)
+        bias = self.bias(y).view(y.size(0), -1, 1)
         # If using my batchnorm
         if self.mybn or self.cross_replica:
             return self.bn(x, gain=gain, bias=bias)
@@ -399,8 +368,8 @@ class bn(nn.Module):
 
     def forward(self, x, y=None):
         if self.cross_replica or self.mybn:
-            gain = self.gain.view(1, -1, 1, 1)
-            bias = self.bias.view(1, -1, 1, 1)
+            gain = self.gain.view(1, -1, 1)
+            bias = self.bias.view(1, -1, 1)
             return self.bn(x, gain=gain, bias=bias)
         else:
             return F.batch_norm(x, self.stored_mean, self.stored_var, self.gain,
@@ -415,7 +384,7 @@ class bn(nn.Module):
 # be preselected)
 class GBlock(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 which_conv=nn.Conv2d, which_bn=bn, activation=None,
+                 which_conv=nn.Conv1d, which_bn=bn, activation=None,
                  upsample=None):
         super(GBlock, self).__init__()
 
@@ -451,7 +420,7 @@ class GBlock(nn.Module):
 
 # Residual block for the discriminator
 class DBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, which_conv=SNConv2d, wide=True,
+    def __init__(self, in_channels, out_channels, which_conv=SNConv1d, wide=True,
                  preactivation=False, activation=None, downsample=None, ):
         super(DBlock, self).__init__()
         self.in_channels, self.out_channels = in_channels, out_channels

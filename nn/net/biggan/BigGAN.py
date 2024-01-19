@@ -115,7 +115,7 @@ class Generator(nn.Module):
 
         # Which convs, batchnorms, and linear layers to use
         if self.G_param == 'SN':
-            self.which_conv = functools.partial(layers.SNConv2d,
+            self.which_conv = functools.partial(layers.SNConv1d,
                                                 kernel_size=3, padding=1,
                                                 num_svs=num_G_SVs, num_itrs=num_G_SV_itrs,
                                                 eps=self.SN_eps)
@@ -205,7 +205,7 @@ class Generator(nn.Module):
     def init_weights(self):
         self.param_count = 0
         for module in self.modules():
-            if (isinstance(module, nn.Conv2d)
+            if (isinstance(module, nn.Conv1d)
                     or isinstance(module, nn.Linear)
                     or isinstance(module, nn.Embedding)):
                 if self.init == 'ortho':
@@ -314,7 +314,7 @@ class Discriminator(nn.Module):
         # Which convs, batchnorms, and linear layers to use
         # No option to turn off SN in D right now
         if self.D_param == 'SN':
-            self.which_conv = functools.partial(layers.SNConv2d,
+            self.which_conv = functools.partial(layers.SNConv1d,
                                                 kernel_size=3, padding=1,
                                                 num_svs=num_D_SVs, num_itrs=num_D_SV_itrs,
                                                 eps=self.SN_eps)
@@ -371,7 +371,7 @@ class Discriminator(nn.Module):
     def init_weights(self):
         self.param_count = 0
         for module in self.modules():
-            if (isinstance(module, nn.Conv2d)
+            if (isinstance(module, nn.Conv1d)
                     or isinstance(module, nn.Linear)
                     or isinstance(module, nn.Embedding)):
                 if self.init == 'ortho':
@@ -393,7 +393,7 @@ class Discriminator(nn.Module):
             for block in blocklist:
                 h = block(h)
         # Apply global sum pooling as in SN-GAN
-        h = torch.sum(self.activation(h), [2, 3])
+        h = torch.sum(self.activation(h), [2,])
         # Get initial class-unconditional output
         out = self.linear(h)
         # Get projection of final featureset onto class vectors and add to evidence
