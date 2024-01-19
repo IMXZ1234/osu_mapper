@@ -150,6 +150,7 @@ def test_gen_3(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 2.5,
         },
         {
             'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -162,6 +163,7 @@ def test_gen_3(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 4.5,
         },
         {
             'audio_filename': os.path.basename(audio_file_path),  # indispensable
@@ -174,12 +176,19 @@ def test_gen_3(generator):
             'circle_size': 3,
             'approach_rate': 8,
             'slider_tick_rate': 2,
+            'star': 5.5,
         },
     ]
     for meta in meta_list:
         save_meta(meta)
-    generator.generate_beatmapsets([audio_file_path], [[2.5, 3., 3.5]], [meta_list], [None],
-                                   audio_info_path_list=[audio_info_path])
+    generator.generate_beatmapset(
+        os.path.join(DEFAULT_GEN_DIR, r'osz\test3.osz'),
+        audio_file_path,
+        meta_list,
+        audio_info_path=audio_info_path,
+        title='遠くの子守の唄',
+        osu_dir=os.path.join(DEFAULT_GEN_DIR, r'osu\test3'),
+    )
 
 
 def test_gen_4(generator):
@@ -311,6 +320,7 @@ def test_gen_5(generator):
 
     audio_info_path = \
         r'C:\Users\asus\coding\python\osu_mapper\resources\gen\audio_info\Jiyuu no Hane.yaml'
+    # audio_info_path = None
 
     meta_list = [
         {

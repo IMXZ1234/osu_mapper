@@ -33,7 +33,7 @@ class Generator:
         model_arg = {
             'dim': 48,
             'channels': 5,
-            'num_meta': 1,
+            'num_meta': 2,
             'audio_in_channels': 40,
             'audio_out_channels': 12,
         }
@@ -53,7 +53,7 @@ class Generator:
         self.n_mels = 40
 
         self.model = CUViT(**model_arg)
-        model_path = r'./resources/pretrained_models/model_0_epoch_41_batch_1280.pt'
+        model_path = r'./resources/pretrained_models/model_0_epoch_2_batch_-1.pt'
         state_dict = torch.load(model_path, map_location=self.output_device)
         self.model.load_state_dict(state_dict)
         self.model.eval()

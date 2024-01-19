@@ -15,10 +15,10 @@ class TypeCoordInterpreter:
 
     @staticmethod
     def map_pos(x, y):
-        # x = int(x * 512 + 256)
-        # y = int(y * 384 + 192)
-        x = int(x * (691 + 180) - 180)
-        y = int(y * (407 + 82) - 82)
+        x = int(x * 512 + 256)
+        y = int(y * 384 + 192)
+        # x = int(x * (691 + 180) - 180)
+        # y = int(y * (407 + 82) - 82)
         # if x < 0:
         #     x = 0
         # if x > 1:
