@@ -32,6 +32,7 @@ SYS_DICT = {
     'skipgram': TrainWord2VecSkipGram,
     'cddpm': CDDPMSYS,
 }
+print('init sysdict')
 
 
 def plot_difference_distribution(pred_list, target_list, difference_step):

@@ -1,5 +1,4 @@
 import yaml
-import numpy as np
 
 from nn.train import train_with_config
 from train_scripts import cddpm
@@ -6271,4 +6270,4 @@ if __name__ == '__main__':
     # test_gen_capacity('20231108_acgan_embeddingv8_capacity_lr0.00001')
     # acgan_embedding.train_acgan_embeddingv9('20231111_acgan_embeddingv9_gp_lp10_glr1e-4_dlr1e-4_more_layers2')
     # acgan_embedding.train_acgan_embeddingv10('20231113_acgan_embeddingv10_gp_lp10_glr7e-5_dlr7e-5')
-    cddpm.train_cddpm('20230118_cddpm_0.001')
+    cddpm.train_cddpm('20230118_cddpm_0.001_datasetv6')

@@ -92,7 +92,7 @@ class Train:
         self.start_epoch = self.config_dict.get('start_epoch', -1)
         self.writer, self.logger, self.log_dir, \
         self.model_save_dir, self.model_save_step, self.model_save_batch_step,\
-        self.log_batch_step = self.load_logger(**output_arg)
+        self.log_batch_step, self.log_epoch_step = self.load_logger(**output_arg)
         self.train_state_dir = config_dict['train_state_dir'] if 'train_state_dir' in config_dict else os.path.join(self.log_dir, 'train_state')
         os.makedirs(self.train_state_dir, exist_ok=True)
         self.model = self.load_model(**model_arg)
@@ -119,7 +119,7 @@ class Train:
         self.last_time_stamp = current_time
         return time_itv
 
-    def load_logger(self, log_dir, model_save_dir, model_save_step, model_save_batch_step=None, log_batch_step=None, **kwargs):
+    def load_logger(self, log_dir, model_save_dir, model_save_step, model_save_batch_step=None, log_batch_step=None, log_epoch_step=None, **kwargs):
         writer = SummaryWriter(logdir=log_dir + '/run')
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -134,7 +134,7 @@ class Train:
         fHandler.setLevel(logging.DEBUG)
         fHandler.setFormatter(formatter)
         logger.addHandler(fHandler)
-        return writer, logger, log_dir, model_save_dir, model_save_step, model_save_batch_step, log_batch_step
+        return writer, logger, log_dir, model_save_dir, model_save_step, model_save_batch_step, log_batch_step, log_epoch_step
 
     def load_model(self, model_type, **kwargs):
         if isinstance(model_type, (list, tuple)):
@@ -256,14 +256,14 @@ class Train:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
 
-    def save_model(self, epoch=-1, model_index=None):
+    def save_model(self, epoch=-1, batch_idx=-1, model_index=None):
         if not isinstance(self.model, (list, tuple)):
             models = [self.model]
         else:
             models = self.model
         if model_index is None:
             model_index = list(range(len(models)))
-        pt_filename = 'model_%d_epoch_{}.pt'.format(epoch)
+        pt_filename = 'model_%d_epoch_{}_batch_{}.pt'.format(epoch, batch_idx)
         for index in model_index:
             model = models[index]
             torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))
@@ -726,14 +726,14 @@ class Train1:
             pred = dynamic_import(pred_type)(**kwargs)
         return pred
 
-    def save_model(self, epoch=-1, model_index=None):
+    def save_model(self, epoch=-1, batch_idx=-1, model_index=None):
         if not isinstance(self.model, (list, tuple)):
             models = [self.model]
         else:
             models = self.model
         if model_index is None:
             model_index = list(range(len(models)))
-        pt_filename = 'model_%d_epoch_{}.pt'.format(epoch)
+        pt_filename = 'model_%d_epoch_{}_batch_{}.pt'.format(epoch, batch_idx)
         for index in model_index:
             model = models[index]
             torch.save(model.state_dict(), os.path.join(self.model_save_dir, pt_filename % index))

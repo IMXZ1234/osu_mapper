@@ -132,7 +132,7 @@ class LearnedSinusoidalPosEmb(nn.Module):
         self.weights = nn.Parameter(torch.randn(half_dim))
 
     def forward(self, x):
-        x = rearrange(x, 'b -> b 1')
+        x = x.reshape([x.shape[0], 1])
         freqs = x * rearrange(self.weights, 'd -> 1 d') * 2 * math.pi
         # b, 2*(d//2)
         fouriered = torch.cat((freqs.sin(), freqs.cos()), dim=-1)
@@ -403,8 +403,8 @@ class CUViT(nn.Module):
             ff_mult=4,
             resnet_block_groups=8,
             learned_sinusoidal_dim=16,
-            init_img_transform: callable = None,
-            final_img_itransform: callable = None,
+            # init_img_transform: callable = None,
+            # final_img_itransform: callable = None,
             patch_size=1,
 
             num_meta=1,
@@ -417,26 +417,23 @@ class CUViT(nn.Module):
 
         # for initial dwt transform (or whatever transform researcher wants to try here)
 
-        if exists(init_img_transform) and exists(final_img_itransform):
-            init_shape = torch.Size(1, 1, 32)
-            mock_tensor = torch.randn(init_shape)
-            assert final_img_itransform(init_img_transform(mock_tensor)).shape == init_shape
+        # if exists(init_img_transform) and exists(final_img_itransform):
+        #     init_shape = torch.Size(1, 1, 32)
+        #     mock_tensor = torch.randn(init_shape)
+        #     assert final_img_itransform(init_img_transform(mock_tensor)).shape == init_shape
 
-        self.init_img_transform = default(init_img_transform, identity)
-        self.final_img_itransform = default(final_img_itransform, identity)
-
-        input_channels = channels + audio_out_channels
+        # self.init_img_transform = default(init_img_transform, identity)
+        # self.final_img_itransform = default(final_img_itransform, identity)
 
         init_dim = default(init_dim, dim)
-        self.init_conv = nn.Conv1d(input_channels, init_dim, 7, padding=3)
+        self.init_conv = nn.Conv1d(channels + audio_out_channels, init_dim, 7, padding=3)
 
         # whether to do initial patching, as alternative to dwt
 
-        self.unpatchify = identity
+        # self.unpatchify = identity
 
         input_channels = channels * (patch_size ** 2)
-        needs_patch = patch_size > 1
-
+        # needs_patch = patch_size > 1
         # if needs_patch:
         #     if not dual_patchnorm:
         #         self.init_conv = nn.Conv2d(channels, init_dim, patch_size, stride=patch_size)
@@ -541,7 +538,7 @@ class CUViT(nn.Module):
         for embed in meta_embed:
             t = t + embed
         # input should be [n, c, l]
-        x = self.init_img_transform(x)
+        # x = self.init_img_transform(x)
 
         x = torch.cat([x, audio_embed], dim=1)
 
@@ -583,8 +580,9 @@ class CUViT(nn.Module):
         x = self.final_res_block(x, t)
         x = self.final_conv(x)
 
-        x = self.unpatchify(x)
-        return self.final_img_itransform(x)
+        # x = self.unpatchify(x)
+        # return self.final_img_itransform(x)
+        return x
 
 
 if __name__ == '__main__':

@@ -2,8 +2,8 @@ import os
 
 import numpy as np
 from matplotlib import pyplot as plt
-import matplotlib
-matplotlib.use('TkAgg')
+# import matplotlib
+# matplotlib.use('QtAgg')
 
 
 def plot_loss(loss_list, title=None, save_path=None, show=True):

@@ -17,7 +17,7 @@ from torch.special import expm1
 from tqdm import tqdm
 
 from system.base_sys import Train
-from util.general_util import dynamic_import
+from util.general_util import dynamic_import, recursive_wrap_data
 from util.plt_util import plot_signal
 
 
@@ -161,8 +161,6 @@ class CDDPMSYS(Train):
 
     @torch.no_grad()
     def p_sample(self, x, time, time_next, cond_data):
-        batch, *_, device = *x.shape, x.device
-
         model_mean, model_variance = self.p_mean_variance(x=x, time=time, time_next=time_next, cond_data=cond_data)
 
         if time_next == 0:
@@ -173,13 +171,11 @@ class CDDPMSYS(Train):
 
     @torch.no_grad()
     def p_sample_loop(self, shape, cond_data):
-        batch = shape[0]
+        img = torch.randn(shape, device=self.output_device)
+        steps = torch.linspace(1., 0., self.num_sample_steps + 1, device=self.output_device)
 
-        img = torch.randn(shape, device=self.device)
-        steps = torch.linspace(1., 0., self.num_sample_steps + 1, device=self.device)
-
-        for i in range(self.num_sample_steps):
-        # for i in tqdm(range(self.num_sample_steps), desc='sampling loop time step', total=self.num_sample_steps):
+        # for i in range(self.num_sample_steps):
+        for i in tqdm(range(self.num_sample_steps), desc='sampling loop time step', total=self.num_sample_steps, ncols=80):
             times = steps[i]
             times_next = steps[i + 1]
             img = self.p_sample(img, times, times_next, cond_data)
@@ -188,7 +184,7 @@ class CDDPMSYS(Train):
 
     @torch.no_grad()
     def sample(self, cond_data, batch_size=16):
-        return self.p_sample_loop((batch_size, self.channels, self.length, self.length), cond_data)
+        return self.p_sample_loop((batch_size, self.channels, self.length), cond_data)
 
     # training related functions - noise prediction
 
@@ -242,29 +238,29 @@ class CDDPMSYS(Train):
 
         return (loss * loss_weight).mean()
 
-    def log_gen_output_embedding(self, gen_output, epoch, prefix='gen', plot_first=3):
-        coord_output, embedding_output = gen_output
-        coord_output = coord_output.cpu().detach().numpy()
-        # print(embedding_output.shape)
-        embedding_output = embedding_output.cpu().detach().numpy()
-        # print(embedding_output.shape)
-        output_dir = os.path.join(self.log_dir, 'output', str(epoch), prefix)
+    def log_gen_output(self, gen_output, epoch, batch_idx, prefix='gen', plot_first=3):
+        output_dir = os.path.join(self.log_dir, 'output', 'e%d_b%d' % (epoch, batch_idx), prefix)
         os.makedirs(output_dir, exist_ok=True)
-        all_sample_decoded = [
-            self.embedding_output_decoder.decode(d)
-            for d in embedding_output
-        ]
+
+        gen_output = gen_output.cpu().detach().numpy()
+        coord_output, embedding_output = gen_output[:, :2], gen_output[:, 2:]
+
+        # embedding_output = np.round(embedding_output)
+        # -> [batch_size, n_snaps]
+        all_sample_decoded = np.sum(np.round(embedding_output) * np.arange(1, 4).reshape([1, -1, 1]), axis=1)
+
         with open(os.path.join(output_dir, r'hit_signal.txt'), 'w') as f:
             for sample_decoded in all_sample_decoded:
-                f.write(str(sample_decoded.tolist()))
+                f.write(str(sample_decoded.tolist()) + '\n')
         with open(os.path.join(output_dir, r'cursor_signal.txt'), 'w') as f:
             for sample_coord_output in coord_output:
-                f.write(str(sample_coord_output.T.tolist()))
-        for i, (sample_coord_output, sample_decoded) in enumerate(zip(coord_output, all_sample_decoded)):
+                # [n_snaps, coord_num]
+                f.write(str(sample_coord_output.T.tolist()) + '\n')
+        for i, (sample_coord_output, sample_embedding_output) in enumerate(zip(coord_output, embedding_output)):
             if i >= plot_first:
                 break
             for signal, name in zip(
-                sample_coord_output.T,
+                sample_coord_output,
                 [
                     'cursor_x', 'cursor_y'
                 ]
@@ -272,13 +268,10 @@ class CDDPMSYS(Train):
                 fig_array, fig = plot_signal(signal, name,
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
                                              show=False)
-                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+                self.writer.add_figure(prefix + name, fig, epoch)
+            # plot as float
             for signal, name in zip(
-                [
-                    np.where(sample_decoded == 1, 1, 0),
-                    np.where(sample_decoded == 2, 1, 0),
-                    np.where(sample_decoded == 3, 1, 0),
-                ],
+                sample_embedding_output,
                 [
                     'circle_hit', 'slider_hit', 'spinner_hit'
                 ]
@@ -286,33 +279,63 @@ class CDDPMSYS(Train):
                 fig_array, fig = plot_signal(signal, name,
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
                                              show=False)
-                self.tensorboard_writer.add_figure(prefix + name, fig, epoch)
+                self.writer.add_figure(prefix + name, fig, epoch)
 
     def run_train(self):
         self.init_train_state()
         for epoch in range(self.start_epoch, self.epoch):
-            bar = tqdm(self.train_iter)
+            epoch_loss_list = []
+
+            bar = tqdm(enumerate(self.train_iter), total=len(self.train_iter), ncols=80)
             for batch_idx, batch in bar:
+                batch = recursive_wrap_data(batch, self.output_device)
                 loss_value = self.training_step(batch, batch_idx, epoch)
                 bar.set_postfix(collections.OrderedDict({'loss': loss_value}))
-            self.scheduler.step()
+                epoch_loss_list.append(loss_value)
 
+            self.scheduler.step()
+            self.logger.info("loss %.4f", sum(epoch_loss_list) / len(epoch_loss_list))
+
+            self.save_model(epoch)
+
+            if self.log_epoch_step is not None and epoch % self.log_epoch_step == 0:
+                # if self.current_epoch % 16 == 0:
+                # log sampled images
+                audio, x_start, meta = batch
+                num_gen_vis = 3
+                # log sampled images
+                sample_imgs = self.sample(
+                    (torch.cat([audio[:num_gen_vis], audio[:num_gen_vis]], dim=0),
+                     [torch.cat([m[:num_gen_vis], m[:num_gen_vis]], dim=0) for m in meta]),
+                    batch_size=num_gen_vis * 2
+                )
+                self.log_gen_output(sample_imgs[:num_gen_vis], epoch, -1, 'generated_seed1')
+                self.log_gen_output(sample_imgs[num_gen_vis:], epoch, -1, 'generated_seed2')
+                self.log_gen_output(x_start[:num_gen_vis], epoch, -1, 'input')
         self.save_model(-1)
 
     def training_step(self, batch, batch_idx, epoch):
-        x_start, cond_data = batch
+        audio, x_start, meta = batch
+        # print(meta)
+        cond_data = (audio, meta)
         # input value -1~1
         times = torch.zeros((x_start.shape[0],), device=x_start.device).float().uniform_(0, 1)
 
         loss = self.p_losses(x_start, cond_data, times)
 
-        self.logger.log("loss", loss)
-
         if self.log_batch_step is not None and batch_idx % self.log_batch_step == 0:
-            # if self.current_epoch % 16 == 0:
+            num_gen_vis = 3
             # log sampled images
-            sample_imgs = self.sample(cond_data, 6)
-            self.log_gen_output_embedding(sample_imgs, epoch, 'generated')
+            sample_imgs = self.sample(
+                (torch.cat([audio[:num_gen_vis], audio[:num_gen_vis]], dim=0),
+                 [torch.cat([m[:num_gen_vis], m[:num_gen_vis]], dim=0) for m in meta]),
+                batch_size=num_gen_vis * 2
+            )
+            self.log_gen_output(sample_imgs[:num_gen_vis], epoch, batch_idx, 'generated_seed1')
+            self.log_gen_output(sample_imgs[num_gen_vis:], epoch, batch_idx, 'generated_seed2')
+            self.log_gen_output(x_start[:num_gen_vis], epoch, batch_idx, 'input')
+
+            self.save_model(epoch, batch_idx)
 
         self.optimizer.zero_grad()
         loss.backward()
