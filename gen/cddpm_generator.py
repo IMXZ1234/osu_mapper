@@ -12,13 +12,12 @@ from torch.special import expm1
 from tqdm import tqdm
 
 from gen import gen_util
-from gen.interpreter import cursor_with_hit_embedding
+from gen.interpreter import type_coord
 from nn.net.diffusion.cuvit import CUViT
 from util import audio_util, beatmap_util
 from util.audio_util import cal_mel_spec
 from util.general_util import recursive_to_cpu, recursive_to_ndarray, recursive_flatten_batch
 from util.plt_util import plot_signal
-
 
 
 def logsnr_schedule_cosine(t, logsnr_min=-15, logsnr_max=15):
@@ -64,11 +63,7 @@ class ACGANEmbeddingGenerator:
         # self.model.load_state_dict(new_state_dict)
         if torch.cuda.is_available():
             self.model.cuda(0)
-        self.label_interpreter = cursor_with_hit_embedding.CursorWithHitEmbeddingInterpreter(
-            r'./resources/pretrained_models/embedding_center-1_-1_normed.pkl',
-            self.beat_divisor,
-            r'./resources/pretrained_models/counter.pkl',
-        )
+        self.label_interpreter = type_coord.TypeCoordInterpreter()
 
         # self.embedding_output_decoder = embedding_decode.EmbeddingDecode(
         #     r'./resources/pretrained_models/embedding_center-1_-1_normed.pkl',
@@ -226,12 +221,12 @@ class ACGANEmbeddingGenerator:
             meta = np.array([meta_dict.pop('star')], dtype=np.float32) / 10
             meta = torch.tensor([[meta]]).expand([mel_spec.shape[0], -1])
             meta = meta.to(self.output_device)
-            gen_output = self.sample((mel_spec, meta))
+            gen_output = self.sample((mel_spec, meta), mel_spec.shape[0])
             # self.log_gen_output_embedding(gen_output, 0)
 
             gen_output = recursive_to_cpu(gen_output)
             gen_output = recursive_to_ndarray(gen_output)
-            # N, 2, L
+            # N, 5, L -> N, L, 5
             gen_output = recursive_flatten_batch(gen_output, cat_dim=2).T
 
             # plot_gen_output(gen_output)
@@ -243,7 +238,7 @@ class ACGANEmbeddingGenerator:
                 meta_dict
             )
             self.label_interpreter.gen_hitobjects(
-                beatmap, gen_output, bpm, start_time * 1000, end_time * 1000
+                beatmap, gen_output, bpm, start_time * 1000, end_time * 1000, self.beat_divisor
             )
 
             beatmap_name = beatmap_util.osu_filename(beatmap)

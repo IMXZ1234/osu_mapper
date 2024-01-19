@@ -421,6 +421,24 @@ def add_circle(beatmap, pos, time, hitsound=0, addition='0:0:0:0:'):
     return ho_circle
 
 
+def add_spinner(beatmap, pos, time, num_beats, ms_per_beat, hitsound=0, addition='0:0:0:0:'):
+    """
+    time can be number (in milliseconds), or timedelta
+    """
+    if not isinstance(time, timedelta):
+        time = timedelta(milliseconds=time)
+    duration = timedelta(milliseconds=int(num_beats * ms_per_beat))
+    ho_spinner = slider.beatmap.Spinner(
+        slider.Position(pos[0], pos[1]),
+        time,
+        hitsound,
+        time + duration,
+        addition
+    )
+    beatmap._hit_objects.append(ho_spinner)
+    return ho_spinner
+
+
 def add_slider(beatmap,
                curve_type,
                pos_list,
@@ -481,6 +499,9 @@ class BeatmapConstructor:
 
     def add_circle(self, pos, time, hitsound=0, addition='0:0:0:0:'):
         return add_circle(self.beatmap, pos, time, hitsound, addition)
+
+    def add_spinner(self, pos, time, num_beats, hitsound=0, addition='0:0:0:0:'):
+        return add_spinner(self.beatmap, pos, time, num_beats, self.ms_per_beat, hitsound, addition)
 
     def add_slider(self,
                    curve_type,
