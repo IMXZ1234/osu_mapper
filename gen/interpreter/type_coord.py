@@ -15,21 +15,23 @@ class TypeCoordInterpreter:
 
     @staticmethod
     def map_pos(x, y):
-        if x < 0:
-            x = 0
-        if x > 1:
-            x = 1
-        if y < 0:
-            y = 0
-        if y > 1:
-            y = 1
-        x = int(x * 512 + 256)
-        y = int(y * 384 + 192)
+        # x = int(x * 512 + 256)
+        # y = int(y * 384 + 192)
+        x = int(x * (691 + 180) - 180)
+        y = int(y * (407 + 82) - 82)
+        # if x < 0:
+        #     x = 0
+        # if x > 1:
+        #     x = 1
+        # if y < 0:
+        #     y = 0
+        # if y > 1:
+        #     y = 1
         return x, y
 
     @staticmethod
     def parse_step_label(step_label):
-        x, y, circle_density, slider_density, spinner_density,  = step_label
+        x, y, circle_density, slider_density, spinner_density = step_label
         x, y = TypeCoordInterpreter.map_pos(x, y)
         if spinner_density > 0.6:
             return 3, x, y

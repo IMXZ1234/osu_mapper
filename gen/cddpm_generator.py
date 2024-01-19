@@ -26,10 +26,11 @@ def logsnr_schedule_cosine(t, logsnr_min=-15, logsnr_max=15):
     return -2 * torch.log((torch.tan(t_min + t * (t_max - t_min))).clamp(min=1e-20))
 
 
-class ACGANEmbeddingGenerator:
-    def __init__(self):
+class Generator:
+    def __init__(self, device='cuda:0'):
+        self.output_device = device
+
         model_arg = {
-            'model_type': 'nn.net.diffusion.cuvit.CUViT',
             'dim': 48,
             'channels': 5,
             'num_meta': 1,
@@ -51,18 +52,17 @@ class ACGANEmbeddingGenerator:
         self.mel_frame_per_snap = 16
         self.n_mels = 40
 
-        self.model = CUViT.Generator(**model_arg)
-        model_path = r'./resources/pretrained_models/model_adv_3_8999_0.pt'
-        state_dict = torch.load(model_path, map_location='cuda:0')
+        self.model = CUViT(**model_arg)
+        model_path = r'./resources/pretrained_models/model_0_epoch_41_batch_1280.pt'
+        state_dict = torch.load(model_path, map_location=self.output_device)
         self.model.load_state_dict(state_dict)
         self.model.eval()
+        self.model = self.model.to(self.output_device)
 
         # new_state_dict = {}
         # for k, v in state_dict.items():
         #     new_state_dict[k[7:]] = v
         # self.model.load_state_dict(new_state_dict)
-        if torch.cuda.is_available():
-            self.model.cuda(0)
         self.label_interpreter = type_coord.TypeCoordInterpreter()
 
         # self.embedding_output_decoder = embedding_decode.EmbeddingDecode(
@@ -70,7 +70,6 @@ class ACGANEmbeddingGenerator:
         #     self.beat_divisor,
         #     r'./resources/pretrained_models/counter.pkl',
         # )
-        self.output_device = 'cuda:0'
         self.num_sample_steps = 500
         self.channels = 5
         self.length = self.n_snaps
@@ -186,7 +185,7 @@ class ACGANEmbeddingGenerator:
             )
             # -> n_frames, n_mels
             mel_spec = np.mean(mel_spec, axis=1)
-            print(mel_spec)
+            # print(mel_spec)
             assert mel_spec.shape[0] == total_mel_frames, 'mel_spec.shape[0] %s != total_mel_frames %s' % (mel_spec.shape[0], total_mel_frames)
             print('mel spec shape: ', mel_spec.shape)
         except Exception:
@@ -211,23 +210,24 @@ class ACGANEmbeddingGenerator:
         mel_spec = mel_spec.T.reshape([num_subseq, self.n_mels, self.n_snaps * self.mel_frame_per_snap])
         mel_spec = torch.tensor(mel_spec, dtype=torch.float32)
         print('mel spec shape: ', mel_spec.shape)
-        if torch.cuda.is_available():
-            mel_spec = mel_spec.to('cuda:0')
+
+        mel_spec = mel_spec.to(self.output_device)
 
         # run for every meta
         for meta_dict in meta_list:
             # get and remove 'star'
             # np.array([star - 3.5]) / 5
             meta = np.array([meta_dict.pop('star')], dtype=np.float32) / 10
-            meta = torch.tensor([[meta]]).expand([mel_spec.shape[0], -1])
+            meta = torch.tensor(meta).expand([mel_spec.shape[0], -1])
             meta = meta.to(self.output_device)
             gen_output = self.sample((mel_spec, meta), mel_spec.shape[0])
-            # self.log_gen_output_embedding(gen_output, 0)
+            self.log_gen_output(gen_output, 3)
 
             gen_output = recursive_to_cpu(gen_output)
             gen_output = recursive_to_ndarray(gen_output)
             # N, 5, L -> N, L, 5
-            gen_output = recursive_flatten_batch(gen_output, cat_dim=2).T
+            gen_output = gen_output.transpose(0, 2, 1).reshape([-1, 5])
+            # gen_output = recursive_flatten_batch(gen_output, cat_dim=2).T
 
             # plot_gen_output(gen_output)
 
@@ -304,3 +304,30 @@ class ACGANEmbeddingGenerator:
     @torch.no_grad()
     def sample(self, cond_data, batch_size=16):
         return self.p_sample_loop((batch_size, self.channels, self.length), cond_data)
+
+    def log_gen_output(self, gen_output, plot_first=3):
+        gen_output = gen_output.cpu().detach().numpy()
+        coord_output, embedding_output = gen_output[:, :2], gen_output[:, 2:]
+
+        for i, (sample_coord_output, sample_embedding_output) in enumerate(zip(coord_output, embedding_output)):
+            if i >= plot_first:
+                break
+            for signal, name in zip(
+                sample_coord_output,
+                [
+                    'cursor_x', 'cursor_y'
+                ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=None,
+                                             show=True)
+            # plot as float
+            for signal, name in zip(
+                sample_embedding_output,
+                [
+                    'circle_hit', 'slider_hit', 'spinner_hit'
+                ]
+            ):
+                fig_array, fig = plot_signal(signal, name,
+                                             save_path=None,
+                                             show=True)

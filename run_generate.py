@@ -400,12 +400,12 @@ def test_gen_6(generator):
 
 
 if __name__ == '__main__':
-    from gen.acgan_embedding_generator import ACGANEmbeddingGenerator
+    from gen.cddpm_generator import Generator
     # from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
     # import pickle
     # with open(r'C:\Users\asus\coding\python\osu_mapper\resources\data\processed_v4\mel\999834.pkl', 'rb') as f:
     #     print(pickle.load(f))
-    generator = ACGANEmbeddingGenerator()
+    generator = Generator()
     # test_gen_6(generator)
     test_gen_5(generator)
 #
