@@ -88,10 +88,20 @@ class HeatmapDataset:
     Typical frame sizes in speech processing range from 20 ms to 40 ms with 50% (+/-10%) overlap between consecutive frames.
     Popular settings are **25 ms** for the frame size, frame_size = 0.025 and a 10 ms stride (15 ms overlap), frame_stride = 0.01.
 
-    commonly seen bpm is within 60 ~ 120
-    with beat_divisor 4, snap per minute is 240 ~ 480,
-    a typical snap therefore takes 250ms ~ 125ms, and can hold 10 ~ 20 mel frames (with stride of half window length)
+    commonly seen bpm is within 60 ~ 260, extremes will not exceed [56, 360], average is around 160 bpm
+    with beat_divisor 8, snap per minute is 480 ~ 2080, with average 1280
+    a typical snap therefore takes 125ms ~ 28.85ms, with average 46.875, and can hold 12~3 mel frames (with stride of half window length)
+    with mel_frame_per_snap=8, we have 15.625 ~ 3.60625 ms/mel, 343.750 ~ 79.3375 samples/mel(stride)
 
+    # we now calculate mel_spec with fixed time window length(fix number of audio samples),
+    # since this will guarantee the same mel filter bank is the sum of exactly the same number of fft bins.
+    # we observe that mel banks for low frequencies may be very narrow(containing very few fft bins), so the above property is highly desirable.
+
+    # we now calculate mel_spec with fixed n_fft(fix number of fft bins, even if number of time samples are different),
+    # since this will guarantee the same mel filter bank is the sum of exactly the same number of fft bins.
+    # we observe that mel banks for low frequencies may be very narrow(containing very few fft bins), so the above property is highly desirable.
+
+    we later resample mel_spec to align it with snaps
     with beat_divisor=8 and mel_frame_per_snap=16, we have 128~256 mel/sec, 7.8~3.9 ms/mel(stride)
     """
     def __init__(self, mel_args, feature_args):
@@ -100,6 +110,7 @@ class HeatmapDataset:
 
         self.sample_rate = mel_args.get('sample_rate', 22000)
         self.mel_frame_per_snap = mel_args.get('mel_frame_per_snap', 8)
+        self.n_fft = mel_args.get('n_fft', 400)
         self.n_mels = mel_args.get('n_mels', 40)
 
         self.beat_divisor = feature_args.get('beat_divisor', 8)
@@ -272,7 +283,7 @@ class HeatmapDataset:
                     audio_for_mel,
                     frame_start, frame_length,
                     window='hamming',
-                    nfft=frame_length,
+                    nfft=self.n_fft,
                     n_mel=self.n_mels,
                     sample_rate=self.sample_rate
                 )
@@ -420,7 +431,7 @@ class HeatmapDataset:
             # process meta from mel
         if not (skip_exist and processed['meta']):
             try:
-                meta_data = (beatmap.stars(), beatmap.cs())
+                meta_data = (beatmap.stars(), beatmap.cs(), beatmap.ar(), beatmap.od(), beatmap.hp(), beatmap.bpm_min())
             except Exception:
                 traceback.print_exc()
                 print('failed process_meta %s_%s' % (beatmapset_id, beatmap_id))
@@ -450,7 +461,8 @@ def worker(q: multiprocessing.Queue, i):
     # print('worker!')
     mel_args = {
         'sample_rate': 22000,
-        'mel_frame_per_snap': 16,
+        'mel_frame_per_snap': 8,
+        'n_fft': 400,
         'n_mels': 40,
     }
     feature_args = {
@@ -467,7 +479,7 @@ def worker(q: multiprocessing.Queue, i):
             return 0
         ds.process_beatmap_meta_dict(
             beatmap_meta_dict,
-            r'/home/data1/xiezheng/osu_mapper/preprocessed_v6',
+            r'/home/xiezheng/data/preprocessed_v7',
             r'/home/data1/xiezheng/osu_mapper/beatmapsets',
             temp_dir,
             skip_exist=True,
@@ -482,11 +494,11 @@ def multiprocessing_prepare_data(nproc=32, target=worker):
     all_meta = os.listdir(meta_root)
     all_meta_file_path = [os.path.join(meta_root, fn) for fn in all_meta]
 
-    preprocessed_root = r'/home/xiezheng/data/preprocessed_v6'
+    preprocessed_root = r'/home/xiezheng/data/preprocessed_v7'
     # preprocessed_root = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6'
     os.makedirs(preprocessed_root, exist_ok=True)
 
-    processed_beatmapid_log_file = r'/home/xiezheng/data/preprocessed_v6'
+    processed_beatmapid_log_file = r'/home/xiezheng/data/preprocessed_v7/processed_ids.txt'
     # processed_beatmapid_log_file = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6/processed_ids.txt'
     if not os.path.exists(processed_beatmapid_log_file):
         open(processed_beatmapid_log_file, 'w')

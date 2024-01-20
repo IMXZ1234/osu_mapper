@@ -1,6 +1,7 @@
 import itertools
 import os
 import pickle
+import zipfile
 from datetime import timedelta
 
 import numpy as np
@@ -711,24 +712,67 @@ def star_hist():
         pickle.dump(all_cs, f)
 
 
+def bpm_hist():
+    meta_dir = r'/home/data1/xiezheng/osu_mapper/beatmapsets'
+    all_bpm = []
+    n_processed = 0
+    for filename in tqdm(os.listdir(meta_dir), ncols=80):
+        osz_path = os.path.join(meta_dir, filename)
+        n_processed += 1
+
+        try:
+            osz_file = zipfile.ZipFile(osz_path, 'r')
+            all_beatmaps = list(slider.Beatmap.from_osz_file(osz_file).values())
+            for bm in all_beatmaps:
+                if bm.bpm_min() == bm.bpm_max():
+                    all_bpm.append(bm.bpm_min())
+        except Exception:
+            print('beatmap parse failed %s' % osz_file)
+            continue
+        if n_processed in [1000, 5000, 10000, 20000]:
+            plt.figure()
+            plt.hist(all_bpm, bins=50)
+            plt.title('bpm')
+            plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/bpm_hist_%d.png' % n_processed)
+            plt.clf()
+            # 3.671196325409603 0.0 10.0
+            print(np_statistics(np.array(all_bpm)))
+            with open(r'/home/data1/xiezheng/osu_mapper/vis/bpm_%d.pkl' % n_processed, 'wb') as f:
+                pickle.dump(all_bpm, f)
+
+    plt.figure()
+    plt.hist(all_bpm, bins=50)
+    plt.title('bpm')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/bpm_hist.png')
+    plt.clf()
+    # 3.671196325409603 0.0 10.0
+    print(np_statistics(np.array(all_bpm)))
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/bpm.pkl', 'wb') as f:
+        pickle.dump(all_bpm, f)
+
+
 if __name__ == '__main__':
+    """
+    view bpm hist
+    """
+    bpm_hist()
     """
     view star hist
     """
-    # view_word_embedding()
-    # star_hist()
-    with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\stars.pkl', 'rb') as f:
-        all_star = pickle.load(f)
-
-    def smaller_than(star_ref):
-        count = 0
-        for star in all_star:
-            if star < star_ref:
-                count += 1
-        return count / len(all_star)
-
-    for s in [1, 2, 3, 4, 5, 6, 7, 8]:
-        print(smaller_than(s))
+    # # view_word_embedding()
+    # # star_hist()
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\stars.pkl', 'rb') as f:
+    #     all_star = pickle.load(f)
+    #
+    # def smaller_than(star_ref):
+    #     count = 0
+    #     for star in all_star:
+    #         if star < star_ref:
+    #             count += 1
+    #     return count / len(all_star)
+    #
+    # for s in [1, 2, 3, 4, 5, 6, 7, 8]:
+    #     print(smaller_than(s))
 
     """
     """

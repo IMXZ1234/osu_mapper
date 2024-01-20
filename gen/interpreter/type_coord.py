@@ -50,6 +50,7 @@ class TypeCoordInterpreter:
         snap_ms = ms_per_beat / snap_divisor
         # circle_hit, slider_hit, spinner_hit, cursor_x, cursor_y = labels.T
         total_len = labels.shape[0]
+        num_hit_objects = 0
 
         snap_idx = 0
         while True:
@@ -63,6 +64,7 @@ class TypeCoordInterpreter:
                 beatmap_util.add_circle(beatmap, (x, y), time)
                 snap_idx += 1
                 print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
+                num_hit_objects += 1
             elif label == 2:
                 pos_list = [[x, y]]
                 start_pos = snap_idx
@@ -84,6 +86,7 @@ class TypeCoordInterpreter:
                     beatmap, 'L', pos_list, time, num_beats, ms_per_beat
                 )
                 print('add slider at (%.3f, %s)' % (time, (' ({}, {})' * len(pos_list)).format(*chain(*pos_list))))
+                num_hit_objects += 1
             elif label == 3:
                 pos_list = [[x, y]]
                 start_pos = snap_idx
@@ -105,5 +108,7 @@ class TypeCoordInterpreter:
                     beatmap, pos_list[0], time, num_beats, ms_per_beat
                 )
                 print('add spinner at (%.3f)' % time)
+                num_hit_objects += 1
             else:
                 snap_idx += 1
+        print('total %d hitobjects' % num_hit_objects)
