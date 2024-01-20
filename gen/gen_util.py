@@ -366,6 +366,7 @@ def extract_bpm(audio_file_path):
     """
     estimator = BeatNet(1, mode='online', inference_model='PF', plot=[], thread=False,
                         device='cuda:0' if torch.cuda.is_available() else 'cpu')
+    print('beatnet process %s' % audio_file_path)
     output = estimator.process(audio_file_path)
     itv = np.diff(output[:, 0])
     bpm = 60 / thresh_bin_mean(itv, 0.02)

@@ -10,6 +10,7 @@ from einops import repeat
 from torch import sqrt
 from torch.special import expm1
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from gen import gen_util
 from gen.interpreter import type_coord
@@ -49,11 +50,14 @@ class Generator:
         self.n_snaps = self.n_beats * self.beat_divisor
         self.batch_size = 16
         self.sample_rate = 22000
-        self.mel_frame_per_snap = 16
+        self.mel_frame_per_snap = 1
         self.n_mels = 40
 
         self.model = CUViT(**model_arg)
-        model_path = r'./resources/pretrained_models/model_0_epoch_2_batch_-1.pt'
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        pretrained_model_root = os.path.join(project_root, 'resources', 'pretrained_models')
+        model_path = os.path.join(pretrained_model_root, r'model_0_epoch_63_batch_1536.pt')
+        # model_path = r'./resources/pretrained_models/model_0_epoch_2_batch_-1.pt'
         state_dict = torch.load(model_path, map_location=self.output_device)
         self.model.load_state_dict(state_dict)
         self.model.eval()
@@ -114,7 +118,7 @@ class Generator:
             osu_dir = os.path.dirname(audio_file_path)
         os.makedirs(osu_dir, exist_ok=True)
         if audio_info_path is None:
-            audio_info_path = os.path.join(os.path.dirname(audio_file_path), audio_filename_no_ext + 'yaml')
+            audio_info_path = os.path.join(os.path.dirname(audio_file_path), audio_filename_no_ext + '.yaml')
 
         try:
             audio_data, sr = audio_util.audioread_get_audio_data(audio_file_path, ret_tensor=True)
@@ -175,6 +179,7 @@ class Generator:
                 audio_for_mel = np.concatenate([audio_for_mel, np.zeros([2, frame_start[-1] + frame_length - audio_for_mel.shape[1]])], axis=1)
             else:
                 audio_for_mel = audio_for_mel[..., :frame_start[-1] + frame_length]
+            print('frame_length', frame_length)
             mel_spec = cal_mel_spec(
                 audio_for_mel,
                 frame_start, frame_length,
@@ -188,6 +193,13 @@ class Generator:
             # print(mel_spec)
             assert mel_spec.shape[0] == total_mel_frames, 'mel_spec.shape[0] %s != total_mel_frames %s' % (mel_spec.shape[0], total_mel_frames)
             print('mel spec shape: ', mel_spec.shape)
+            mel_spec -= (np.mean(mel_spec, axis=0) + 1e-8)
+            print(mel_spec[:, 5])
+            print(mel_spec)
+            plt.figure()
+            plt.title('mel_spec')
+            plt.imshow(mel_spec.T, aspect='auto')
+            plt.show()
         except Exception:
             print('mel spec generation failed!')
             return
@@ -195,7 +207,7 @@ class Generator:
         # with open(r'C:\Users\asus\coding\python\osu_mapper\resources\data\processed_v4\mel\999834.pkl', 'rb') as f:
         #     mel_spec = pickle.load(f)
         total_mel_frames = len(mel_spec)
-        total_snaps = total_mel_frames // 16
+        total_snaps = total_mel_frames // self.mel_frame_per_snap
 
         osu_path_list = []
         beatmap_list = []
@@ -219,7 +231,7 @@ class Generator:
             star_meta = np.array([meta_dict.pop('star')], dtype=np.float32) / 10
             star_meta = torch.tensor(star_meta, device=self.output_device).expand([mel_spec.shape[0], -1])
             gen_output = self.sample((mel_spec, [star_meta, offset_proportion]), mel_spec.shape[0])
-            # self.log_gen_output(gen_output, 3)
+            self.log_gen_output(gen_output.permute(1, 0, 2).reshape([1, 5, -1]), -1)
 
             gen_output = recursive_to_cpu(gen_output)
             gen_output = recursive_to_ndarray(gen_output)
@@ -303,22 +315,23 @@ class Generator:
     def sample(self, cond_data, batch_size=16):
         return self.p_sample_loop((batch_size, self.channels, self.length), cond_data)
 
-    def log_gen_output(self, gen_output, plot_first=3):
+    def log_gen_output(self, gen_output, plot_first=-1):
         gen_output = gen_output.cpu().detach().numpy()
         coord_output, embedding_output = gen_output[:, :2], gen_output[:, 2:]
+        if plot_first == -1:
+            plot_first = gen_output.shape[0]
 
         for i, (sample_coord_output, sample_embedding_output) in enumerate(zip(coord_output, embedding_output)):
             if i >= plot_first:
                 break
+            fig = plt.figure()
             for signal, name in zip(
                 sample_coord_output,
                 [
                     'cursor_x', 'cursor_y'
                 ]
             ):
-                fig_array, fig = plot_signal(signal, name,
-                                             save_path=None,
-                                             show=True)
+                plt.plot(signal)
             # plot as float
             for signal, name in zip(
                 sample_embedding_output,
@@ -326,6 +339,83 @@ class Generator:
                     'circle_hit', 'slider_hit', 'spinner_hit'
                 ]
             ):
-                fig_array, fig = plot_signal(signal, name,
-                                             save_path=None,
-                                             show=True)
+                plt.plot(signal)
+            plt.show()
+
+
+if __name__ == '__main__':
+    import slider
+    import sys
+    import pickle
+    import torchaudio
+    root_dir = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\audio'
+    audio_path = os.path.join(root_dir, 'audio_fix.mp3')
+    audio, sr = audio_util.audioread_get_audio_data(audio_path)
+    torchaudio.functional.resample(audio, sr, 16000)
+    mel = torchaudio.transforms.MelSpectrogram(n_mels=40)
+    mel_spec = mel(audio).numpy()
+    print(mel_spec.shape)
+    mel_spec = mel_spec.mean(axis=0)
+    print(np.min(mel_spec), np.max(mel_spec), np.mean(mel_spec))
+    mel_spec = np.where(mel_spec == 0, np.finfo(float).eps, mel_spec)  # Numerical Stability
+    mel_spec = 20 * np.log10(mel_spec)  # dB
+    mel_spec -= (np.mean(mel_spec, axis=0) + 1e-8)
+    print(np.min(mel_spec), np.max(mel_spec), np.mean(mel_spec))
+
+    plt.figure()
+    plt.title('from dataset mel spec torchaudio')
+    plt.imshow(mel_spec, aspect='auto')
+    plt.show()
+
+    plt.figure()
+    plt.hist(mel_spec.reshape([-1]), bins=100)
+    plt.title('mel spec hist torchaudio')
+    plt.show()
+
+    # sys.exit()
+    bmp = slider.Beatmap.from_path(
+        os.path.join(root_dir, r'CHiCO with HoneyWorks - Ai no Scenario (TV Size) (rew0825) [Cup].osu')
+    )
+    print(bmp.bpm_min(), bmp.bpm_max())
+    with open(
+        os.path.join(root_dir, '999185.pkl'), 'rb'
+    ) as f:
+        mel_spec = pickle.load(f)
+    print('from dataset mel spec', mel_spec.shape)
+    print(mel_spec)
+    print(np.min(mel_spec), np.max(mel_spec), np.mean(mel_spec))
+    mel_spec -= (np.mean(mel_spec, axis=0) + 1e-8)
+    print(np.min(mel_spec), np.max(mel_spec), np.mean(mel_spec))
+
+    plt.figure()
+    plt.hist(mel_spec.reshape([-1]), bins=100)
+    plt.title('mel spec hist')
+    plt.show()
+
+    plt.figure()
+    plt.title('from dataset mel spec')
+    plt.imshow(mel_spec.T, aspect='auto')
+    plt.show()
+    # sys.exit()
+
+    generator = Generator()
+    generator.generate_beatmapset(
+        osz_path=os.path.join(root_dir, 'test.osz'),
+        audio_file_path=os.path.join(root_dir, 'audio_fix.mp3'),
+        meta_list=[
+            {
+                'audio_filename': 'audio_fix.mp3',  # indispensable
+                'artist_unicode': 'ai',
+                'artist': 'ai',  # indispensable
+                'title_unicode': 'ai',
+                'title': 'ai',  # indispensable
+                'version': '8',  # indispensable
+                'creator': 'IMXZ123',
+                'circle_size': 3,
+                'approach_rate': 8,
+                'slider_tick_rate': 2,
+                'star': 4.5,
+            },
+        ],
+        audio_info_path=os.path.join(root_dir, 'audio_fix.yaml'),
+    )

@@ -214,6 +214,7 @@ def cal_mel_spec(audio_data,
     mel_points = np.linspace(low_freq_mel, high_freq_mel, n_mel + 2)  # Equally spaced in Mel scale
     hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
     bin = np.floor((nfft + 1) * hz_points / sample_rate)
+    print('bin', bin)
 
     fbank = np.zeros((n_mel, int(np.floor(nfft / 2 + 1))))
     for m in range(1, n_mel + 1):
@@ -237,7 +238,12 @@ def cal_mel_spec(audio_data,
 
 
 if __name__ == '__main__':
-    crop_audio(
-        r'C:\Users\asus\coding\python\osu_mapper\resources\data\audio\47065.mp3',
-
-    )
+    sample_rate = 22000
+    n_mel = 40
+    nfft = 1024
+    low_freq_mel = 0
+    high_freq_mel = (2595 * np.log10(1 + (sample_rate / 2) / 700))  # Convert Hz to Mel
+    mel_points = np.linspace(low_freq_mel, high_freq_mel, n_mel + 2)  # Equally spaced in Mel scale
+    hz_points = (700 * (10 ** (mel_points / 2595) - 1))  # Convert Mel to Hz
+    bin = np.floor((nfft + 1) * hz_points / sample_rate)
+    print('bin', bin)

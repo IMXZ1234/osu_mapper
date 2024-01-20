@@ -89,9 +89,14 @@ class HeatmapDataset:
     Popular settings are **25 ms** for the frame size, frame_size = 0.025 and a 10 ms stride (15 ms overlap), frame_stride = 0.01.
 
     commonly seen bpm is within 60 ~ 120
-    with beat_divisor 4, snap per minute is 240 ~ 480,
-    a typical snap therefore takes 250ms ~ 125ms, and can hold 10 ~ 20 mel frames (with stride of half window length)
+    with beat_divisor 8, snap per minute is 480 ~ 960,
+    a typical snap therefore takes 125ms ~ 62.5ms, and can hold 12~6 mel frames (with stride of half window length)
 
+    we now calculate mel_spec with fixed time window length(fix number of audio samples),
+    since this will guarantee the same mel filter bank is the sum of exactly the same number of fft bins.
+    we observe that mel banks for low frequencies may be very narrow(containing very few fft bins), so the above property is highly desirable.
+
+    we later resample mel_spec to align it with snaps
     with beat_divisor=8 and mel_frame_per_snap=16, we have 128~256 mel/sec, 7.8~3.9 ms/mel(stride)
     """
     def __init__(self, mel_args, feature_args):
@@ -100,6 +105,9 @@ class HeatmapDataset:
 
         self.sample_rate = mel_args.get('sample_rate', 22000)
         self.mel_frame_per_snap = mel_args.get('mel_frame_per_snap', 8)
+        self.n_fft = mel_args.get('n_fft', 1024)
+        self.mel_frame_length = mel_args.get('mel_frame_length', 1024)
+        self.mel_frame_stride = mel_args.get('mel_frame_stride', self.mel_frame_length // 2)
         self.n_mels = mel_args.get('n_mels', 40)
 
         self.beat_divisor = feature_args.get('beat_divisor', 8)

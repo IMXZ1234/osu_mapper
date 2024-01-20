@@ -711,24 +711,56 @@ def star_hist():
         pickle.dump(all_cs, f)
 
 
+def bpm_hist():
+    meta_dir = r'/home/data1/xiezheng/osu_mapper/preprocessed_v6/meta'
+    all_star = []
+    all_cs = []
+    for filename in tqdm(os.listdir(meta_dir)):
+        filepath = os.path.join(meta_dir, filename)
+        with open(filepath, 'rb') as f:
+            star, cs = pickle.load(f)
+            all_star.append(star)
+            all_cs.append(cs)
+    plt.hist(all_star, bins=np.linspace(0, 14, 140).tolist())
+    plt.title('star')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/star_hist.png')
+    plt.clf()
+    # 3.10023066607676 0.19123955711997528 13.700304400500588
+    print(np_statistics(np.array(all_star)))
+    plt.hist(all_cs)
+    plt.title('cs')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/cs_hist.png')
+    plt.clf()
+    # 3.671196325409603 0.0 10.0
+    print(np_statistics(np.array(all_cs)))
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/stars.pkl', 'wb') as f:
+        pickle.dump(all_star, f)
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/cs.pkl', 'wb') as f:
+        pickle.dump(all_cs, f)
+
+
 if __name__ == '__main__':
+    """
+    view bpm hist
+    """
+    star_hist()
     """
     view star hist
     """
-    # view_word_embedding()
-    # star_hist()
-    with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\stars.pkl', 'rb') as f:
-        all_star = pickle.load(f)
-
-    def smaller_than(star_ref):
-        count = 0
-        for star in all_star:
-            if star < star_ref:
-                count += 1
-        return count / len(all_star)
-
-    for s in [1, 2, 3, 4, 5, 6, 7, 8]:
-        print(smaller_than(s))
+    # # view_word_embedding()
+    # # star_hist()
+    # with open(r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\vis\stars.pkl', 'rb') as f:
+    #     all_star = pickle.load(f)
+    #
+    # def smaller_than(star_ref):
+    #     count = 0
+    #     for star in all_star:
+    #         if star < star_ref:
+    #             count += 1
+    #     return count / len(all_star)
+    #
+    # for s in [1, 2, 3, 4, 5, 6, 7, 8]:
+    #     print(smaller_than(s))
 
     """
     """
