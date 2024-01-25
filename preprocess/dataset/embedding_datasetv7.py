@@ -545,7 +545,7 @@ def multiprocessing_prepare_data(nproc=32, target=worker):
 
 
 if __name__ == '__main__':
-    multiprocessing_prepare_data(16)
+    multiprocessing_prepare_data(8)
     # ds = HeatmapDataset(
     #     {
     #         'sample_rate': 22000,

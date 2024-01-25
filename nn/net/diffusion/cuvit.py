@@ -45,14 +45,14 @@ def l2norm(t):
 
 
 class AudioEncoder(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, length_compress=16):
         # downsample 16x
         super(AudioEncoder, self).__init__()
         self.net = nn.Sequential(
             nn.Conv1d(in_channels, out_channels, kernel_size=7, stride=4, padding=3),
             RMSNorm(out_channels, normalize_dim=1),
             nn.SiLU(),
-            nn.Conv1d(out_channels, out_channels, kernel_size=7, stride=4, padding=3),
+            nn.Conv1d(out_channels, out_channels, kernel_size=7, stride=length_compress // 4, padding=3),
             RMSNorm(out_channels, normalize_dim=1),
             nn.SiLU(),
         )
@@ -410,10 +410,11 @@ class CUViT(nn.Module):
             num_meta=1,
             audio_in_channels=40,
             audio_out_channels=40,
+            audio_length_compress=16,
     ):
         super().__init__()
 
-        self.audio_encoder = AudioEncoder(audio_in_channels, audio_out_channels)
+        self.audio_encoder = AudioEncoder(audio_in_channels, audio_out_channels, audio_length_compress)
 
         # for initial dwt transform (or whatever transform researcher wants to try here)
 

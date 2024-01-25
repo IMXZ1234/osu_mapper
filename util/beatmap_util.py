@@ -94,6 +94,7 @@ def pack_to_osz(audio_path, osu_path_list, osz_path=None, beatmap_list: list = N
     if osz_path is None:
         osz_path = os.path.join(DEFAULT_OSZ_DIR,
                                 osz_filename(beatmap_list[0]))
+    os.makedirs(os.path.dirname(osz_path), exist_ok=True)
     with ZipFile(osz_path, 'w') as zf:
         zf.write(audio_path, os.path.basename(audio_path))
         for osu_path, beatmap in zip(osu_path_list, beatmap_list):

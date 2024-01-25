@@ -27,5 +27,7 @@ from . import (
     feeder_word2vec_skipgram,
 
     feeder_embedding,
+    feeder_embeddingv7,
     feeder_onehot,
+    feeder_onehotv7,
 )

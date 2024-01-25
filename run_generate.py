@@ -409,6 +409,39 @@ def test_gen_6(generator):
     )
 
 
+def test_gen_7(generator):
+    audio_file_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\audio\audio_fix.mp3'
+
+    audio_info_path = None
+        # os.path.join(DEFAULT_GEN_DIR, r'audio_info\遠くの子守の唄.yaml')
+
+    meta_list = [
+        {
+            'audio_filename': os.path.basename(audio_file_path),  # indispensable
+            'artist_unicode': 'ai',
+            'artist': 'ai',  # indispensable
+            'title_unicode': 'ai',
+            'title': 'ai',  # indispensable
+            'version': '8',  # indispensable
+            'creator': 'IMXZ123',
+            'circle_size': 3,
+            'approach_rate': 8,
+            'slider_tick_rate': 2,
+            'star': 4.5,
+        },
+    ]
+    # for meta in meta_list:
+    #     save_meta(meta)
+    generator.generate_beatmapset(
+        os.path.join(DEFAULT_GEN_DIR, r'osz\test7.osz'),
+        audio_file_path,
+        meta_list,
+        audio_info_path=audio_info_path,
+        title='audio_fix',
+        osu_dir=os.path.join(DEFAULT_GEN_DIR, r'osu\test7'),
+    )
+
+
 if __name__ == '__main__':
     from gen.cddpm_generator import Generator
     # from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
@@ -417,5 +450,5 @@ if __name__ == '__main__':
     #     print(pickle.load(f))
     generator = Generator()
     # test_gen_6(generator)
-    test_gen_5(generator)
+    test_gen_7(generator)
 #
