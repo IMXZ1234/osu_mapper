@@ -131,11 +131,12 @@ def train_cddpm_datasetv7(setting_name='cddpm'):
         config_path = './resources/config/train/%s.yaml' % setting_name
         model_arg = {
             'model_type': 'nn.net.diffusion.cuvit.CUViT',
-            'dim': 48,
+            'dim': 64,
+            'dim_mults': [1, 2, 2, 4],
             'channels': 5,
             'num_meta': 3,
             'audio_in_channels': mel_features,
-            'audio_out_channels': 12,
+            'audio_out_channels': 16,
             'audio_length_compress': mel_frame_per_snap,
         }  # , 'num_block': [1, 1, 1, 1]
         optimizer_arg = {
@@ -144,8 +145,8 @@ def train_cddpm_datasetv7(setting_name='cddpm'):
         }
         scheduler_arg = {
             'scheduler_type': 'MultiStepLR',
-            'milestones': [5],
-            'gamma': 1.,
+            'milestones': [16, 32, 48, 64],
+            'gamma': 0.3,
         }
         data_arg = {'dataset': 'nn.dataset.feeder_onehotv7.SubseqFeeder',
                     'train_dataset_arg':
@@ -173,8 +174,8 @@ def train_cddpm_datasetv7(setting_name='cddpm'):
             'loss_type': 'MSELoss',
         }
         pred_arg = {'pred_type': 'nn.pred.multi_pred.MultiPred'}
-        output_arg = {'log_dir': '/home/data1/xiezheng/osu_mapper/result/' + setting_name,
-                      'model_save_dir': '/home/data1/xiezheng/osu_mapper/result/' + setting_name,
+        output_arg = {'log_dir': '/home/data/xiezheng/osu_mapper/result/' + setting_name,
+                      'model_save_dir': '/home/data/xiezheng/osu_mapper/result/' + setting_name,
                       'model_save_step': 1,
                       'train_state_save_step': 1,
                       'log_batch_step': 512,

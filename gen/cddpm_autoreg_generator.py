@@ -49,6 +49,11 @@ class Generator:
         self.beat_divisor = 8
         self.mel_frame_per_snap = 8
         self.n_snaps = self.n_beats * self.beat_divisor
+        self.n_frames = self.n_snaps * self.mel_frame_per_snap
+
+        self.half_n_snaps = self.n_snaps // 2
+        self.half_n_frames = self.n_frames // 2
+
         self.batch_size = 16
         self.sample_rate = 22000
         self.n_fft = 400
@@ -214,17 +219,18 @@ class Generator:
         beatmap_list = []
 
         # pad tail to multiples of subseq length
-        extra_snaps, num_subseq = total_snaps % self.n_snaps, total_snaps // self.n_snaps
+        extra_snaps, num_subseq = total_snaps % self.half_n_snaps, total_snaps // self.half_n_snaps
         print(total_snaps, total_mel_frames)
         print(extra_snaps, num_subseq)
         if extra_snaps > 0:
-            mel_spec = np.concatenate([mel_spec, np.zeros([(self.n_snaps - extra_snaps) * self.mel_frame_per_snap, self.n_mels])], axis=0)
+            mel_spec = np.concatenate([mel_spec, np.zeros([(self.half_n_snaps - extra_snaps) * self.mel_frame_per_snap, self.n_mels])], axis=0)
             num_subseq += 1
-        mel_spec = mel_spec.reshape([num_subseq, self.n_snaps * self.mel_frame_per_snap, self.n_mels]).transpose([0, 2, 1])
         mel_spec = torch.tensor(mel_spec, dtype=torch.float32, device=self.output_device)
-        # N, C, L
+        mel_spec = mel_spec.reshape([num_subseq, self.half_n_frames])
+        mel_spec = to_half_cat(mel_spec)
+
         print('mel spec shape: ', mel_spec.shape)
-        offset_proportion = torch.arange(num_subseq, dtype=torch.float32, device=self.output_device) * (self.n_snaps / total_snaps)
+        offset_proportion = torch.arange(num_subseq, dtype=torch.float32, device=self.output_device) * (self.half_n_snaps / total_snaps)
 
         # run for every meta
         for index, meta_dict in enumerate(meta_list):
@@ -235,7 +241,7 @@ class Generator:
             # print(bpm)
             bpm_meta = torch.tensor([(bpm-50) / 360], device=self.output_device).expand([mel_spec.shape[0], -1])
             # print(star_meta, bpm_meta)
-            gen_output = self.sample((mel_spec, [star_meta, offset_proportion, bpm_meta]), mel_spec.shape[0])
+            gen_output = self.sample_autoreg((mel_spec, [star_meta, offset_proportion, bpm_meta]))
             # self.log_gen_output(gen_output.permute(1, 0, 2).reshape([1, 5, -1]), -1)
 
             gen_output = recursive_to_cpu(gen_output)
@@ -265,7 +271,8 @@ class Generator:
         beatmap_util.pack_to_osz(audio_file_path, osu_path_list, osz_path, beatmap_list)
         print('saved to %s' % osz_path)
 
-    def p_mean_variance(self, x, time, time_next, cond_data):
+    @torch.no_grad()
+    def p_sample(self, x, time, time_next, cond_data):
 
         log_snr = self.log_snr(time)
         log_snr_next = self.log_snr(time_next)
@@ -291,20 +298,17 @@ class Generator:
 
         posterior_variance = squared_sigma_next * c
 
-        return model_mean, posterior_variance
-
-    @torch.no_grad()
-    def p_sample(self, x, time, time_next, cond_data):
-        model_mean, model_variance = self.p_mean_variance(x=x, time=time, time_next=time_next, cond_data=cond_data)
-
         if time_next == 0:
             return model_mean
 
         noise = torch.randn_like(x)
-        return model_mean + sqrt(model_variance) * noise
+        return model_mean + sqrt(posterior_variance) * noise
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, cond_data):
+    def p_sample_loop_autoreg(self, shape, cond_data):
+        """
+        sample for each sample in the batch respectively
+        """
         img = torch.randn(shape, device=self.output_device)
         steps = torch.linspace(1., 0., self.num_sample_steps + 1, device=self.output_device)
 
@@ -317,8 +321,8 @@ class Generator:
         return img
 
     @torch.no_grad()
-    def sample(self, cond_data, batch_size=16):
-        return self.p_sample_loop((batch_size, self.channels, self.length), cond_data)
+    def sample_autoreg(self, cond_data):
+        return self.p_sample_loop_autoreg((cond_data[0].shape[0], self.channels, self.length), cond_data)
 
     def log_gen_output(self, gen_output, save_dir=None, index=0):
         if save_dir is None:
@@ -348,6 +352,11 @@ class Generator:
             plt.savefig(os.path.join(save_dir, 'type%d.png' % index))
         # plt.show()
 
+
+def to_half_cat(tensor_in):
+    former_half, latter_half = mel_spec[:-1], mel_spec[1:]
+    # -> num_subseq-1, self.n_snaps, self.n_mels
+    mel_spec = np.concatenate([former_half, latter_half], axis=1)
 
 if __name__ == '__main__':
     import slider
