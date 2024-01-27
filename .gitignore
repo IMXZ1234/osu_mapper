@@ -7,3 +7,6 @@ __pycache__/
 /resources/test/
 /resources/train_state/
 /resources/scrape/
+/resources/pretrained_models/
+/resources/generate/
+/resources/vis/

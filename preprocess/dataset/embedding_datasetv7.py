@@ -83,6 +83,24 @@ def check_beatmap_suitable(beatmap: slider.Beatmap, beat_divisor=8):
     return True
 
 
+def check_audio_compatibility(beatmap: slider.Beatmap, beatmap_ref: slider.Beatmap, threshold=0.125):
+    try:
+        bpm = beatmap.bpm_min()
+        if bpm != beatmap_ref.bpm_min():
+            return False
+        first_tp_min = beatmap.timing_points[0].offset / timedelta(minutes=1)
+        first_tp_min_ref = beatmap_ref.timing_points[0].offset / timedelta(minutes=1)
+        num_beat_within_itv = abs(first_tp_min - first_tp_min_ref) * bpm
+        # beat position mismatch > 1 snap
+        drift = abs(num_beat_within_itv - round(num_beat_within_itv))
+        # print(drift)
+        if drift > threshold:
+            return False
+    except Exception:
+        return False
+    return True
+
+
 class HeatmapDataset:
     """
     Typical frame sizes in speech processing range from 20 ms to 40 ms with 50% (+/-10%) overlap between consecutive frames.
@@ -171,8 +189,13 @@ class HeatmapDataset:
         # print([(bm.beatmap_id, bm.beatmap_set_id) for bm in all_beatmaps])
         beatmap = None
         for bm in all_beatmaps:
-            if bm.version == beatmap_meta_dict['version'] or bm.beatmap_id == int(beatmap_id):
+            if bm.version == beatmap_meta_dict.get('version', '') or bm.beatmap_id == int(beatmap_id):
                 beatmap = bm
+        # check if we can reuse preprocessed audio
+        if not check_audio_compatibility(beatmap, all_beatmaps[0]):
+            print('audio can not be reused! %s_%s' % (beatmapset_id, beatmap_id))
+            paths['mel'] = os.path.join(dirs['mel'], beatmapset_id + '_' + beatmap_id + '.pkl')
+            processed['mel'] = False
         if beatmap is None:
             print('beatmap %s not found in osz %s' % (beatmap_id, osz_path))
             return
@@ -354,7 +377,7 @@ class HeatmapDataset:
                             # end snap is not counted
                             ho_span_snaps = ho_a_end_pos_snap - ho_a_pos_snap
                             if isinstance(ho_a, slider.beatmap.Slider):
-                                assert ho_span_snaps % ho_a.repeat == 0
+                                # assert ho_span_snaps % ho_a.repeat == 0
                                 single_repeat_span_snaps = ho_span_snaps / ho_a.repeat
                                 for snap_offset in range(ho_span_snaps):
                                     snap = ho_a_pos_snap + snap_offset
@@ -406,7 +429,7 @@ class HeatmapDataset:
                 y_pos_seq = (y_pos_seq - 192) / 384
                 label = np.stack([snap_type, x_pos_seq, y_pos_seq], axis=1)
             except Exception:
-                # traceback.print_exc()
+                traceback.print_exc()
                 print('failed process_label %s_%s, at ho %d' % (beatmapset_id, beatmap_id, i))
                 return
             with open(paths['label'], 'wb') as f:
@@ -445,7 +468,9 @@ class HeatmapDataset:
             try:
                 first_occupied_snap = get_ho_pos_snap(beatmap._hit_objects[0], end_time=False)
                 last_occupied_snap = get_ho_pos_snap(beatmap._hit_objects[-1], end_time=True)
-                sample_info = (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap)
+                # audio mel filename is 'beatmapset_id.pkl' if can be shared with other beatmaps from
+                # the same beatmapset, or 'beatmapset_id_beatmap_id.pkl'
+                sample_info = (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap, snaps_before_first_tp, crop_start_sample_f / self.sample_rate)
                 # print(sample_info)
             except Exception:
                 traceback.print_exc()

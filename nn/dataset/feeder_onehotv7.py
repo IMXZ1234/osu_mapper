@@ -191,6 +191,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
                  subseq_snaps,
                  # embedding_path,
                  use_random_iter=True,
+                 take_occupied=False,
+                 offset_meta_relative_to='aligned_audio',
                  pad=False,
                  # subseq_num for each batch
                  random_seed=None,
@@ -233,6 +235,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
         ]
         # print(self.all_beatmapids)
         self.use_random_iter = use_random_iter
+        self.take_occupied = take_occupied
+        self.offset_meta_relative_to = offset_meta_relative_to
         self.take_first = take_first
         self.take_first_subseq = take_first_subseq
 
@@ -336,7 +340,18 @@ class SubseqFeeder(torch.utils.data.Dataset):
             if self.take_first is not None and idx > self.take_first:
                 break
             self.sample_subseq[beatmapid] = []
-            total_beats = total_mel_frames // (self.mel_frame_per_snap * self.beat_divisor)
+            if self.take_occupied:
+                # beat_offset relative to the first time position aligned to beats in the whole audio
+                beat_offset = math.ceil(first_occupied_snap // self.beat_divisor)
+                end_beat_offset = math.floor(last_occupied_snap // self.beat_divisor)
+                total_beats = end_beat_offset - beat_offset
+            else:
+                total_beats = total_mel_frames // (self.mel_frame_per_snap * self.beat_divisor)
+                beat_offset = 0
+                end_beat_offset = beat_offset + total_beats
+            if total_beats <= 0:
+                print('beatmap too short')
+                continue
             in_sample_subseq_num = total_beats // self.subseq_beats
 
             if self.pad:
@@ -348,7 +363,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                 # always cut from the beginning
                 for in_sample_subseq_idx in range(in_sample_subseq_num):
                     start = in_sample_subseq_idx * self.subseq_beats
-                    self.subseq_dict[subseq_index] = (beatmapid, start)
+                    self.subseq_dict[subseq_index] = (beatmapid, beatmapset_id, start+beat_offset, beat_offset, end_beat_offset)
                     subseq_index += 1
                     self.sample_subseq[beatmapid].append(subseq_index)
             else:
@@ -363,7 +378,7 @@ class SubseqFeeder(torch.utils.data.Dataset):
                         continue
                 start_list = self.rand_inst.randint(0, rand_end, size=[in_sample_subseq_num])
                 for in_sample_subseq_idx in range(in_sample_subseq_num):
-                    self.subseq_dict[subseq_index] = (beatmapid, beatmapset_id, start_list[in_sample_subseq_idx])
+                    self.subseq_dict[subseq_index] = (beatmapid, beatmapset_id, start_list[in_sample_subseq_idx]+beat_offset, beat_offset, end_beat_offset)
                     subseq_index += 1
                     self.sample_subseq[beatmapid].append(subseq_index)
 
@@ -387,8 +402,8 @@ class SubseqFeeder(torch.utils.data.Dataset):
     def load_subseq(self, subseq_idx):
         # time_list = []
         # time_list.append(time.perf_counter_ns())
-        # beatmapid, beatmapsetid, start, start_frame, end_frame = self.subseq_dict[subseq_idx]
-        beatmapid, beatmapsetid, start = self.subseq_dict[subseq_idx]
+        # start is the beat index relative to the beat-aligned beginning of audio
+        beatmapid, beatmapsetid, start, beat_offset, end_beat_offset = self.subseq_dict[subseq_idx]
         end = start + self.subseq_beats
         # print('loaded')
         # time_list.append(time.perf_counter_ns())
@@ -430,7 +445,17 @@ class SubseqFeeder(torch.utils.data.Dataset):
         # meta = np.tile(np.array([star, cs])[np.newaxis, :], (len(data), 1))
         star, cs, ar, od, hp, bpm = self.meta_dict[beatmapid]
         type_coord = self.label_dict[beatmapid]
-        meta = [np.array([star], dtype=np.float32) / 10, np.array([start / sample_beats], dtype=np.float32), np.array([(bpm-50) / 360], dtype=np.float32)]
+        if self.offset_meta_relative_to == 'aligned_audio':
+            offset_meta = start / (end_beat_offset - beat_offset)
+        elif self.offset_meta_relative_to == 'first_hitobject_beat':
+            offset_meta = (start-beat_offset) / (end_beat_offset - beat_offset)
+        else:
+            raise ValueError('unknown offset_meta_relative_to %s' % self.offset_meta_relative_to)
+        meta = [
+            np.array([star], dtype=np.float32) / 10,
+            np.array([offset_meta], dtype=np.float32),
+            np.array([(bpm-50) / 360], dtype=np.float32)
+        ]
         # meta = np.array([star - 3.5]) / 5
         # print('meta', meta)
         # print('added indicator')

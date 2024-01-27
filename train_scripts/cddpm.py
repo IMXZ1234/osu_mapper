@@ -154,6 +154,8 @@ def train_cddpm_datasetv7(setting_name='cddpm'):
                          'subseq_snaps': subseq_snaps,
                          'random_seed': random_seed,
                          'use_random_iter': True,
+                         'take_occupied': True,
+                         'offset_meta_relative_to': 'aligned_audio',
                          'take_first': None,
                          'pad': False,
                          'beat_divisor': beat_divisor,

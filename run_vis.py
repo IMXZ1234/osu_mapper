@@ -749,13 +749,70 @@ def bpm_hist():
     print(np_statistics(np.array(all_bpm)))
     with open(r'/home/data1/xiezheng/osu_mapper/vis/bpm.pkl', 'wb') as f:
         pickle.dump(all_bpm, f)
+        
+        
+def beat_divisor_hist():
+    meta_dir = r'/home/data1/xiezheng/osu_mapper/beatmapsets'
+    all_beat_divisor = []
+    n_processed = 0
+    for filename in tqdm(os.listdir(meta_dir), ncols=80):
+        osz_path = os.path.join(meta_dir, filename)
+        n_processed += 1
+
+        try:
+            osz_file = zipfile.ZipFile(osz_path, 'r')
+            all_beatmaps = list(slider.Beatmap.from_osz_file(osz_file).values())
+            for bm in all_beatmaps:
+                all_beat_divisor.append(bm.beat_divisor)
+        except Exception:
+            print('beatmap parse failed %s' % osz_file)
+            continue
+        if n_processed in [1000, 5000, 10000, 20000]:
+
+            counter = Counter(all_beat_divisor)
+            print(counter)
+            num = [0 for _ in range(33)]
+            for i in range(33):
+                if i in counter:
+                    num[i] = counter[i]
+
+            plt.figure()
+            plt.bar(np.arange(33), num)
+            plt.title('beat_divisor')
+            plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/beat_divisor_hist_%d.png' % n_processed)
+            plt.clf()
+            # 3.671196325409603 0.0 10.0
+            print(np_statistics(np.array(all_beat_divisor)))
+            with open(r'/home/data1/xiezheng/osu_mapper/vis/beat_divisor_%d.pkl' % n_processed, 'wb') as f:
+                pickle.dump(all_beat_divisor, f)
+
+    counter = Counter(all_beat_divisor)
+    print(counter)
+    num = [0 for _ in range(33)]
+    for i in range(33):
+        if i in counter:
+            num[i] = counter[i]
+
+    plt.figure()
+    plt.bar(np.arange(33), num)
+    plt.title('beat_divisor')
+    plt.savefig(r'/home/data1/xiezheng/osu_mapper/vis/beat_divisor_hist.png')
+    plt.clf()
+    # 3.671196325409603 0.0 10.0
+    print(np_statistics(np.array(all_beat_divisor)))
+    with open(r'/home/data1/xiezheng/osu_mapper/vis/beat_divisor.pkl', 'wb') as f:
+        pickle.dump(all_beat_divisor, f)
 
 
 if __name__ == '__main__':
     """
+    view beat_divisor_hist
+    """
+    beat_divisor_hist()
+    """
     view bpm hist
     """
-    bpm_hist()
+    # bpm_hist()
     """
     view star hist
     """

@@ -57,7 +57,7 @@ class Generator:
         self.model = CUViT(**model_arg)
         project_root = os.path.dirname(os.path.dirname(__file__))
         pretrained_model_root = os.path.join(project_root, 'resources', 'pretrained_models')
-        model_path = os.path.join(pretrained_model_root, 'cddpm',  r'model_0_epoch_23_batch_512.pt')
+        model_path = os.path.join(pretrained_model_root, 'cddpm',  r'model_0_epoch_150_batch_-1.pt')
         # model_path = r'./resources/pretrained_models/model_0_epoch_2_batch_-1.pt'
         state_dict = torch.load(model_path, map_location=self.output_device)
         self.model.load_state_dict(state_dict)

@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from einops import repeat, reduce
 from torch import sqrt
+from torch import nn
 from torch.nn import functional as F
 from torch.special import expm1
 from tqdm import tqdm
@@ -16,59 +17,61 @@ from util.general_util import recursive_wrap_data
 from util.plt_util import plot_signal
 
 
-def exists(val):
-    return val is not None
+def init_weight(weight, init='normal',
+                init_range=0.1,
+                init_std=0.02, ):
+    if init == 'uniform':
+        nn.init.uniform_(weight, -init_range, init_range)
+    elif init == 'normal':
+        nn.init.normal_(weight, 0.0, init_std)
 
 
-def is_lambda(f):
-    return callable(f) and f.__name__ == "<lambda>"
+def init_bias(bias):
+    nn.init.constant_(bias, 0.0)
 
 
-def default(val, d):
-    if exists(val):
-        return val
-    return d() if is_lambda(d) else d
+def weights_init(m, proj_init_std=0.01,
+                 init_std=0.02, ):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        if hasattr(m, 'weight') and m.weight is not None:
+            init_weight(m.weight)
+        if hasattr(m, 'bias') and m.bias is not None:
+            init_bias(m.bias)
+    elif classname.find('AdaptiveEmbedding') != -1:
+        if hasattr(m, 'emb_projs'):
+            for i in range(len(m.emb_projs)):
+                if m.emb_projs[i] is not None:
+                    nn.init.normal_(m.emb_projs[i], 0.0, proj_init_std)
+    elif classname.find('Embedding') != -1:
+        if hasattr(m, 'weight'):
+            init_weight(m.weight)
+    elif classname.find('ProjectedAdaptiveLogSoftmax') != -1:
+        if hasattr(m, 'cluster_weight') and m.cluster_weight is not None:
+            init_weight(m.cluster_weight)
+        if hasattr(m, 'cluster_bias') and m.cluster_bias is not None:
+            init_bias(m.cluster_bias)
+        if hasattr(m, 'out_projs'):
+            for i in range(len(m.out_projs)):
+                if m.out_projs[i] is not None:
+                    nn.init.normal_(m.out_projs[i], 0.0, proj_init_std)
+    elif classname.find('LayerNorm') != -1:
+        if hasattr(m, 'weight'):
+            nn.init.normal_(m.weight, 1.0, init_std)
+        if hasattr(m, 'bias') and m.bias is not None:
+            init_bias(m.bias)
+    elif classname.find('TransformerLM') != -1:
+        if hasattr(m, 'r_emb'):
+            init_weight(m.r_emb)
+        if hasattr(m, 'r_w_bias'):
+            init_weight(m.r_w_bias)
+        if hasattr(m, 'r_r_bias'):
+            init_weight(m.r_r_bias)
+        if hasattr(m, 'r_bias'):
+            init_bias(m.r_bias)
 
 
-def logsnr_schedule_cosine(t, logsnr_min=-15, logsnr_max=15):
-    t_min = math.atan(math.exp(-0.5 * logsnr_max))
-    t_max = math.atan(math.exp(-0.5 * logsnr_min))
-    return -2 * torch.log((torch.tan(t_min + t * (t_max - t_min))).clamp(min=1e-20))
-
-
-def logsnr_schedule_shifted(fn, image_d, noise_d):
-    shift = 2 * math.log(noise_d / image_d)
-
-    @wraps(fn)
-    def inner(*args, **kwargs):
-        nonlocal shift
-        return fn(*args, **kwargs) + shift
-
-    return inner
-
-
-def logsnr_schedule_interpolated(fn, image_d, noise_d_low, noise_d_high):
-    logsnr_low_fn = logsnr_schedule_shifted(fn, image_d, noise_d_low)
-    logsnr_high_fn = logsnr_schedule_shifted(fn, image_d, noise_d_high)
-
-    @wraps(fn)
-    def inner(t, *args, **kwargs):
-        nonlocal logsnr_low_fn
-        nonlocal logsnr_high_fn
-        return t * logsnr_low_fn(t, *args, **kwargs) + (1 - t) * logsnr_high_fn(t, *args, **kwargs)
-
-    return inner
-
-
-def right_pad_dims_to(x, t):
-    # pad t to the dims of x
-    padding_dims = x.ndim - t.ndim
-    if padding_dims <= 0:
-        return t
-    return t.view(*t.shape, *((1,) * padding_dims))
-
-
-class CDDPMSYS(Train):
+class TransformerXLSYS(Train):
     def __init__(self,
                  config_dict,
                  task_type='classification',
@@ -77,7 +80,8 @@ class CDDPMSYS(Train):
 
         # training objective
         self.pred_objective = self.config_dict['pred_objective']
-        assert self.pred_objective in {'v', 'eps'}, 'whether to predict v-space (progressive distillation paper) or noise'
+        assert self.pred_objective in {'v',
+                                       'eps'}, 'whether to predict v-space (progressive distillation paper) or noise'
 
         noise_d = self.config_dict['noise_d']
         noise_d_low = self.config_dict['noise_d_low']
@@ -118,7 +122,7 @@ class CDDPMSYS(Train):
         self.min_snr_gamma = min_snr_gamma
 
         # if 'embedding_decoder' in self.config_dict:
-        #     self.embedding_output_decoder = dynamic_import(self.config_dict['embedding_decoder'])(**self.config_dict['embedding_decoder_args'])
+        #     self.embedding_output_decoder = dynamic_import(self.config_dict['embedding_decoder'])(**self.config_dict['embedding_decoder_])
 
     @property
     def device(self):
@@ -170,7 +174,8 @@ class CDDPMSYS(Train):
         steps = torch.linspace(1., 0., self.num_sample_steps + 1, device=self.output_device)
 
         # for i in range(self.num_sample_steps):
-        for i in tqdm(range(self.num_sample_steps), desc='sampling loop time step', total=self.num_sample_steps, ncols=80):
+        for i in tqdm(range(self.num_sample_steps), desc='sampling loop time step', total=self.num_sample_steps,
+                      ncols=80):
             times = steps[i]
             times_next = steps[i + 1]
             img = self.p_sample(img, times, times_next, cond_data)
@@ -255,10 +260,10 @@ class CDDPMSYS(Train):
             if i >= plot_first:
                 break
             for signal, name in zip(
-                sample_coord_output,
-                [
-                    'cursor_x', 'cursor_y'
-                ]
+                    sample_coord_output,
+                    [
+                        'cursor_x', 'cursor_y'
+                    ]
             ):
                 fig_array, fig = plot_signal(signal, name,
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
@@ -266,10 +271,10 @@ class CDDPMSYS(Train):
                 self.writer.add_figure(prefix + name, fig, epoch)
             # plot as float
             for signal, name in zip(
-                sample_embedding_output,
-                [
-                    'circle_hit', 'slider_hit', 'spinner_hit'
-                ]
+                    sample_embedding_output,
+                    [
+                        'circle_hit', 'slider_hit', 'spinner_hit'
+                    ]
             ):
                 fig_array, fig = plot_signal(signal, name,
                                              save_path=os.path.join(output_dir, name + '%d.jpg' % i),
@@ -339,3 +344,145 @@ class CDDPMSYS(Train):
         self.optimizer.step()
 
         return loss.item()
+
+def evaluate(eval_iter):
+    # Turn on evaluation mode which disables dropout.
+    model.eval()
+
+    # If the model does not use memory at all, make the ext_len longer.
+    # Otherwise, make the mem_len longer and keep the ext_len the same.
+    if args.mem_len == 0:
+        model.reset_length(args.eval_tgt_len,
+            args.ext_len+args.tgt_len-args.eval_tgt_len, args.mem_len)
+    else:
+        model.reset_length(args.eval_tgt_len,
+            args.ext_len, args.mem_len+args.tgt_len-args.eval_tgt_len)
+
+    # Evaluation
+    total_len, total_loss = 0, 0.
+    with torch.no_grad():
+        mems = tuple()
+        for i, (data, target, seq_len) in enumerate(eval_iter):
+            if args.max_eval_steps > 0 and i >= args.max_eval_steps:
+                break
+            ret = model(data, target, *mems)
+            loss, mems = ret[0], ret[1:]
+            loss = loss.mean()
+            total_loss += seq_len * loss.float().item()
+            total_len += seq_len
+
+    # Switch back to the training mode
+    model.reset_length(args.tgt_len, args.ext_len, args.mem_len)
+    model.train()
+
+    return total_loss / total_len
+
+
+def train():
+    # Turn on training mode which enables dropout.
+    global train_step, train_loss, best_val_loss, eval_start_time, log_start_time
+    model.train()
+    if args.batch_chunk > 1:
+        mems = [tuple() for _ in range(args.batch_chunk)]
+    else:
+        mems = tuple()
+    train_iter = tr_iter.get_varlen_iter() if args.varlen else tr_iter
+    for batch, (data, target, seq_len) in enumerate(train_iter):
+        model.zero_grad()
+        if args.batch_chunk > 1:
+            data_chunks = torch.chunk(data, args.batch_chunk, 1)
+            target_chunks = torch.chunk(target, args.batch_chunk, 1)
+            for i in range(args.batch_chunk):
+                data_i = data_chunks[i].contiguous()
+                target_i = target_chunks[i].contiguous()
+                ret = para_model(data_i, target_i, *mems[i])
+                loss, mems[i] = ret[0], ret[1:]
+                loss = loss.float().mean().type_as(loss) / args.batch_chunk
+                if args.fp16:
+                    optimizer.backward(loss)
+                else:
+                    loss.backward()
+                train_loss += loss.float().item()
+        else:
+            ret = para_model(data, target, *mems)
+            loss, mems = ret[0], ret[1:]
+            loss = loss.float().mean().type_as(loss)
+            if args.fp16:
+                optimizer.backward(loss)
+            else:
+                loss.backward()
+            train_loss += loss.float().item()
+
+        if args.fp16:
+            optimizer.clip_master_grads(args.clip)
+        else:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+
+        optimizer.step()
+        if args.sample_softmax > 0:
+            optimizer_sparse.step()
+
+        # step-wise learning rate annealing
+        train_step += 1
+        if args.scheduler in ['cosine', 'constant', 'dev_perf']:
+            # linear warmup stage
+            if train_step < args.warmup_step:
+                curr_lr = args.lr * train_step / args.warmup_step
+                optimizer.param_groups[0]['lr'] = curr_lr
+                if args.sample_softmax > 0:
+                    optimizer_sparse.param_groups[0]['lr'] = curr_lr * 2
+            else:
+                if args.scheduler == 'cosine':
+                    scheduler.step(train_step)
+                    if args.sample_softmax > 0:
+                        scheduler_sparse.step(train_step)
+        elif args.scheduler == 'inv_sqrt':
+            scheduler.step(train_step)
+
+        if train_step % args.log_interval == 0:
+            cur_loss = train_loss / args.log_interval
+            elapsed = time.time() - log_start_time
+            log_str = '| epoch {:3d} step {:>8d} | {:>6d} batches | lr {:.3g} ' \
+                      '| ms/batch {:5.2f} | loss {:5.2f}'.format(
+                epoch, train_step, batch+1, optimizer.param_groups[0]['lr'],
+                elapsed * 1000 / args.log_interval, cur_loss)
+            if args.dataset in ['enwik8', 'text8']:
+                log_str += ' | bpc {:9.5f}'.format(cur_loss / math.log(2))
+            else:
+                log_str += ' | ppl {:9.3f}'.format(math.exp(cur_loss))
+            logging(log_str)
+            train_loss = 0
+            log_start_time = time.time()
+
+        if train_step % args.eval_interval == 0:
+            val_loss = evaluate(va_iter)
+            logging('-' * 100)
+            log_str = '| Eval {:3d} at step {:>8d} | time: {:5.2f}s ' \
+                      '| valid loss {:5.2f}'.format(
+                train_step // args.eval_interval, train_step,
+                (time.time() - eval_start_time), val_loss)
+            if args.dataset in ['enwik8', 'text8']:
+                log_str += ' | bpc {:9.5f}'.format(val_loss / math.log(2))
+            else:
+                log_str += ' | valid ppl {:9.3f}'.format(math.exp(val_loss))
+            logging(log_str)
+            logging('-' * 100)
+            # Save the model if the validation loss is the best we've seen so far.
+            if not best_val_loss or val_loss < best_val_loss:
+                if not args.debug:
+                    with open(os.path.join(args.work_dir, 'model.pt'), 'wb') as f:
+                        torch.save(model, f)
+                    with open(os.path.join(args.work_dir, 'optimizer.pt'), 'wb') as f:
+                        torch.save(optimizer.state_dict(), f)
+                best_val_loss = val_loss
+
+            # dev-performance based learning rate annealing
+            if args.scheduler == 'dev_perf':
+                scheduler.step(val_loss)
+                if args.sample_softmax > 0:
+                    scheduler_sparse.step(val_loss)
+
+            eval_start_time = time.time()
+
+        if train_step == args.max_step:
+            break

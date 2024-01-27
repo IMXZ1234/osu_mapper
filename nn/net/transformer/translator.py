@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from transformer.models import Transformer
-from transformer.beam import Beam
+from .models import Transformer
+from .beam import Beam
 
 
 class Translator(object):

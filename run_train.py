@@ -6272,4 +6272,4 @@ if __name__ == '__main__':
     # acgan_embedding.train_acgan_embeddingv10('20231113_acgan_embeddingv10_gp_lp10_glr7e-5_dlr7e-5')
     # cddpm.train_cddpm('20230118_cddpm_0.001_datasetv6')
     # cddpm.train_cddpm('20230118_cddpm_0.0001_datasetv6_start_pos_meta')
-    cddpm.train_cddpm_datasetv7('20230125_cddpm_0.0001_datasetv7')
+    cddpm.train_cddpm_datasetv7('20230126_cddpm_0.0001_datasetv7_occupied')

@@ -8,6 +8,7 @@ from . import (
     word2vec_skipgram_sys,
     regression_sys,
     cddpm_sys,
+    transformer_xl_sys,
 )
 
 from . import inference
