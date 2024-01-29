@@ -225,12 +225,17 @@ class Generator:
         if extra_snaps > 0:
             mel_spec = np.concatenate([mel_spec, np.zeros([(self.half_n_snaps - extra_snaps) * self.mel_frame_per_snap, self.n_mels])], axis=0)
             num_subseq += 1
+        # [num_subseq * self.half_n_frames, self.n_mels]
         mel_spec = torch.tensor(mel_spec, dtype=torch.float32, device=self.output_device)
-        mel_spec = mel_spec.reshape([num_subseq, self.half_n_frames])
-        mel_spec = to_half_cat(mel_spec)
+        mel_spec = mel_spec.reshape([num_subseq, self.half_n_frames, self.n_mels])
+        former_half, latter_half = mel_spec[:-1], mel_spec[1:]
+        # -> [num_subseq-1, self.n_frames, self.n_mels]
+        mel_spec = torch.cat([former_half, latter_half], dim=1)
+        # -> N, C, L
+        mel_spec = mel_spec.permute(0, 2, 1)
 
         print('mel spec shape: ', mel_spec.shape)
-        offset_proportion = torch.arange(num_subseq, dtype=torch.float32, device=self.output_device) * (self.half_n_snaps / total_snaps)
+        offset_proportion = torch.arange(mel_spec.shape[0], dtype=torch.float32, device=self.output_device) * (self.half_n_snaps / total_snaps)
 
         # run for every meta
         for index, meta_dict in enumerate(meta_list):
@@ -307,18 +312,25 @@ class Generator:
     @torch.no_grad()
     def p_sample_loop_autoreg(self, shape, cond_data):
         """
-        sample for each sample in the batch respectively
+        shape: num_segment, channel, segment_length
+
+        for every time step, the former half of diffusion input is replaced with latter half of the output
+        of the last segment from the former time step
+
+        this may improve local coherence
         """
-        img = torch.randn(shape, device=self.output_device)
+        N, C, L = shape
+        x = torch.randn(shape, device=self.output_device)
         steps = torch.linspace(1., 0., self.num_sample_steps + 1, device=self.output_device)
 
         # for i in range(self.num_sample_steps):
         for i in tqdm(range(self.num_sample_steps), desc='sampling loop time step', total=self.num_sample_steps, ncols=80):
             times = steps[i]
             times_next = steps[i + 1]
-            img = self.p_sample(img, times, times_next, cond_data)
+            x = self.p_sample(x, times, times_next, cond_data)
+            x[1:, ..., :L//2] = x[:N-1, ..., L//2:]
 
-        return img
+        return x
 
     @torch.no_grad()
     def sample_autoreg(self, cond_data):
@@ -353,10 +365,6 @@ class Generator:
         # plt.show()
 
 
-def to_half_cat(tensor_in):
-    former_half, latter_half = mel_spec[:-1], mel_spec[1:]
-    # -> num_subseq-1, self.n_snaps, self.n_mels
-    mel_spec = np.concatenate([former_half, latter_half], axis=1)
 
 if __name__ == '__main__':
     import slider
