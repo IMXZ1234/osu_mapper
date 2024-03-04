@@ -1,6 +1,34 @@
+import torch
+
 from nn.net.util.transformer_modules import PosEncoding
 from torch import nn
 from torch.nn import functional as F
+
+
+class LayerNorm1D(nn.Module):
+    def __init__(self, normalized_shape, **kwargs):
+        super(LayerNorm1D, self).__init__()
+        self.norm_layer = nn.LayerNorm(normalized_shape, **kwargs)
+
+    def forward(self, x):
+        """
+        x: N, C, L
+        """
+        # swap channel dim to the last dim before layernorm
+        x = torch.transpose(self.norm_layer(torch.transpose(x, 1, -1)), 1, -1)
+        return x
+
+
+def parse_norm(channels, norm='LN'):
+    if norm is None:
+        norm_layer = nn.Identity()
+    elif norm == 'BN':
+        norm_layer = nn.BatchNorm1d(channels)
+    elif norm == 'LN':
+        norm_layer = LayerNorm1D(channels)
+    else:
+        raise ValueError('unknown normalize')
+    return norm_layer
 
 
 class TransformerStem(nn.Module):
@@ -74,20 +102,13 @@ class ConvNeXtBlock1D(nn.Module):
         if (not self.residual) or ((in_channels == out_channels) and (stride == 1)):
             self.short_cut = nn.Identity()
         else:
-            if norm is None:
-                norm_short_cut = nn.Identity()
-            else:
-                norm_short_cut = nn.BatchNorm1d(out_channels) if norm == 'BN' else nn.LayerNorm(seq_len // stride)
             self.short_cut = nn.Sequential(
                 nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
-                norm_short_cut
+                parse_norm(out_channels, norm)
             )
         if bottleneck_channels is None:
             bottleneck_channels = 2 * in_channels
-        if norm is None:
-            self.norm_bottleneck = nn.Identity()
-        else:
-            self.norm_bottleneck = nn.BatchNorm1d(in_channels) if norm == 'BN' else nn.LayerNorm(seq_len // stride)
+        self.norm_bottleneck = parse_norm(in_channels, norm)
         padding = kernel_size // 2
         self.conv_in = nn.Conv1d(in_channels, in_channels, kernel_size=kernel_size, padding=padding, stride=stride)
         self.conv_bottleneck = nn.Conv1d(in_channels, bottleneck_channels, kernel_size=1, padding=0, stride=1)
@@ -137,14 +158,7 @@ class UpSampleBlock1D(nn.Module):
         """
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=stride)
-        if norm is None:
-            self.norm = nn.Identity()
-        elif norm == 'BN':
-            self.norm = nn.BatchNorm1d(in_channels)
-        elif norm == 'LN':
-            self.norm = nn.LayerNorm(seq_len)
-        else:
-            raise ValueError('unknown normalize')
+        self.norm = parse_norm(in_channels, norm)
         self.dropout = nn.Dropout(dropout)
         self.conv_out = nn.Conv1d(in_channels, out_channels,
                                   kernel_size=kernel_size,
@@ -168,14 +182,7 @@ class DownSampleBlock1D(nn.Module):
         dcgan downsample block
         """
         super().__init__()
-        if norm is None:
-            self.norm = nn.Identity()
-        elif norm == 'BN':
-            self.norm = nn.BatchNorm1d(in_channels)
-        elif norm == 'LN':
-            self.norm = nn.LayerNorm(seq_len)
-        else:
-            raise ValueError('unknown normalize')
+        self.norm = parse_norm(in_channels, norm)
         self.dropout = nn.Dropout(dropout)
         self.conv_out = nn.Conv1d(in_channels, out_channels,
                                   kernel_size=kernel_size,
@@ -197,14 +204,7 @@ class CNNExtractor(nn.Module):
         super().__init__()
         self.net = []
         if input_norm:
-            if norm is None:
-                pass
-            elif norm == 'BN':
-                self.net.append(nn.BatchNorm1d(in_channels))
-            elif norm == 'LN':
-                self.net.append(nn.LayerNorm(seq_len))
-            else:
-                raise ValueError('unknown normalize')
+            self.norm_layer = parse_norm(in_channels, norm)
         current_in_channels = in_channels
         current_seq_len = seq_len
         for stride, out_channels, kernel_size in zip(stride_list, out_channels_list, kernel_size_list):
@@ -223,6 +223,7 @@ class CNNExtractor(nn.Module):
         self.net = nn.Sequential(*self.net)
 
     def forward(self, x):
+        x = self.norm_layer(x)
         return self.net(x)
 
 
