@@ -400,7 +400,7 @@ def tensor_list_recursive_stack_retain_type(sample_list):
     """
     collated = []
     for i in range(len(sample_list[0])):
-        collated.append(sample_data[i] for sample_data in sample_list)
+        collated.append([sample_data[i] for sample_data in sample_list])
     for i in range(len(collated)):
         collated[i] = recursive_zip(collated[i])
         collated[i] = recursive_to_tensor(collated[i])

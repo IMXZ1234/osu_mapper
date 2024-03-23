@@ -379,8 +379,9 @@ def test_gen_6(generator):
     audio_file_path = \
         os.path.join(DEFAULT_GEN_DIR, r"遠くの子守の唄.mp3")
 
+    # audio_info_path = None
     audio_info_path = \
-        os.path.join(DEFAULT_GEN_DIR, r'audio_info\遠くの子守の唄.yaml')
+        os.path.join(DEFAULT_GEN_DIR, r'遠くの子守の唄.yaml')
 
     meta_list = [
         {
@@ -413,7 +414,6 @@ def test_gen_7(generator):
     audio_file_path = r'C:\Users\admin\Desktop\python_project\osu_mapper\resources\data\audio\audio_fix.mp3'
 
     audio_info_path = None
-        # os.path.join(DEFAULT_GEN_DIR, r'audio_info\遠くの子守の唄.yaml')
 
     meta_list = [
         {
@@ -443,12 +443,13 @@ def test_gen_7(generator):
 
 
 if __name__ == '__main__':
-    from gen.cddpm_generator import Generator
+    from gen.transformer_xl_generator import Generator
+    # from gen.cddpm_autoreg_generator  import Generator
     # from gen.acgan_embeddingv1_generator import ACGANEmbeddingGenerator
     # import pickle
     # with open(r'C:\Users\asus\coding\python\osu_mapper\resources\data\processed_v4\mel\999834.pkl', 'rb') as f:
     #     print(pickle.load(f))
     generator = Generator()
-    # test_gen_6(generator)
-    test_gen_7(generator)
+    test_gen_6(generator)
+    # test_gen_7(generator)
 #

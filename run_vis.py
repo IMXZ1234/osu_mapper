@@ -804,11 +804,45 @@ def beat_divisor_hist():
         pickle.dump(all_beat_divisor, f)
 
 
+def seq_len_hist():
+    info_dir = r'/home/xiezheng/data/preprocessed_v7/info'
+    all_beatmap_nmel_count = []
+    n_processed = 0
+    for filename in tqdm(os.listdir(info_dir), ncols=80):
+        info_path = os.path.join(info_dir, filename)
+        n_processed += 1
+
+        with open(info_path, 'rb') as f:
+            n_mel = pickle.load(f)[0]
+        all_beatmap_nmel_count.append(n_mel)
+    # 24963.777327398428 2048 114240
+    # -> 390 32 1785
+    all_beatmap_nmel_count = np.array(all_beatmap_nmel_count)
+    print(np_statistics(all_beatmap_nmel_count))
+    with open(r'/home/xiezheng/osu_mapper/resources/vis/all_beatmap_nmel_count.pkl', 'wb') as f:
+        pickle.dump(all_beatmap_nmel_count, f)
+    plt.figure()
+    plt.hist(all_beatmap_nmel_count)
+    plt.title('all_beatmap_nmel_count')
+    plt.savefig(r'/home/xiezheng/osu_mapper/resources/vis/all_beatmap_nmel.png')
+    plt.clf()
+    all_beatmap_beat_count = all_beatmap_nmel_count / 8 / 8
+
+
+def view_label_group_vocab():
+    with open() as f:
+        pass
+
+
 if __name__ == '__main__':
+    """
+    view beatmap total snap number hist
+    """
+    seq_len_hist()
     """
     view beat_divisor_hist
     """
-    beat_divisor_hist()
+    # beat_divisor_hist()
     """
     view bpm hist
     """

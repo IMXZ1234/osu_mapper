@@ -470,7 +470,8 @@ class HeatmapDataset:
                 last_occupied_snap = get_ho_pos_snap(beatmap._hit_objects[-1], end_time=True)
                 # audio mel filename is 'beatmapset_id.pkl' if can be shared with other beatmaps from
                 # the same beatmapset, or 'beatmapset_id_beatmap_id.pkl'
-                sample_info = (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap, snaps_before_first_tp, crop_start_sample_f / self.sample_rate)
+                # former: total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap
+                sample_info = (total_mel_frames, beatmapset_id, first_occupied_snap, last_occupied_snap, snaps_before_first_tp, crop_start_sample_f / self.sample_rate, beatmap.beat_divisor)
                 # print(sample_info)
             except Exception:
                 traceback.print_exc()
@@ -570,6 +571,9 @@ def multiprocessing_prepare_data(nproc=32, target=worker):
 
 
 if __name__ == '__main__':
+    """
+    20240320 new info
+    """
     multiprocessing_prepare_data(8)
     # ds = HeatmapDataset(
     #     {

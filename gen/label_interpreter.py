@@ -85,8 +85,14 @@ class BiLabelInterpreter:
 
 
 class MultiLabelInterpreter:
+    """
+    0: no hit object
+    1: circle
+    2: slider
+    3: spinner
+    """
     @staticmethod
-    def gen_hitobjects(beatmap, labels, start_time, snap_ms, snap_divisor=8):
+    def gen_hitobjects(beatmap, labels, start_ms, snap_ms, snap_divisor=8):
         # save some space about the border as circles have radius
         pos_gen = RandomWalkInRectangle(30, 482, 30, 354)
         pos_gen.move_to_random_pos()
@@ -98,47 +104,64 @@ class MultiLabelInterpreter:
             """
             yields (current position, nonzero period, trailing zero period length)
             """
-            pos = 0
-            next_pos = 0
+            next_snap_idx = 0
             while True:
-                pos = next_pos
-                next_pos += 1
-                if pos >= len(labels):
+                snap_idx = next_snap_idx
+                next_snap_idx += 1
+                if snap_idx >= len(labels):
                     break
                 # skip prepending zeros
-                if labels[pos] == 2:
-                    if next_pos >= len(labels):
+                if labels[snap_idx] == 2:
+                    if next_snap_idx >= len(labels):
                         break
-                    while labels[next_pos] == 2:
-                        next_pos += 1
-                        if next_pos >= len(labels):
+                    while labels[next_snap_idx] == 2:
+                        next_snap_idx += 1
+                        if next_snap_idx >= len(labels):
                             break
-                    yield pos, next_pos - pos, 2
-                elif labels[pos] == 1:
-                    yield pos, 1, 1
+                    yield snap_idx, next_snap_idx - snap_idx, 2
+                elif labels[snap_idx] == 3:
+                    if next_snap_idx >= len(labels):
+                        break
+                    while labels[next_snap_idx] == 3:
+                        next_snap_idx += 1
+                        if next_snap_idx >= len(labels):
+                            break
+                    yield snap_idx, next_snap_idx - snap_idx, 3
+                elif labels[snap_idx] == 1:
+                    yield snap_idx, 1, 1
 
         ms_per_beat = 60000 / beatmap.bpm_min()
-        for pos, period, label in periods():
+        for snap_idx, period, label in periods():
             # print('pos, period, label')
             # print(pos, period, label)
-            time = start_time + pos * snap_ms
+            time = start_ms + snap_idx * snap_ms
             if label == 1:
                 x, y = pos_gen.next_pos()
                 beatmap_util.add_circle(beatmap, (x, y), time)
                 print(('add circle at (%.3f, (%d, %d))' % (time, x, y)))
             elif label == 2:
-                num_beats = period // snap_divisor
+                num_beats = period / snap_divisor
                 if num_beats == 0:
                     continue
                 pos_list = [
                     pos_gen.next_pos()
-                    for _ in range(num_beats + 1)
+                    for _ in range(period)
                 ]
 
                 ho_slider = beatmap_util.add_slider(
                     beatmap, 'L', pos_list, time, num_beats, ms_per_beat
                 )
                 print(('add slider at (%.3f, %s)' % (time, ' ({}, {})' * len(pos_list))).format(*chain(*pos_list)))
+            elif label == 3:
+                num_beats = period // snap_divisor
+                if num_beats == 0:
+                    continue
+
+                ho_spinner = beatmap_util.add_spinner(
+                    beatmap, (256, 192), time, num_beats, ms_per_beat
+                )
+                pos_gen.move_to_pos(256, 192)
+                print('add spinner at %.3f' % time)
 
 
 class SwitchInterpreter:

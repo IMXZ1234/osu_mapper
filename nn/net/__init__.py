@@ -52,4 +52,6 @@ from . import (
     acgan_embeddingv7_only_coord,
     acgan_embeddingv7_only_embedding,
     diffusion,
+    transformer_xl,
+    vae_compress,
 )

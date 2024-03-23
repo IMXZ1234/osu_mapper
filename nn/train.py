@@ -14,6 +14,8 @@ from system.wgan_sys import TrainWGAN, TrainWGANWithinBatch, TrainACWGANWithinBa
 from system.word2vec_skipgram_sys import TrainWord2VecSkipGram
 from system.regression_sys import TrainRegression
 from system.cddpm_sys import CDDPMSYS
+from system.transformer_xl_sys import TransformerXLSYS
+from system.vae_compress_sys import TrainVAECompress
 from util.general_util import try_format_dict_with_path
 
 np.set_printoptions(suppress=True)
@@ -31,6 +33,8 @@ SYS_DICT = {
     'seqgan_adv_loss': TrainSeqGANAdvLoss,
     'skipgram': TrainWord2VecSkipGram,
     'cddpm': CDDPMSYS,
+    'transformer_xl': TransformerXLSYS,
+    'vae_compress': TrainVAECompress,
 }
 print('init sysdict')
 
@@ -56,6 +60,7 @@ def plot_difference_distribution(pred_list, target_list, difference_step):
 
 
 def train_with_config(config_path, format_config=False, folds=5):
+    print(config_path)
     with open(config_path, 'r') as f:
         config_dict = yaml.load(f, Loader=yaml.FullLoader)
     if folds is None:

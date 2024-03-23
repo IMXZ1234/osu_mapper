@@ -67,15 +67,19 @@ class Train:
         else:
             self.output_collate_fn = dynamic_import(config_dict['output_collate_fn'])
         grad_alter_fn = config_dict.get('grad_alter_fn', None)
+        self.grad_alter_fn_inp_type = 'model'
         if grad_alter_fn is None:
             self.grad_alter_fn = None
         elif grad_alter_fn == 'value':
             self.grad_alter_fn = functools.partial(nn.utils.clip_grad_value_, **config_dict['grad_alter_fn_arg'])
+            self.grad_alter_fn_inp_type = 'model_params'
         elif grad_alter_fn == 'norm':
             self.grad_alter_fn = functools.partial(nn.utils.clip_grad_norm_, **config_dict['grad_alter_fn_arg'])
+            self.grad_alter_fn_inp_type = 'model_params'
         else:
             self.grad_alter_fn = dynamic_import(config_dict['grad_alter_fn'])
-            self.grad_alter_fn_arg = config_dict['grad_alter_fn_arg']
+            self.grad_alter_fn_inp_type = config_dict.get('grad_alter_fn_inp_type', 'model')
+        self.grad_alter_fn_arg = config_dict.get('grad_alter_fn_arg', dict())
         self.train_extra = config_dict.get('train_extra', dict())
         self.test_extra = config_dict.get('test_extra', dict())
 
@@ -202,22 +206,51 @@ class Train:
                   shuffle=True,
                   num_workers=1,
                   drop_last=False,
+
+                  train_sampler=None,
+                  train_sampler_type='sampler',
+                  train_sampler_arg={},
+
+                  test_sampler=None,
+                  test_sampler_type='sampler',
+                  test_sampler_arg={},
                   **kwargs):
-        train_iter = torch.utils.data.DataLoader(
-            dataset=dynamic_import(dataset)(**train_dataset_arg),
-            batch_size=batch_size,
-            shuffle=shuffle,
-            collate_fn=self.collate_fn,
-            num_workers=num_workers,
-            drop_last=drop_last)
+        iter_arg_common = {
+            'collate_fn': self.collate_fn,
+            'num_workers': num_workers,
+        }
+
+        train_iter_arg = iter_arg_common.copy()
+        train_iter_arg['dataset'] = dynamic_import(dataset)(**train_dataset_arg)
+        train_iter_arg['drop_last'] = drop_last
+        if train_sampler is None:
+            train_iter_arg['shuffle'] = shuffle
+            train_iter_arg['batch_size'] = batch_size
+        else:
+            train_sampler_inst = dynamic_import(train_sampler)(train_iter_arg['dataset'], **train_sampler_arg)
+            if train_sampler_type == 'sampler':
+                train_iter_arg['sampler'] = train_sampler_inst
+                train_iter_arg['batch_size'] = batch_size
+            else:
+                train_iter_arg['batch_sampler'] = train_sampler_inst
+        train_iter = torch.utils.data.DataLoader(**train_iter_arg)
+
         if test_dataset_arg is not None:
-            test_iter = torch.utils.data.DataLoader(
-                dataset=dynamic_import(dataset)(**test_dataset_arg),
-                batch_size=batch_size,
-                shuffle=False,
-                collate_fn=self.collate_fn,
-                num_workers=num_workers,
-                drop_last=False)
+            test_iter_arg = iter_arg_common.copy()
+            test_iter_arg['dataset'] = dynamic_import(dataset)(**test_dataset_arg)
+            test_iter_arg['drop_last'] = False
+
+            if test_sampler is None:
+                test_iter_arg['shuffle'] = False
+                test_iter_arg['batch_size'] = batch_size
+            else:
+                test_sampler_inst = dynamic_import(test_sampler)(test_iter_arg['dataset'], **test_sampler_arg)
+                if test_sampler_type == 'sampler':
+                    test_iter_arg['sampler'] = test_sampler_inst
+                    test_iter_arg['batch_size'] = batch_size
+                else:
+                    test_iter_arg['batch_sampler'] = test_sampler_inst
+            test_iter = torch.utils.data.DataLoader(**test_iter_arg)
         else:
             test_iter = None
         return train_iter, test_iter
